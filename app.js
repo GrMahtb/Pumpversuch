@@ -1,9 +1,9 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v8 loaded');
+console.log('HTB Pumpversuch app.js v9 loaded');
 
 const BASE = '/Pumpversuch/';
-const STORAGE_DRAFT = 'htb-pumpversuch-draft-v8';
-const STORAGE_HISTORY = 'htb-pumpversuch-history-v8';
+const STORAGE_DRAFT = 'htb-pumpversuch-draft-v9';
+const STORAGE_HISTORY = 'htb-pumpversuch-history-v9';
 const HISTORY_MAX = 30;
 
 const DEFAULT_INTERVALLE = [0, 1, 2, 3, 4, 5, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180];
@@ -23,6 +23,7 @@ const state = {
     geprueftDurch: '',
     geprueftAm: ''
   },
+  activeBrunnen: 'foerder',
   foerder: {
     dm: '',
     endteufe: '',
@@ -53,6 +54,17 @@ function h(v) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+function pdfSafe(v) {
+  return String(v ?? '')
+    .replace(/Δ/g, 'Diff.')
+    .replace(/≥/g, '>=')
+    .replace(/≤/g, '<=')
+    .replace(/–/g, '-')
+    .replace(/—/g, '-')
+    .replace(/•/g, '-')
+    .replace(/→/g, '->')
+    .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '?');
 }
 function fmtComma(v, d = 3) {
   const n = Number(v);
@@ -104,6 +116,18 @@ function getVersuchById(id) {
 }
 function getStageTitle(idx) {
   return `Stufe ${idx + 1}`;
+}
+function getActiveLabel() {
+  return state.activeBrunnen === 'foerder' ? 'Förderbrunnen' : 'Schluckbrunnen';
+}
+function getActiveLabelPdf() {
+  return state.activeBrunnen === 'foerder' ? 'Foerderbrunnen' : 'Schluckbrunnen';
+}
+function getActiveKey() {
+  return state.activeBrunnen === 'foerder' ? 'foerder_m' : 'schluck_m';
+}
+function getActiveRuhe() {
+  return state.activeBrunnen === 'foerder' ? state.foerder.ruhe : state.schluck.ruhe;
 }
 function getSortedMinutesFromRows(v) {
   return (v.messungen || [])
@@ -206,6 +230,12 @@ function syncBrunnenToUi() {
     if (el) el.value = state[group][key] || '';
   });
 }
+function syncActiveBrunnenToUi() {
+  const f = $('active-foerder');
+  const s = $('active-schluck');
+  if (f) f.checked = state.activeBrunnen === 'foerder';
+  if (s) s.checked = state.activeBrunnen === 'schluck';
+}
 function collectMetaFromUi() {
   META_FIELDS.forEach(([id, key]) => {
     const el = $(id);
@@ -218,15 +248,20 @@ function collectBrunnenFromUi() {
     if (el) state[group][key] = el.value || '';
   });
 }
+function collectActiveBrunnenFromUi() {
+  state.activeBrunnen = $('active-schluck')?.checked ? 'schluck' : 'foerder';
+}
 
 /* ───────────────── draft / history ───────────────── */
 
 function collectSnapshot() {
   collectMetaFromUi();
   collectBrunnenFromUi();
+  collectActiveBrunnenFromUi();
   return {
-    v: 8,
+    v: 9,
     meta: clone(state.meta),
+    activeBrunnen: state.activeBrunnen,
     foerder: clone(state.foerder),
     schluck: clone(state.schluck),
     versuche: clone(state.versuche)
@@ -237,6 +272,7 @@ function applySnapshot(snapshot, render = true) {
   if (!snapshot) return;
 
   state.meta = { ...state.meta, ...(snapshot.meta || {}) };
+  state.activeBrunnen = snapshot.activeBrunnen || 'foerder';
   state.foerder = { ...state.foerder, ...(snapshot.foerder || {}) };
   state.schluck = { ...state.schluck, ...(snapshot.schluck || {}) };
 
@@ -251,6 +287,7 @@ function applySnapshot(snapshot, render = true) {
   if (render) {
     syncMetaToUi();
     syncBrunnenToUi();
+    syncActiveBrunnenToUi();
     renderVersuche();
   }
 }
@@ -318,27 +355,24 @@ function initTabs() {
 /* ───────────────── render versuche ───────────────── */
 
 function buildVersuchHtml(v, idx) {
+  const activeLabel = getActiveLabel();
+  const activeKey = getActiveKey();
   const m3h = lsToM3h(v.foerderrate_ls);
   const summaryRate = v.foerderrate_ls
-    ? `${h(v.foerderrate_ls)} l/s · ${h(m3h || '0')} m³/h`
-    : 'keine Förderrate';
+    ? `${h(activeLabel)} · ${h(v.foerderrate_ls)} l/s · ${h(m3h || '0')} m³/h`
+    : `${h(activeLabel)} · keine Förderrate`;
 
-  const rows = v.messungen.map((m, rowIdx) => {
-    return `
-      <tr data-row="${rowIdx}">
-        <td>
-          <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}" type="number" step="1" inputmode="numeric" value="${h(m.min)}" />
-        </td>
-        <td>
-          <input class="mess-input" data-role="foerder-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(m.foerder_m)}" />
-        </td>
-        <td>
-          <input class="mess-input" data-role="schluck-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(m.schluck_m)}" />
-        </td>
-        <td class="rate-cell">${m3h ? h(m3h) : '—'}</td>
-      </tr>
-    `;
-  }).join('');
+  const rows = v.messungen.map((m, rowIdx) => `
+    <tr data-row="${rowIdx}">
+      <td>
+        <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}" type="number" step="1" inputmode="numeric" value="${h(m.min)}" />
+      </td>
+      <td>
+        <input class="mess-input" data-role="wasser-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(m[activeKey] ?? '')}" />
+      </td>
+      <td class="rate-cell">${m3h ? h(m3h) : '—'}</td>
+    </tr>
+  `).join('');
 
   return `
     <details class="card card--collapsible versuch-card" data-vid="${h(v.id)}" open>
@@ -377,8 +411,7 @@ function buildVersuchHtml(v, idx) {
             <thead>
               <tr>
                 <th>Min</th>
-                <th class="th-foerder">Förderbrunnen m ab OK</th>
-                <th class="th-schluck">Schluckbrunnen m ab OK</th>
+                <th class="th-brunnen">${h(activeLabel)} m ab OK</th>
                 <th>Förderrate [m³/h]</th>
               </tr>
             </thead>
@@ -604,6 +637,18 @@ function hookStaticInputs() {
       saveDraftDebounced();
     });
   });
+
+  $('active-foerder')?.addEventListener('change', () => {
+    collectActiveBrunnenFromUi();
+    renderVersuche();
+    saveDraftDebounced();
+  });
+
+  $('active-schluck')?.addEventListener('change', () => {
+    collectActiveBrunnenFromUi();
+    renderVersuche();
+    saveDraftDebounced();
+  });
 }
 
 /* ───────────────── versuch events ───────────────── */
@@ -625,16 +670,21 @@ function hookVersuchDelegation() {
 
     if (role === 'foerderrate') {
       versuch.foerderrate_ls = el.value;
-      const out = card.querySelector('[data-role="m3h"]');
       const conv = lsToM3h(el.value);
+      const out = card.querySelector('[data-role="m3h"]');
       if (out) out.textContent = conv ? `${conv} m³/h` : '—';
+
       card.querySelectorAll('.rate-cell').forEach(cell => {
         cell.textContent = conv ? `${conv}` : '—';
       });
+
       const summary = card.querySelector('.versuch-summary-meta');
       if (summary) {
-        summary.textContent = el.value ? `${el.value} l/s · ${conv || '0'} m³/h` : 'keine Förderrate';
+        summary.textContent = el.value
+          ? `${getActiveLabel()} · ${el.value} l/s · ${conv || '0'} m³/h`
+          : `${getActiveLabel()} · keine Förderrate`;
       }
+
       saveDraftDebounced();
       return;
     }
@@ -646,16 +696,10 @@ function hookVersuchDelegation() {
       return;
     }
 
-    if (role === 'foerder-m') {
+    if (role === 'wasser-m') {
       const idx = Number(el.dataset.row);
-      if (versuch.messungen[idx]) versuch.messungen[idx].foerder_m = el.value;
-      saveDraftDebounced();
-      return;
-    }
-
-    if (role === 'schluck-m') {
-      const idx = Number(el.dataset.row);
-      if (versuch.messungen[idx]) versuch.messungen[idx].schluck_m = el.value;
+      const key = getActiveKey();
+      if (versuch.messungen[idx]) versuch.messungen[idx][key] = el.value;
       saveDraftDebounced();
     }
   });
@@ -677,12 +721,14 @@ function hookVersuchDelegation() {
         el.value = versuch.intervalleStr;
         return;
       }
+
       const old = Array.isArray(versuch.messungen) ? versuch.messungen : [];
       versuch.intervalleStr = ints.join(', ');
       versuch.messungen = ints.map(min => {
         const hit = old.find(m => Number(m.min) === Number(min));
         return hit || { min, foerder_m: '', schluck_m: '' };
       });
+
       hardStopTimer(versuch.id);
       renderVersuche();
       saveDraftDebounced();
@@ -708,7 +754,8 @@ function hookVersuchDelegation() {
     const role = btn.dataset.role;
 
     if (role === 'del') {
-      if (!confirm(`${getStageTitle(state.versuche.findIndex(v => v.id === versuch.id))} wirklich löschen?`)) return;
+      const idx = state.versuche.findIndex(v => v.id === versuch.id);
+      if (!confirm(`${getStageTitle(idx)} wirklich löschen?`)) return;
       hardStopTimer(versuch.id);
       state.versuche = state.versuche.filter(v => v.id !== versuch.id);
       renderVersuche();
@@ -776,6 +823,7 @@ function renderHistoryList() {
   host.innerHTML = list.map(entry => {
     const snap = entry.snapshot || {};
     const count = Array.isArray(snap.versuche) ? snap.versuche.length : 0;
+    const brunnen = snap.activeBrunnen === 'schluck' ? 'Schluckbrunnen' : 'Förderbrunnen';
     return `
       <div class="historyItem">
         <div class="historyTop">
@@ -783,7 +831,7 @@ function renderHistoryList() {
           <span style="color:var(--muted);font-size:.82em">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
         </div>
         <div class="historySub">
-          Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> · Pumpstufen: <b>${h(count)}</b>
+          Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> · Brunnenart: <b>${h(brunnen)}</b> · Stufen: <b>${h(count)}</b>
         </div>
         <div class="historyBtns">
           <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
@@ -857,6 +905,10 @@ function niceAxis(minVal, maxVal, maxTicks = 5) {
   return { min: niceMin, max: niceMax, ticks };
 }
 
+function drawTextSafe(page, text, options) {
+  page.drawText(pdfSafe(text), options);
+}
+
 function drawDashedHLine(page, x1, x2, y, color, dash = 4, gap = 3, thickness = 0.7) {
   for (let x = x1; x < x2; x += dash + gap) {
     page.drawLine({
@@ -881,19 +933,28 @@ function drawMetaRow(page, x, y, w, h, cells, fontR, fontB, K) {
   }
   cells.forEach((c, i) => {
     const cx = x + i * colW + 5;
-    page.drawText(String(c.label || ''), { x: cx, y: y + h - 10, size: 7, font: fontB, color: K });
-    page.drawText(String(c.value || ''), { x: cx, y: y + 5, size: 8.2, font: fontR, color: K });
+    drawTextSafe(page, c.label || '', { x: cx, y: y + h - 10, size: 7, font: fontB, color: K });
+    drawTextSafe(page, c.value || '', { x: cx, y: y + 5, size: 8.2, font: fontR, color: K });
   });
 }
 
 function drawMeasurementTable(page, opt) {
-  const { x, yTop, w, h, messungen, foerderRuhe, schluckRuhe, foerderrateM3h, fontR, fontB, K, blue, orange } = opt;
+  const {
+    x, yTop, w, h,
+    messungen,
+    wellKey,
+    wellLabel,
+    ruhe,
+    foerderrateM3h,
+    fontR, fontB, K
+  } = opt;
+
   const rows = messungen || [];
   const head = 18;
   const available = h - head;
   const rowH = Math.max(12, Math.min(18, available / Math.max(1, rows.length)));
 
-  const cols = [0.12, 0.18, 0.16, 0.18, 0.16, 0.20];
+  const cols = [0.16, 0.26, 0.24, 0.34];
   const xs = [x];
   for (let i = 0; i < cols.length; i++) xs.push(xs[i] + w * cols[i]);
 
@@ -913,27 +974,22 @@ function drawMeasurementTable(page, opt) {
     });
   }
 
-  page.drawText('Min', { x: xs[0] + 8, y: yHead + 5, size: 7.5, font: fontB, color: K });
-  page.drawText('FB m', { x: xs[1] + 6, y: yHead + 5, size: 7.5, font: fontB, color: blue });
-page.drawText('FB Diff.', { x: xs[2] + 6, y: yHead + 5, size: 7.5, font: fontB, color: blue });
-  page.drawText('SB m', { x: xs[3] + 6, y: yHead + 5, size: 7.5, font: fontB, color: orange });
-page.drawText('SB Diff.', { x: xs[4] + 6, y: yHead + 5, size: 7.5, font: fontB, color: orange });
-  page.drawText('Rate m³/h', { x: xs[5] + 6, y: yHead + 5, size: 7.2, font: fontB, color: K });
+  drawTextSafe(page, 'Min', { x: xs[0] + 8, y: yHead + 5, size: 7.5, font: fontB, color: K });
+  drawTextSafe(page, `${wellLabel} m ab OK`, { x: xs[1] + 6, y: yHead + 5, size: 7.2, font: fontB, color: K });
+  drawTextSafe(page, 'Diff. Ruhe', { x: xs[2] + 6, y: yHead + 5, size: 7.2, font: fontB, color: K });
+  drawTextSafe(page, 'Rate [m3/h]', { x: xs[3] + 6, y: yHead + 5, size: 7.2, font: fontB, color: K });
 
   let y = yHead;
   rows.forEach((m) => {
     const nextY = y - rowH;
     page.drawLine({ start: { x, y: nextY }, end: { x: x + w, y: nextY }, thickness: 0.6, color: K });
 
-    const fDelta = calcDelta(m.foerder_m, foerderRuhe);
-    const sDelta = calcDelta(m.schluck_m, schluckRuhe);
+    const delta = calcDelta(m[wellKey], ruhe);
 
-    page.drawText(String(m.min ?? ''), { x: xs[0] + 8, y: nextY + 4.2, size: 7.4, font: fontR, color: K });
-    page.drawText(m.foerder_m !== '' ? fmtComma(m.foerder_m, 3) : '—', { x: xs[1] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
-    page.drawText(fDelta !== '' ? fmtComma(fDelta, 3) : '—', { x: xs[2] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
-    page.drawText(m.schluck_m !== '' ? fmtComma(m.schluck_m, 3) : '—', { x: xs[3] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
-    page.drawText(sDelta !== '' ? fmtComma(sDelta, 3) : '—', { x: xs[4] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
-    page.drawText(foerderrateM3h ? fmtComma(foerderrateM3h, 3) : '—', { x: xs[5] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
+    drawTextSafe(page, String(m.min ?? ''), { x: xs[0] + 8, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
+    drawTextSafe(page, m[wellKey] !== '' ? fmtComma(m[wellKey], 3) : '—', { x: xs[1] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
+    drawTextSafe(page, delta !== '' ? fmtComma(delta, 3) : '—', { x: xs[2] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
+    drawTextSafe(page, foerderrateM3h ? fmtComma(foerderrateM3h, 3) : '—', { x: xs[3] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
 
     y = nextY;
   });
@@ -944,8 +1000,8 @@ function drawChart(page, opt) {
 
   page.drawRectangle({ x, y, width: w, height: h, borderColor: K, borderWidth: 1 });
 
-  page.drawText(title, { x: x + 8, y: y + h - 14, size: 10, font: fontB, color });
-  page.drawText(subtitle || '', { x: x + 8, y: y + h - 25, size: 7.2, font: fontR, color: K });
+  drawTextSafe(page, title, { x: x + 8, y: y + h - 14, size: 10, font: fontB, color });
+  drawTextSafe(page, subtitle || '', { x: x + 8, y: y + h - 25, size: 7.2, font: fontR, color: K });
 
   const padL = 40;
   const padR = 10;
@@ -975,24 +1031,24 @@ function drawChart(page, opt) {
   yAxis.ticks.forEach(t => {
     const gy = sy(t);
     page.drawLine({ start: { x: px, y: gy }, end: { x: px + pw, y: gy }, thickness: 0.4, color: grid });
-    page.drawText(fmtComma(t, 2), { x: x + 3, y: gy - 3, size: 7, font: fontR, color: K });
+    drawTextSafe(page, fmtComma(t, 2), { x: x + 3, y: gy - 3, size: 7, font: fontR, color: K });
   });
 
   xAxis.ticks.forEach(t => {
     const gx = sx(t);
     page.drawLine({ start: { x: gx, y: py }, end: { x: gx, y: py + ph }, thickness: 0.4, color: grid });
-    page.drawText(String(Math.round(t)), { x: gx - 4, y: y + 7, size: 7, font: fontR, color: K });
+    drawTextSafe(page, String(Math.round(t)), { x: gx - 4, y: y + 7, size: 7, font: fontR, color: K });
   });
 
   page.drawLine({ start: { x: px, y: py }, end: { x: px + pw, y: py }, thickness: 1, color: K });
   page.drawLine({ start: { x: px, y: py }, end: { x: px, y: py + ph }, thickness: 1, color: K });
 
-  page.drawText('Min', { x: px + pw - 12, y: y + 7, size: 7.5, font: fontB, color: K });
+  drawTextSafe(page, 'Min', { x: px + pw - 12, y: y + 7, size: 7.5, font: fontB, color: K });
 
   if (Number.isFinite(Number(ruhe))) {
     const ry = sy(Number(ruhe));
     drawDashedHLine(page, px, px + pw, ry, K);
-    page.drawText(`Ruhewasser: ${fmtComma(ruhe, 3)} m`, {
+    drawTextSafe(page, `Ruhewasser: ${fmtComma(ruhe, 3)} m`, {
       x: px + 6,
       y: ry + 3,
       size: 7,
@@ -1002,7 +1058,7 @@ function drawChart(page, opt) {
   }
 
   if (!points.length) {
-    page.drawText('Keine Messpunkte vorhanden', {
+    drawTextSafe(page, 'Keine Messpunkte vorhanden', {
       x: px + 10,
       y: py + ph / 2,
       size: 9,
@@ -1049,7 +1105,7 @@ async function exportPdf(snapshot = null) {
 
   let logo = null;
   try {
-    const bytes = await fetch(`${BASE}logo.png?v=8`).then(r => {
+    const bytes = await fetch(`${BASE}logo.png?v=9`).then(r => {
       if (!r.ok) throw new Error(String(r.status));
       return r.arrayBuffer();
     });
@@ -1068,8 +1124,11 @@ async function exportPdf(snapshot = null) {
   const BLACK = rgb(0.08, 0.08, 0.08);
 
   const meta = snap.meta || {};
-  const foerder = snap.foerder || {};
-  const schluck = snap.schluck || {};
+  const activeBrunnen = snap.activeBrunnen || 'foerder';
+  const wellKey = activeBrunnen === 'foerder' ? 'foerder_m' : 'schluck_m';
+  const wellTitle = activeBrunnen === 'foerder' ? 'Foerderbrunnen' : 'Schluckbrunnen';
+  const ruhe = activeBrunnen === 'foerder' ? snap.foerder?.ruhe : snap.schluck?.ruhe;
+  const brunnenData = activeBrunnen === 'foerder' ? (snap.foerder || {}) : (snap.schluck || {});
 
   for (let i = 0; i < versuche.length; i++) {
     const v = hydrateVersuch(versuche[i], i);
@@ -1106,7 +1165,7 @@ async function exportPdf(snapshot = null) {
       });
     }
 
-    page.drawText('Pumpversuch-Protokoll', {
+    drawTextSafe(page, 'Pumpversuch-Protokoll', {
       x: x0 + mm(37),
       y: y0 + H - hdrH + mm(4.5),
       size: 13,
@@ -1114,7 +1173,7 @@ async function exportPdf(snapshot = null) {
       color: rgb(1, 1, 1)
     });
 
-    page.drawText('HTB Baugesellschaft m.b.H.', {
+    drawTextSafe(page, 'HTB Baugesellschaft m.b.H.', {
       x: x0 + mm(37),
       y: y0 + H - hdrH + mm(1.5),
       size: 8,
@@ -1122,10 +1181,10 @@ async function exportPdf(snapshot = null) {
       color: rgb(0.75, 0.75, 0.75)
     });
 
-    page.drawText(`${getStageTitle(i)} · ${v.foerderrate_ls || '—'} l/s · ${lsToM3h(v.foerderrate_ls) || '—'} m³/h`, {
-      x: x0 + W - mm(88),
+    drawTextSafe(page, `${getStageTitle(i)} · ${wellTitle} · ${v.foerderrate_ls || '—'} l/s · ${lsToM3h(v.foerderrate_ls) || '—'} m3/h`, {
+      x: x0 + W - mm(110),
       y: y0 + H - hdrH + mm(4),
-      size: 10,
+      size: 9.3,
       font: fontB,
       color: YELLOW
     });
@@ -1136,8 +1195,8 @@ async function exportPdf(snapshot = null) {
     drawMetaRow(page, x0, cy - rowH, W, rowH, [
       { label: 'Objekt', value: meta.objekt || '' },
       { label: 'Grundstück / Straße', value: meta.grundstueck || '' },
-      { label: 'Geprüft durch', value: meta.geprueftDurch || '' },
-      { label: 'Geprüft am', value: dateDE(meta.geprueftAm) || '' }
+      { label: 'Geprueft durch', value: meta.geprueftDurch || '' },
+      { label: 'Geprueft am', value: dateDE(meta.geprueftAm) || '' }
     ], fontR, fontB, K);
     cy -= rowH;
 
@@ -1152,8 +1211,8 @@ async function exportPdf(snapshot = null) {
     drawMetaRow(page, x0, cy - rowH, W, rowH, [
       { label: 'Bohrmeister', value: meta.bohrmeister || '' },
       { label: 'Koordination', value: meta.koordination || '' },
-      { label: 'Förderbrunnen', value: `Ø ${foerder.dm || '—'} mm · ET ${foerder.endteufe || '—'} m · RW ${foerder.ruhe || '—'} m` },
-      { label: 'Schluckbrunnen', value: `Ø ${schluck.dm || '—'} mm · ET ${schluck.endteufe || '—'} m · RW ${schluck.ruhe || '—'} m` }
+      { label: wellTitle, value: `Ø ${brunnenData.dm || '—'} mm · ET ${brunnenData.endteufe || '—'} m · RW ${ruhe || '—'} m` },
+      { label: 'Foerderrate', value: `${v.foerderrate_ls || '—'} l/s · ${lsToM3h(v.foerderrate_ls) || '—'} m3/h` }
     ], fontR, fontB, K);
     cy -= rowH;
 
@@ -1161,9 +1220,9 @@ async function exportPdf(snapshot = null) {
     const contentBottom = y0 + mm(8);
     const contentH = contentTop - contentBottom;
 
-    const tableW = W * 0.47;
-    const chartsX = x0 + tableW + mm(4);
-    const chartsW = W - tableW - mm(4);
+    const tableW = W * 0.50;
+    const chartX = x0 + tableW + mm(4);
+    const chartW = W - tableW - mm(4);
 
     drawMeasurementTable(page, {
       x: x0,
@@ -1171,47 +1230,27 @@ async function exportPdf(snapshot = null) {
       w: tableW,
       h: contentH,
       messungen: rows,
-      foerderRuhe: foerder.ruhe,
-      schluckRuhe: schluck.ruhe,
+      wellKey,
+      wellLabel: wellTitle,
+      ruhe,
       foerderrateM3h: lsToM3h(v.foerderrate_ls),
       fontR,
       fontB,
-      K,
-      blue: BLUE,
-      orange: ORANGE
+      K
     });
 
-    const chartGap = mm(4);
-    const chartH = (contentH - chartGap) / 2;
     const maxX = Math.max(180, ...(rows || []).map(m => Number(m.min) || 0));
 
     drawChart(page, {
-      x: chartsX,
-      y: contentBottom + chartH + chartGap,
-      w: chartsW,
-      h: chartH,
-      title: 'Förderbrunnen',
-      subtitle: 'Wasserstand [m ab OK Brunnenausbau]',
-      color: BLUE,
-      points: numericSeries(rows, 'foerder_m'),
-      ruhe: Number(foerder.ruhe),
-      fontR,
-      fontB,
-      K,
-      grid: GRID,
-      xMax: maxX
-    });
-
-    drawChart(page, {
-      x: chartsX,
+      x: chartX,
       y: contentBottom,
-      w: chartsW,
-      h: chartH,
-      title: 'Schluckbrunnen',
+      w: chartW,
+      h: contentH,
+      title: wellTitle,
       subtitle: 'Wasserstand [m ab OK Brunnenausbau]',
-      color: ORANGE,
-      points: numericSeries(rows, 'schluck_m'),
-      ruhe: Number(schluck.ruhe),
+      color: activeBrunnen === 'foerder' ? BLUE : ORANGE,
+      points: numericSeries(rows, wellKey),
+      ruhe: Number(ruhe),
       fontR,
       fontB,
       K,
@@ -1223,10 +1262,10 @@ async function exportPdf(snapshot = null) {
       start: { x: x0, y: y0 + mm(5.5) },
       end: { x: x0 + W, y: y0 + mm(5.5) },
       thickness: 0.8,
-           color: K
+      color: K
     });
 
-    page.drawText(`Exportiert: ${new Date().toLocaleString('de-DE')}`, {
+    drawTextSafe(page, `Exportiert: ${new Date().toLocaleString('de-DE')}`, {
       x: x0 + 4,
       y: y0 + 4,
       size: 7,
@@ -1234,7 +1273,7 @@ async function exportPdf(snapshot = null) {
       color: K
     });
 
-    page.drawText(`Seite ${i + 1}/${versuche.length}`, {
+    drawTextSafe(page, `Seite ${i + 1}/${versuche.length}`, {
       x: x0 + W - 40,
       y: y0 + 4,
       size: 7,
@@ -1261,7 +1300,6 @@ async function exportPdf(snapshot = null) {
     a.download = fileName;
     a.click();
   }
-
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
@@ -1285,12 +1323,14 @@ function resetAll() {
     geprueftAm: ''
   };
 
+  state.activeBrunnen = 'foerder';
   state.foerder = { dm: '', endteufe: '', ruhe: '' };
   state.schluck = { dm: '', endteufe: '', ruhe: '' };
   state.versuche = [];
 
   syncMetaToUi();
   syncBrunnenToUi();
+  syncActiveBrunnenToUi();
   renderVersuche();
   saveDraftDebounced();
 }
@@ -1323,6 +1363,7 @@ function initInstallButton() {
 
 window.addEventListener('DOMContentLoaded', () => {
   state.versuche = [];
+  state.activeBrunnen = 'foerder';
 
   initTabs();
   hookStaticInputs();
@@ -1333,6 +1374,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   syncMetaToUi();
   syncBrunnenToUi();
+  syncActiveBrunnenToUi();
   renderVersuche();
   renderHistoryList();
   initInstallButton();
@@ -1367,7 +1409,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btnReset')?.addEventListener('click', resetAll);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`${BASE}sw.js?v=8`).catch(err => {
+    navigator.serviceWorker.register(`${BASE}sw.js?v=9`).catch(err => {
       console.error('SW registration failed:', err);
     });
   }
