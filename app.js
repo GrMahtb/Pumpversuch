@@ -1223,4 +1223,152 @@ async function exportPdf(snapshot = null) {
       start: { x: x0, y: y0 + mm(5.5) },
       end: { x: x0 + W, y: y0 + mm(5.5) },
       thickness: 0.8,
-      color:
+           color: K
+    });
+
+    page.drawText(`Exportiert: ${new Date().toLocaleString('de-DE')}`, {
+      x: x0 + 4,
+      y: y0 + 4,
+      size: 7,
+      font: fontR,
+      color: K
+    });
+
+    page.drawText(`Seite ${i + 1}/${versuche.length}`, {
+      x: x0 + W - 40,
+      y: y0 + 4,
+      size: 7,
+      font: fontR,
+      color: K
+    });
+  }
+
+  const bytes = await pdf.save();
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+
+  const obj = (snap.meta?.objekt || 'Pumpversuch')
+    .replace(/[^\wäöüÄÖÜß\- ]+/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+
+  const fileName = `${dateTag(new Date())}_HTB_Pumpversuch_${obj || 'Protokoll'}.pdf`;
+
+  const w = window.open(url, '_blank');
+  if (!w) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+  }
+
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/* ───────────────── reset / install ───────────────── */
+
+function resetAll() {
+  if (!confirm('Alle Eingaben wirklich zurücksetzen?')) return;
+
+  Object.keys(timerMap).forEach(hardStopTimer);
+
+  state.meta = {
+    objekt: '',
+    grundstueck: '',
+    ort: '',
+    geologie: '',
+    auftragsnummer: '',
+    bauleitung: '',
+    bohrmeister: '',
+    koordination: '',
+    geprueftDurch: '',
+    geprueftAm: ''
+  };
+
+  state.foerder = { dm: '', endteufe: '', ruhe: '' };
+  state.schluck = { dm: '', endteufe: '', ruhe: '' };
+  state.versuche = [];
+
+  syncMetaToUi();
+  syncBrunnenToUi();
+  renderVersuche();
+  saveDraftDebounced();
+}
+
+function initInstallButton() {
+  let installPrompt = null;
+  const btn = $('btnInstall');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    if (btn) btn.hidden = false;
+  });
+
+  btn?.addEventListener('click', async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    btn.hidden = true;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    if (btn) btn.hidden = true;
+  });
+}
+
+/* ───────────────── init ───────────────── */
+
+window.addEventListener('DOMContentLoaded', () => {
+  state.versuche = [];
+
+  initTabs();
+  hookStaticInputs();
+  hookVersuchDelegation();
+  hookHistoryDelegation();
+
+  loadDraft();
+
+  syncMetaToUi();
+  syncBrunnenToUi();
+  renderVersuche();
+  renderHistoryList();
+  initInstallButton();
+
+  $('btnAddVersuch')?.addEventListener('click', () => {
+    const v = defaultVersuch(state.versuche.length);
+    state.versuche.push(v);
+    renderVersuche();
+    saveDraftDebounced();
+
+    setTimeout(() => {
+      const card = document.querySelector(`.versuch-card[data-vid="${v.id}"]`);
+      card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 40);
+  });
+
+  $('btnSave')?.addEventListener('click', () => {
+    saveCurrentToHistory();
+    saveDraftDebounced();
+    alert('Pumpversuch im Verlauf gespeichert.');
+  });
+
+  $('btnPdf')?.addEventListener('click', async () => {
+    try {
+      await exportPdf();
+    } catch (err) {
+      console.error(err);
+      alert('PDF-Fehler: ' + (err?.message || String(err)));
+    }
+  });
+
+  $('btnReset')?.addEventListener('click', resetAll);
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register(`${BASE}sw.js?v=8`).catch(err => {
+      console.error('SW registration failed:', err);
+    });
+  }
+});
