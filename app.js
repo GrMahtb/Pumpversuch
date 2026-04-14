@@ -1,11 +1,9 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v5 loaded');
+console.log('HTB Pumpversuch app.js v7 loaded');
 
 const BASE = '/Pumpversuch/';
-const VERSION = 'v5';
-
-const STORAGE_DRAFT = 'htb-pumpversuch-draft-v5';
-const STORAGE_HISTORY = 'htb-pumpversuch-history-v5';
+const STORAGE_DRAFT = 'htb-pumpversuch-draft-v7';
+const STORAGE_HISTORY = 'htb-pumpversuch-history-v7';
 const HISTORY_MAX = 30;
 
 const DEFAULT_INTERVALLE = [0, 1, 2, 3, 4, 5, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180];
@@ -40,6 +38,8 @@ const state = {
 
 const timerMap = {};
 
+/* ───────────────── helpers ───────────────── */
+
 function uid() {
   return crypto?.randomUUID?.() || ('id_' + Date.now() + '_' + Math.random().toString(16).slice(2));
 }
@@ -53,10 +53,6 @@ function h(v) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-function fmtNum(v, d = 3) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n.toFixed(d) : '';
 }
 function fmtComma(v, d = 3) {
   const n = Number(v);
@@ -107,7 +103,7 @@ function getVersuchById(id) {
   return state.versuche.find(v => v.id === id);
 }
 
-/* ───────────────────────── defaults ───────────────────────── */
+/* ───────────────── defaults ───────────────── */
 
 function defaultVersuch(idx = 0) {
   const ints = [...DEFAULT_INTERVALLE];
@@ -150,7 +146,7 @@ function hydrateVersuch(v, idx = 0) {
   };
 }
 
-/* ───────────────────────── meta/brunnen sync ───────────────────────── */
+/* ───────────────── field sync ───────────────── */
 
 const META_FIELDS = [
   ['meta-objekt', 'objekt'],
@@ -199,13 +195,13 @@ function collectBrunnenFromUi() {
   });
 }
 
-/* ───────────────────────── draft/history ───────────────────────── */
+/* ───────────────── draft / history ───────────────── */
 
-function collectState() {
+function collectSnapshot() {
   collectMetaFromUi();
   collectBrunnenFromUi();
   return {
-    v: 5,
+    v: 7,
     meta: clone(state.meta),
     foerder: clone(state.foerder),
     schluck: clone(state.schluck),
@@ -213,7 +209,7 @@ function collectState() {
   };
 }
 
-function applyState(snapshot, render = true) {
+function applySnapshot(snapshot, render = true) {
   if (!snapshot) return;
 
   state.meta = { ...state.meta, ...(snapshot.meta || {}) };
@@ -223,7 +219,7 @@ function applyState(snapshot, render = true) {
   if (Array.isArray(snapshot.versuche) && snapshot.versuche.length) {
     state.versuche = snapshot.versuche.map((v, i) => hydrateVersuch(v, i));
   } else {
-    state.versuche = [defaultVersuch(0), defaultVersuch(1), defaultVersuch(2)];
+    state.versuche = [];
   }
 
   Object.keys(timerMap).forEach(hardStopTimer);
@@ -240,7 +236,7 @@ function saveDraftDebounced() {
   clearTimeout(_saveT);
   _saveT = setTimeout(() => {
     try {
-      localStorage.setItem(STORAGE_DRAFT, JSON.stringify(collectState()));
+      localStorage.setItem(STORAGE_DRAFT, JSON.stringify(collectSnapshot()));
     } catch {}
   }, 250);
 }
@@ -249,7 +245,7 @@ function loadDraft() {
   try {
     const raw = localStorage.getItem(STORAGE_DRAFT);
     if (!raw) return;
-    applyState(JSON.parse(raw), true);
+    applySnapshot(JSON.parse(raw), true);
   } catch {}
 }
 
@@ -266,7 +262,7 @@ function writeHistory(list) {
   } catch {}
 }
 function saveCurrentToHistory() {
-  const snap = collectState();
+  const snap = collectSnapshot();
   const entry = {
     id: uid(),
     savedAt: Date.now(),
@@ -279,7 +275,7 @@ function saveCurrentToHistory() {
   renderHistoryList();
 }
 
-/* ───────────────────────── tabs ───────────────────────── */
+/* ───────────────── tabs ───────────────── */
 
 function initTabs() {
   document.querySelectorAll('.tab').forEach(btn => {
@@ -295,11 +291,10 @@ function initTabs() {
   });
 }
 
-/* ───────────────────────── render ───────────────────────── */
+/* ───────────────── render versuche ───────────────── */
 
-function versuchHtml(v, idx) {
+function buildVersuchHtml(v, idx) {
   const m3h = lsToM3h(v.foerderrate_ls);
-
   const rows = v.messungen.map((m, mIdx) => {
     const fd = calcDelta(m.foerder_m, state.foerder.ruhe);
     const sd = calcDelta(m.schluck_m, state.schluck.ruhe);
@@ -315,9 +310,9 @@ function versuchHtml(v, idx) {
   }).join('');
 
   return `
-    <section class="versuch-card" data-id="${h(v.id)}">
+    <section class="versuch-card" data-vid="${h(v.id)}">
       <div class="versuch-head">
-        <input class="versuch-title" data-role="titel" type="text" value="${h(v.titel)}" placeholder="Stufe ${idx + 1}" />
+        <input class="versuch-title-input" data-role="titel" type="text" value="${h(v.titel)}" placeholder="Stufe ${idx + 1}" />
         <button class="del-btn" data-role="del" type="button">Löschen</button>
       </div>
 
@@ -337,9 +332,9 @@ function versuchHtml(v, idx) {
         <div class="timer-row">
           <div class="timer-display" data-role="elapsed">${formatElapsed(v.elapsedMs || 0)}</div>
           <div class="timer-buttons">
-            <button class="timer-btn timer-btn--start" data-role="timer-start" type="button">▶ Start</button>
-            <button class="timer-btn timer-btn--stop" data-role="timer-stop" type="button">■ Stop</button>
-            <button class="timer-btn timer-btn--ghost" data-role="timer-reset" type="button">↺ Reset</button>
+            <button class="timer-btn timer-btn--start" data-role="timer-start" type="button">Start</button>
+            <button class="timer-btn timer-btn--stop" data-role="timer-stop" type="button">Stop</button>
+            <button class="timer-btn timer-btn--ghost" data-role="timer-reset" type="button">Reset</button>
           </div>
         </div>
         <div class="timer-info" data-role="startzeit">${v.startzeit ? `Startzeit: ${h(v.startzeit)}` : 'Noch nicht gestartet'}</div>
@@ -351,14 +346,14 @@ function versuchHtml(v, idx) {
           <thead>
             <tr>
               <th rowspan="2">Min</th>
-              <th colspan="2" class="foerder-head">🔵 Förderbrunnen</th>
-              <th colspan="2" class="schluck-head">🟠 Schluckbrunnen</th>
+              <th colspan="2" class="th-foerder">Förderbrunnen</th>
+              <th colspan="2" class="th-schluck">Schluckbrunnen</th>
             </tr>
             <tr>
-              <th class="foerder-head">m ab OK</th>
-              <th class="foerder-head">Δ Ruhe</th>
-              <th class="schluck-head">m ab OK</th>
-              <th class="schluck-head">Δ Ruhe</th>
+              <th class="th-foerder">m ab OK</th>
+              <th class="th-foerder">Δ Ruhe</th>
+              <th class="th-schluck">m ab OK</th>
+              <th class="th-schluck">Δ Ruhe</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -371,9 +366,21 @@ function versuchHtml(v, idx) {
 function renderVersuche() {
   const host = $('versucheContainer');
   if (!host) return;
-  host.innerHTML = state.versuche.map((v, idx) => versuchHtml(v, idx)).join('');
+
+  if (!state.versuche.length) {
+    host.innerHTML = `
+      <div class="empty-state">
+        Noch kein Pumpversuch angelegt.<br />
+        Bitte über den Plus-Button einen neuen Versuch hinzufügen.
+      </div>
+    `;
+    return;
+  }
+
+  host.innerHTML = state.versuche.map((v, idx) => buildVersuchHtml(v, idx)).join('');
+
   document.querySelectorAll('.versuch-card').forEach(card => {
-    const v = getVersuchById(card.dataset.id);
+    const v = getVersuchById(card.dataset.vid);
     if (v) updateTimerUi(card, v);
   });
 }
@@ -388,7 +395,7 @@ function updateDeltaCell(card, mIdx, role, messwert, ruhe) {
 
 function refreshAllDeltas() {
   document.querySelectorAll('.versuch-card').forEach(card => {
-    const v = getVersuchById(card.dataset.id);
+    const v = getVersuchById(card.dataset.vid);
     if (!v) return;
     v.messungen.forEach((m, mIdx) => {
       updateDeltaCell(card, mIdx, 'foerder-delta', m.foerder_m, state.foerder.ruhe);
@@ -397,7 +404,7 @@ function refreshAllDeltas() {
   });
 }
 
-/* ───────────────────────── timer ───────────────────────── */
+/* ───────────────── timer ───────────────── */
 
 function ensureTimer(vid, versuch) {
   if (!timerMap[vid]) {
@@ -437,7 +444,7 @@ function updateTimerUi(card, versuch) {
   if (startZeitEl) startZeitEl.textContent = versuch.startzeit ? `Startzeit: ${versuch.startzeit}` : 'Noch nicht gestartet';
 
   if (startBtn) {
-    startBtn.textContent = t.running ? '▶ Läuft' : (versuch.elapsedMs > 0 ? '▶ Weiter' : '▶ Start');
+    startBtn.textContent = t.running ? 'Läuft' : (versuch.elapsedMs > 0 ? 'Weiter' : 'Start');
     startBtn.disabled = t.running;
   }
   if (stopBtn) stopBtn.disabled = !t.running;
@@ -445,14 +452,14 @@ function updateTimerUi(card, versuch) {
   const ints = parseIntervalStr(versuch.intervalleStr);
   const alarmInts = ints.filter(iv => iv > 0);
   const elapsedMin = elapsedMs / 60000;
-
   const nextIv = alarmInts.find(iv => elapsedMin < iv);
+
   if (nextEl) {
     if (nextIv !== undefined) {
       const restSec = Math.max(0, Math.ceil((nextIv * 60000 - elapsedMs) / 1000));
-      nextEl.textContent = `⏱ nächste Messung: ${nextIv} min (in ${restSec}s)`;
+      nextEl.textContent = `Nächste Messung: ${nextIv} min (in ${restSec}s)`;
     } else {
-      nextEl.textContent = '✅ alle Messintervalle erreicht';
+      nextEl.textContent = 'Alle Messintervalle erreicht';
     }
   }
 
@@ -471,7 +478,7 @@ function tickTimer(vid) {
   const t = timerMap[vid];
   if (!versuch || !t || !t.running) return;
 
-  const card = document.querySelector(`.versuch-card[data-id="${vid}"]`);
+  const card = document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   if (!card) return;
 
   versuch.elapsedMs = getElapsedMs(vid, versuch);
@@ -492,6 +499,7 @@ function tickTimer(vid) {
 function startTimer(vid) {
   const versuch = getVersuchById(vid);
   if (!versuch) return;
+
   const t = ensureTimer(vid, versuch);
   if (t.running) return;
 
@@ -503,7 +511,7 @@ function startTimer(vid) {
   t.running = true;
   t.startMs = Date.now();
 
-  const card = document.querySelector(`.versuch-card[data-id="${vid}"]`);
+  const card = document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   updateTimerUi(card, versuch);
   tickTimer(vid);
   saveDraftDebounced();
@@ -520,7 +528,7 @@ function stopTimer(vid) {
   if (t.raf) cancelAnimationFrame(t.raf);
   t.raf = null;
 
-  const card = document.querySelector(`.versuch-card[data-id="${vid}"]`);
+  const card = document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   updateTimerUi(card, versuch);
   saveDraftDebounced();
 }
@@ -528,9 +536,10 @@ function stopTimer(vid) {
 function resetTimer(vid) {
   const versuch = getVersuchById(vid);
   if (!versuch) return;
-  const t = ensureTimer(vid, versuch);
 
+  const t = ensureTimer(vid, versuch);
   if (t.raf) cancelAnimationFrame(t.raf);
+
   t.running = false;
   t.startMs = 0;
   t.accumulatedMs = 0;
@@ -540,7 +549,7 @@ function resetTimer(vid) {
   versuch.elapsedMs = 0;
   versuch.startzeit = '';
 
-  const card = document.querySelector(`.versuch-card[data-id="${vid}"]`);
+  const card = document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   updateTimerUi(card, versuch);
   saveDraftDebounced();
 }
@@ -554,7 +563,7 @@ function hardStopTimer(vid) {
   delete timerMap[vid];
 }
 
-/* ───────────────────────── event hooks ───────────────────────── */
+/* ───────────────── event hooks ───────────────── */
 
 function hookStaticInputs() {
   META_FIELDS.forEach(([id]) => {
@@ -596,7 +605,7 @@ function hookVersuchDelegation() {
     if (!el) return;
     const card = el.closest('.versuch-card');
     if (!card) return;
-    const versuch = getVersuchById(card.dataset.id);
+    const versuch = getVersuchById(card.dataset.vid);
     if (!versuch) return;
 
     const role = el.dataset.role;
@@ -637,7 +646,7 @@ function hookVersuchDelegation() {
     if (!el) return;
     const card = el.closest('.versuch-card');
     if (!card) return;
-    const versuch = getVersuchById(card.dataset.id);
+    const versuch = getVersuchById(card.dataset.vid);
     if (!versuch) return;
 
     if (el.dataset.role === 'intervalle') {
@@ -664,22 +673,15 @@ function hookVersuchDelegation() {
     if (!btn) return;
     const card = btn.closest('.versuch-card');
     if (!card) return;
-    const versuch = getVersuchById(card.dataset.id);
+    const versuch = getVersuchById(card.dataset.vid);
     if (!versuch) return;
 
     const role = btn.dataset.role;
 
     if (role === 'del') {
-      if (state.versuche.length <= 1) {
-        alert('Mindestens ein Pumpversuch muss vorhanden sein.');
-        return;
-      }
       if (!confirm(`"${versuch.titel || 'Versuch'}" wirklich löschen?`)) return;
       hardStopTimer(versuch.id);
       state.versuche = state.versuche.filter(v => v.id !== versuch.id);
-      state.versuche.forEach((v, i) => {
-        if (!v.titel || /^Stufe \d+$/i.test(v.titel)) v.titel = `Stufe ${i + 1}`;
-      });
       renderVersuche();
       saveDraftDebounced();
       return;
@@ -713,7 +715,7 @@ function hookHistoryDelegation() {
     if (!entry) return;
 
     if (act === 'load') {
-      applyState(entry.snapshot, true);
+      applySnapshot(entry.snapshot, true);
       saveDraftDebounced();
       document.querySelector('.tab[data-tab="protokoll"]')?.click();
       return;
@@ -730,7 +732,7 @@ function hookHistoryDelegation() {
   });
 }
 
-/* ───────────────────────── history ui ───────────────────────── */
+/* ───────────────── history ui ───────────────── */
 
 function renderHistoryList() {
   const host = $('historyList');
@@ -744,7 +746,7 @@ function renderHistoryList() {
 
   host.innerHTML = list.map(entry => {
     const snap = entry.snapshot || {};
-    const stufen = Array.isArray(snap.versuche) ? snap.versuche.length : 0;
+    const count = Array.isArray(snap.versuche) ? snap.versuche.length : 0;
     return `
       <div class="historyItem">
         <div class="historyTop">
@@ -752,7 +754,7 @@ function renderHistoryList() {
           <span style="color:var(--muted);font-size:.82em">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
         </div>
         <div class="historySub">
-          Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> · Stufen: <b>${h(stufen)}</b>
+          Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> · Pumpversuche: <b>${h(count)}</b>
         </div>
         <div class="historyBtns">
           <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
@@ -764,7 +766,7 @@ function renderHistoryList() {
   }).join('');
 }
 
-/* ───────────────────────── pdf helpers ───────────────────────── */
+/* ───────────────── pdf helpers ───────────────── */
 
 function numericSeries(messungen, key) {
   return (messungen || [])
@@ -813,6 +815,17 @@ function niceAxis(minVal, maxVal, maxTicks = 5) {
   return { min: niceMin, max: niceMax, ticks };
 }
 
+function drawDashedHLine(page, x1, x2, y, color, dash = 4, gap = 3, thickness = 0.7) {
+  for (let x = x1; x < x2; x += dash + gap) {
+    page.drawLine({
+      start: { x, y },
+      end: { x: Math.min(x + dash, x2), y },
+      thickness,
+      color
+    });
+  }
+}
+
 function drawMetaRow(page, x, y, w, h, cells, fontR, fontB, K) {
   const colW = w / cells.length;
   page.drawRectangle({ x, y, width: w, height: h, borderColor: K, borderWidth: 0.7 });
@@ -856,7 +869,6 @@ function drawMeasurementTable(page, opt) {
   for (let i = 1; i < 5; i++) {
     page.drawRectangle({ x: xs[i], y: yHead2, width: xs[i + 1] - xs[i], height: head2, borderColor: K, borderWidth: 0.6 });
   }
-
   for (let i = 1; i < xs.length - 1; i++) {
     page.drawLine({ start: { x: xs[i], y: yTop - totalH }, end: { x: xs[i], y: yHead2 }, thickness: 0.6, color: K });
   }
@@ -886,17 +898,6 @@ function drawMeasurementTable(page, opt) {
 
     y = nextY;
   });
-}
-
-function drawDashedHLine(page, x1, x2, y, color, dash = 4, gap = 3, thickness = 0.7) {
-  for (let x = x1; x < x2; x += dash + gap) {
-    page.drawLine({
-      start: { x, y },
-      end: { x: Math.min(x + dash, x2), y },
-      thickness,
-      color
-    });
-  }
 }
 
 function drawChart(page, opt) {
@@ -934,6 +935,7 @@ function drawChart(page, opt) {
     page.drawLine({ start: { x: px, y: gy }, end: { x: px + pw, y: gy }, thickness: 0.4, color: K, opacity: 0.2 });
     page.drawText(fmtComma(t, 2), { x: x + 3, y: gy - 3, size: 7, font: fontR, color: K });
   });
+
   xAxis.ticks.forEach(t => {
     const gx = sx(t);
     page.drawLine({ start: { x: gx, y: py }, end: { x: gx, y: py + ph }, thickness: 0.4, color: K, opacity: 0.18 });
@@ -967,10 +969,16 @@ function drawChart(page, opt) {
 }
 
 async function exportPdf(snapshot = null) {
-  const snap = snapshot || collectState();
+  const snap = snapshot || collectSnapshot();
 
   if (!window.PDFLib) {
     alert('PDF-Library noch nicht geladen. Bitte kurz warten.');
+    return;
+  }
+
+  const versuche = Array.isArray(snap.versuche) ? snap.versuche : [];
+  if (!versuche.length) {
+    alert('Es ist noch kein Pumpversuch vorhanden.');
     return;
   }
 
@@ -982,7 +990,7 @@ async function exportPdf(snapshot = null) {
 
   let logo = null;
   try {
-    const bytes = await fetch(`${BASE}logo.png?v=5`).then(r => {
+    const bytes = await fetch(`${BASE}logo.png?v=7`).then(r => {
       if (!r.ok) throw new Error(String(r.status));
       return r.arrayBuffer();
     });
@@ -1002,7 +1010,6 @@ async function exportPdf(snapshot = null) {
   const meta = snap.meta || {};
   const foerder = snap.foerder || {};
   const schluck = snap.schluck || {};
-  const versuche = Array.isArray(snap.versuche) && snap.versuche.length ? snap.versuche : [defaultVersuch(0)];
 
   for (let i = 0; i < versuche.length; i++) {
     const v = hydrateVersuch(versuche[i], i);
@@ -1161,7 +1168,7 @@ async function exportPdf(snapshot = null) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-/* ───────────────────────── reset/install ───────────────────────── */
+/* ───────────────── reset / install ───────────────── */
 
 function resetAll() {
   if (!confirm('Alle Eingaben wirklich zurücksetzen?')) return;
@@ -1182,7 +1189,7 @@ function resetAll() {
   };
   state.foerder = { dm: '', endteufe: '', ruhe: '' };
   state.schluck = { dm: '', endteufe: '', ruhe: '' };
-  state.versuche = [defaultVersuch(0), defaultVersuch(1), defaultVersuch(2)];
+  state.versuche = [];
 
   syncMetaToUi();
   syncBrunnenToUi();
@@ -1214,10 +1221,10 @@ function initInstallButton() {
   });
 }
 
-/* ───────────────────────── init ───────────────────────── */
+/* ───────────────── init ───────────────── */
 
 window.addEventListener('DOMContentLoaded', () => {
-  state.versuche = [defaultVersuch(0), defaultVersuch(1), defaultVersuch(2)];
+  state.versuche = [];
 
   initTabs();
   hookStaticInputs();
@@ -1225,10 +1232,6 @@ window.addEventListener('DOMContentLoaded', () => {
   hookHistoryDelegation();
 
   loadDraft();
-
-  if (!state.versuche.length) {
-    state.versuche = [defaultVersuch(0), defaultVersuch(1), defaultVersuch(2)];
-  }
 
   syncMetaToUi();
   syncBrunnenToUi();
@@ -1241,8 +1244,10 @@ window.addEventListener('DOMContentLoaded', () => {
     state.versuche.push(v);
     renderVersuche();
     saveDraftDebounced();
+
     setTimeout(() => {
-      document.querySelector(`.versuch-card[data-id="${v.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const card = document.querySelector(`.versuch-card[data-vid="${v.id}"]`);
+      card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 40);
   });
 
@@ -1264,7 +1269,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btnReset')?.addEventListener('click', resetAll);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`${BASE}sw.js?v=5`).catch(err => {
+    navigator.serviceWorker.register(`${BASE}sw.js?v=7`).catch(err => {
       console.error('SW registration failed:', err);
     });
   }
