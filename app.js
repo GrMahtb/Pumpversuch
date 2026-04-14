@@ -915,9 +915,9 @@ function drawMeasurementTable(page, opt) {
 
   page.drawText('Min', { x: xs[0] + 8, y: yHead + 5, size: 7.5, font: fontB, color: K });
   page.drawText('FB m', { x: xs[1] + 6, y: yHead + 5, size: 7.5, font: fontB, color: blue });
-  page.drawText('FB Δ', { x: xs[2] + 6, y: yHead + 5, size: 7.5, font: fontB, color: blue });
+page.drawText('FB Diff.', { x: xs[2] + 6, y: yHead + 5, size: 7.5, font: fontB, color: blue });
   page.drawText('SB m', { x: xs[3] + 6, y: yHead + 5, size: 7.5, font: fontB, color: orange });
-  page.drawText('SB Δ', { x: xs[4] + 6, y: yHead + 5, size: 7.5, font: fontB, color: orange });
+page.drawText('SB Diff.', { x: xs[4] + 6, y: yHead + 5, size: 7.5, font: fontB, color: orange });
   page.drawText('Rate m³/h', { x: xs[5] + 6, y: yHead + 5, size: 7.2, font: fontB, color: K });
 
   let y = yHead;
