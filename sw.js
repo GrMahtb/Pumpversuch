@@ -1,27 +1,19 @@
-const BASE = '/Pumpversuch/';
-const CACHE = 'htb-pumpversuch-v20';
-
+const BASE  = '/Pumpversuch/';
+const CACHE = 'htb-pumpversuch-v25';
 const ASSETS = [
-  BASE,
-  BASE + 'index.html',
-  BASE + 'styles.css',
-  BASE + 'app.js',
-  BASE + 'manifest.json',
-  BASE + 'logo.svg',
-  BASE + 'icon.svg'
+  BASE, BASE+'index.html', BASE+'styles.css', BASE+'app.js',
+  BASE+'manifest.json', BASE+'logo.svg', BASE+'icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS))
-  );
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -30,17 +22,15 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
-      .then((res) => {
+      .then(res => {
         const clone = res.clone();
-        caches.open(CACHE).then((cache) => cache.put(event.request, clone));
+        caches.open(CACHE).then(cache => cache.put(event.request, clone));
         return res;
       })
       .catch(async () => {
         const cached = await caches.match(event.request);
         if (cached) return cached;
-        if (event.request.mode === 'navigate') {
-          return caches.match(BASE + 'index.html');
-        }
+        if (event.request.mode === 'navigate') return caches.match(BASE+'index.html');
       })
   );
 });
