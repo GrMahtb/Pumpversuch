@@ -29,6 +29,8 @@ body{
   text-rendering:optimizeLegibility;
 }
 
+[hidden]{display:none !important}
+
 /* Header */
 .brand{margin:0 -14px 12px;overflow:hidden}
 .brand__bar{
@@ -199,7 +201,7 @@ body{
   box-shadow:0 0 0 3px rgba(255,237,0,.08);
 }
 
-/* Auswahl Brunnenart */
+/* Auswahl Brunnen */
 .select-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -346,7 +348,7 @@ body{
   margin-bottom:10px;
 }
 
-/* Versuch cards */
+/* Versuch / Stufe */
 .versuch-card{
   margin-bottom:12px;
 }
@@ -378,7 +380,7 @@ body{
   text-transform:uppercase;
 }
 .rate-input{
-  width:92px;
+  width:110px;
   background:#111214;
   color:var(--text);
   border:1px solid var(--border);
@@ -397,6 +399,11 @@ body{
   color:var(--accent);
   font-weight:900;
   font-size:.9em;
+}
+.auto-rate{
+  color:var(--muted);
+  font-size:.85em;
+  font-weight:700;
 }
 .interval-input{
   flex:1;
@@ -504,7 +511,8 @@ body{
   text-align:center;
   font-weight:900;
 }
-.mess-table th.th-brunnen{color:var(--accent)}
+.mess-table th.th-foerder{color:var(--foerder)}
+.mess-table th.th-schluck{color:var(--schluck)}
 .mess-table td{
   border:1px solid var(--border);
   padding:4px;
