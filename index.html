@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title" content="HTB Pumpversuch" />
   <title>HTB Pumpversuch-Protokoll</title>
 
-  <link rel="manifest" href="/Pumpversuch/manifest.json?v=8" />
-  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=8" />
-  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=8" />
+  <link rel="manifest" href="/Pumpversuch/manifest.json?v=9" />
+  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=9" />
+  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=9" />
 
   <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
@@ -20,9 +20,9 @@
     <div class="brand__bar">
       <div class="brand__logo">
         <img
-          src="/Pumpversuch/logo.svg?v=8"
+          src="/Pumpversuch/logo.svg?v=9"
           alt="HTB Logo"
-          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=8';"
+          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=9';"
         />
       </div>
       <div class="brand__info">
@@ -100,6 +100,17 @@
     <details class="card card--collapsible" open>
       <summary class="card__title">Brunnendaten</summary>
       <div class="card__body">
+        <div class="select-grid">
+          <label class="select-card">
+            <input type="radio" name="activeBrunnen" id="active-foerder" value="foerder" checked />
+            <span>Förderbrunnen im Pumpversuch</span>
+          </label>
+          <label class="select-card">
+            <input type="radio" name="activeBrunnen" id="active-schluck" value="schluck" />
+            <span>Schluckbrunnen im Pumpversuch</span>
+          </label>
+        </div>
+
         <div class="brunnen-grid">
           <section class="brunnen-box">
             <div class="brunnen-title brunnen-title--foerder">Förderbrunnen</div>
@@ -146,7 +157,7 @@
         <button id="btnPdf" class="btn btn--ghost btn--small" type="button">PDF</button>
         <button id="btnReset" class="btn btn--ghost btn--small" type="button">Reset</button>
       </div>
-      <div class="hint">Speichern im Verlauf · PDF mit Tabelle und Diagrammen exportieren</div>
+      <div class="hint">Speichern im Verlauf · PDF mit Tabelle und Diagramm exportieren</div>
     </section>
 
     <section class="card">
@@ -174,10 +185,9 @@
     <section class="card">
       <div class="card__title">App</div>
       <div class="text">
-        <p><b>Startzustand:</b> Die App startet ohne Pumpversuch. Eine neue Stufe wird erst über den Plus-Button angelegt.</p>
-        <p><b>Eingabe:</b> Minuten sind direkt pro Zeile editierbar. Die Förderrate wird als m³/h angezeigt.</p>
-        <p><b>PDF:</b> Im PDF sind zusätzlich die Delta-Werte zum Ruhewasserstand enthalten.</p>
-        <p><b>Speicherung:</b> Daten bleiben lokal auf dem Gerät gespeichert.</p>
+        <p><b>Brunnenwahl:</b> Im Bereich Brunnendaten wird festgelegt, ob im Pumpversuch mit Förderbrunnen oder Schluckbrunnen gearbeitet wird.</p>
+        <p><b>Eingabe:</b> Dadurch gibt es in jeder Stufe nur noch eine Brunnen-Spalte und keine seitliche Scrolltabelle mehr.</p>
+        <p><b>PDF:</b> Im PDF wird ebenfalls nur die gewählte Brunnenart ausgegeben; die Differenz zum Ruhewasserstand bleibt dort enthalten.</p>
       </div>
     </section>
 
@@ -196,6 +206,6 @@
     <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
   </footer>
 
-  <script src="/Pumpversuch/app.js?v=8"></script>
+  <script src="/Pumpversuch/app.js?v=9"></script>
 </body>
 </html>
