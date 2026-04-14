@@ -1,1 +1,194 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#111111"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+<meta name="apple-mobile-web-app-title" content="HTB Pumpversuch"/>
+<title>HTB Pumpversuch-Protokoll</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="icon" type="image/svg+xml" href="icon.svg"/>
+<link rel="icon" type="image/png" sizes="192x192" href="launchericon-192x192.png"/>
+<link rel="apple-touch-icon" sizes="180x180" href="launchericon-192x192.png"/>
+<link rel="stylesheet" href="styles.css"/>
+<script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+</head>
+<body>
 
+<header class="brand">
+  <div class="brand__bar">
+    <div class="brand__logo"><img src="logo.png" alt="HTB"/></div>
+    <div class="brand__info">
+      <div class="brand__company">HTB Baugesellschaft m.b.H.</div>
+      <div class="brand__subtitle">Pumpversuch-Protokoll · Förderbrunnen &amp; Schluckbrunnen</div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Menü">
+  <button class="tab is-active" data-tab="protokoll" type="button">Protokoll</button>
+  <button class="tab" data-tab="verlauf"   type="button">Verlauf</button>
+  <button class="tab" data-tab="app"       type="button">App</button>
+</nav>
+
+<!-- ═══ PROTOKOLL ═══ -->
+<main id="tab-protokoll" class="pane is-active" role="tabpanel">
+
+  <!-- Stammdaten -->
+  <details class="card card--collapsible" open>
+    <summary class="card__title">Stammdaten</summary>
+    <div class="card__body">
+      <div class="form-grid">
+        <label class="field field--full">
+          <span class="field__label">Objekt</span>
+          <input id="inp-objekt" class="field__input" type="text" placeholder="Objektbezeichnung"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Grundstück / Straße</span>
+          <input id="inp-grundstueck" class="field__input" type="text"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Ort</span>
+          <input id="inp-ort" class="field__input" type="text"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Auftragsnummer</span>
+          <input id="inp-auftragsnummer" class="field__input" type="text"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Bohrmeister</span>
+          <input id="inp-bohrmeister" class="field__input" type="text"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Geologie</span>
+          <input id="inp-geologie" class="field__input" type="text"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Bauleitung</span>
+          <input id="inp-bauleitung" class="field__input" type="text"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Koordination</span>
+          <input id="inp-koordination" class="field__input" type="text"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Geprüft durch</span>
+          <input id="inp-geprueft-durch" class="field__input" type="text"/>
+        </label>
+        <label class="field">
+          <span class="field__label">Geprüft am</span>
+          <input id="inp-geprueft-am" class="field__input" type="date"/>
+        </label>
+      </div>
+    </div>
+  </details>
+
+  <!-- Brunnendaten -->
+  <details class="card card--collapsible" open>
+    <summary class="card__title">Brunnendaten</summary>
+    <div class="card__body">
+      <div class="brunnen-grid">
+        <!-- Förderbrunnen -->
+        <div class="brunnen-box">
+          <div class="brunnen-title brunnen-title--foerder">🔵 Förderbrunnen</div>
+          <div class="form-grid">
+            <label class="field">
+              <span class="field__label">Ausbau-Ø (freier Durchgang) [mm]</span>
+              <input id="inp-foerder-dm" class="field__input" type="number" step="1" placeholder="z.B. 300"/>
+            </label>
+            <label class="field">
+              <span class="field__label">Endteufe [m]</span>
+              <input id="inp-foerder-endteufe" class="field__input" type="number" step="0.01" placeholder="z.B. 12.00"/>
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Ruhewasserstand [m ab OK Brunnenausbau]</span>
+              <input id="inp-foerder-ruhe" class="field__input" type="number" step="0.001" placeholder="z.B. 3.450"/>
+            </label>
+          </div>
+        </div>
+        <!-- Schluckbrunnen -->
+        <div class="brunnen-box">
+          <div class="brunnen-title brunnen-title--schluck">🟠 Schluckbrunnen</div>
+          <div class="form-grid">
+            <label class="field">
+              <span class="field__label">Ausbau-Ø (freier Durchgang) [mm]</span>
+              <input id="inp-schluck-dm" class="field__input" type="number" step="1" placeholder="z.B. 300"/>
+            </label>
+            <label class="field">
+              <span class="field__label">Endteufe [m]</span>
+              <input id="inp-schluck-endteufe" class="field__input" type="number" step="0.01" placeholder="z.B. 12.00"/>
+            </label>
+            <label class="field field--full">
+              <span class="field__label">Ruhewasserstand [m ab OK Brunnenausbau]</span>
+              <input id="inp-schluck-ruhe" class="field__input" type="number" step="0.001" placeholder="z.B. 3.450"/>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <!-- Pumpversuche Container -->
+  <div id="versucheContainer"></div>
+
+  <!-- Plus Button -->
+  <div class="plus-btn-wrap">
+    <button id="btnAddVersuch" class="btn-plus" type="button" title="Neuen Pumpversuch hinzufügen">＋</button>
+    <div class="plus-label">Pumpversuch hinzufügen</div>
+  </div>
+
+  <!-- Aktionen -->
+  <section class="card">
+    <div class="card__title">Aktionen</div>
+    <div class="buttons">
+      <button id="btnSave"  class="btn btn--accent" type="button">💾 Speichern</button>
+      <button id="btnPdf"   class="btn btn--ghost"  type="button">📄 PDF Export</button>
+      <button id="btnReset" class="btn btn--ghost"  type="button">↺ Reset</button>
+    </div>
+    <div class="hint">PDF enthält Messtabelle + Diagramme für Förder- und Schluckbrunnen</div>
+  </section>
+
+</main>
+
+<!-- ═══ VERLAUF ═══ -->
+<main id="tab-verlauf" class="pane" role="tabpanel" hidden>
+  <section class="card">
+    <div class="card__title">Gespeicherte Pumpversuche</div>
+    <div id="historyList" class="historyList"></div>
+    <div class="hint">Neueste oben · lokal gespeichert · offline verfügbar · max. 30 Einträge</div>
+  </section>
+</main>
+
+<!-- ═══ APP ═══ -->
+<main id="tab-app" class="pane" role="tabpanel" hidden>
+  <section class="card">
+    <div class="card__title">Über diese App</div>
+    <div class="text">
+      <p><b>Pumpversuch-Protokoll</b> nach HTB-Vorlage für Förder- und Schluckbrunnen.</p>
+      <p><b>Stoppuhr:</b> Pro Versuch separate Zeitmessung. Vibration bei jedem Messintervall (0, 1, 2, 3, 4, 5, 15, 30 … 180 min).</p>
+      <p><b>Delta-Berechnung:</b> Δ Ruhewasser wird automatisch aus Messwert − Ruhewasserstand berechnet.</p>
+      <p><b>PDF Export:</b> Protokoll mit Tabellen + Diagrammen für Förder- und Schluckbrunnen je Stufe.</p>
+      <p><b>Speicherung:</b> Alle Daten bleiben lokal auf dem Gerät gespeichert.</p>
+    </div>
+  </section>
+  <section class="card">
+    <div class="card__title">Als App installieren</div>
+    <div class="text">
+      <p><b>Android:</b> Chrome-Menü → "App installieren"</p>
+      <p><b>iPhone:</b> Safari → Teilen → "Zum Home-Bildschirm"</p>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  &copy; <b>HTB Baugesellschaft m.b.H.</b> – Pumpversuch-Protokoll PWA
+  <br/>
+  <button id="btnInstall" class="btn btn--install" type="button" hidden>⬇ App installieren</button>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
