@@ -17,7 +17,6 @@
 
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-
 body{
   background:var(--bg);
   color:var(--text);
@@ -28,7 +27,6 @@ body{
   -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
 }
-
 [hidden]{display:none !important}
 
 /* Header */
@@ -351,12 +349,26 @@ body{
 /* Versuch / Stufe */
 .versuch-card{
   margin-bottom:12px;
+  padding:0 14px 12px;
+  overflow:hidden;
+}
+.versuch-card>summary.card__title{
+  background:var(--accent);
+  color:#111;
+  margin:0 -14px 12px;
+  padding:12px 14px;
+}
+.versuch-card>summary.card__title::before{
+  background:#111;
+}
+.versuch-card>summary.card__title::after{
+  color:#111;
 }
 .versuch-summary-meta{
   margin-left:auto;
-  color:var(--muted);
-  font-size:.9em;
-  font-weight:800;
+  color:#111;
+  font-size:.92em;
+  font-weight:900;
   text-transform:none;
   letter-spacing:0;
   padding-right:8px;
@@ -380,7 +392,7 @@ body{
   text-transform:uppercase;
 }
 .rate-input{
-  width:110px;
+  width:120px;
   background:#111214;
   color:var(--text);
   border:1px solid var(--border);
@@ -399,11 +411,6 @@ body{
   color:var(--accent);
   font-weight:900;
   font-size:.9em;
-}
-.auto-rate{
-  color:var(--muted);
-  font-size:.85em;
-  font-weight:700;
 }
 .interval-input{
   flex:1;
@@ -519,18 +526,30 @@ body{
   text-align:center;
   vertical-align:middle;
 }
-.mess-table .rate-cell{
-  color:var(--accent);
-  font-weight:900;
-  background:rgba(255,237,0,.03);
-}
 .mess-table tr.row-active td{
   background:rgba(0,204,102,.08);
+}
+.minute-cell{
+  display:flex;
+  align-items:center;
+  gap:4px;
 }
 .minute-input{
   width:100%;
   max-width:100%;
 }
+.row-plus{
+  width:26px;
+  height:26px;
+  border:1px solid var(--border);
+  background:var(--card2);
+  color:var(--accent);
+  border-radius:999px;
+  font-weight:900;
+  cursor:pointer;
+  flex-shrink:0;
+}
+.row-plus:hover{border-color:var(--accent)}
 .mess-input{
   width:100%;
   max-width:100%;
@@ -639,6 +658,13 @@ body{
   .brand__subtitle{font-size:.72em}
   .tab{font-size:.8em;padding:9px 4px}
   .card{padding:12px}
+  .versuch-card{
+    padding:0 12px 12px;
+  }
+  .versuch-card>summary.card__title{
+    margin:0 -12px 12px;
+    padding:12px;
+  }
   .versuch-summary-meta{
     width:100%;
     margin-left:0;
