@@ -1,9 +1,9 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v7 loaded');
+console.log('HTB Pumpversuch app.js v8 loaded');
 
 const BASE = '/Pumpversuch/';
-const STORAGE_DRAFT = 'htb-pumpversuch-draft-v7';
-const STORAGE_HISTORY = 'htb-pumpversuch-history-v7';
+const STORAGE_DRAFT = 'htb-pumpversuch-draft-v8';
+const STORAGE_HISTORY = 'htb-pumpversuch-history-v8';
 const HISTORY_MAX = 30;
 
 const DEFAULT_INTERVALLE = [0, 1, 2, 3, 4, 5, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180];
@@ -102,6 +102,31 @@ function calcDelta(messwert, ruhe) {
 function getVersuchById(id) {
   return state.versuche.find(v => v.id === id);
 }
+function getStageTitle(idx) {
+  return `Stufe ${idx + 1}`;
+}
+function getSortedMinutesFromRows(v) {
+  return (v.messungen || [])
+    .map(m => Number(m.min))
+    .filter(n => Number.isFinite(n) && n >= 0)
+    .sort((a, b) => a - b);
+}
+function syncIntervalleStrFromRows(v) {
+  v.intervalleStr = getSortedMinutesFromRows(v).join(', ');
+}
+function sortMessungen(v) {
+  v.messungen.sort((a, b) => {
+    const av = Number(a.min);
+    const bv = Number(b.min);
+    const af = Number.isFinite(av);
+    const bf = Number.isFinite(bv);
+    if (af && bf) return av - bv;
+    if (af) return -1;
+    if (bf) return 1;
+    return 0;
+  });
+  syncIntervalleStrFromRows(v);
+}
 
 /* ───────────────── defaults ───────────────── */
 
@@ -109,7 +134,6 @@ function defaultVersuch(idx = 0) {
   const ints = [...DEFAULT_INTERVALLE];
   return {
     id: uid(),
-    titel: `Stufe ${idx + 1}`,
     foerderrate_ls: '',
     startzeit: '',
     elapsedMs: 0,
@@ -201,7 +225,7 @@ function collectSnapshot() {
   collectMetaFromUi();
   collectBrunnenFromUi();
   return {
-    v: 7,
+    v: 8,
     meta: clone(state.meta),
     foerder: clone(state.foerder),
     schluck: clone(state.schluck),
@@ -295,71 +319,78 @@ function initTabs() {
 
 function buildVersuchHtml(v, idx) {
   const m3h = lsToM3h(v.foerderrate_ls);
-  const rows = v.messungen.map((m, mIdx) => {
-    const fd = calcDelta(m.foerder_m, state.foerder.ruhe);
-    const sd = calcDelta(m.schluck_m, state.schluck.ruhe);
+  const summaryRate = v.foerderrate_ls
+    ? `${h(v.foerderrate_ls)} l/s · ${h(m3h || '0')} m³/h`
+    : 'keine Förderrate';
+
+  const rows = v.messungen.map((m, rowIdx) => {
     return `
-      <tr data-midx="${mIdx}">
-        <td class="min-cell">${h(m.min)} min</td>
-        <td><input class="mess-input" data-role="foerder-m" data-midx="${mIdx}" type="number" step="0.001" inputmode="decimal" value="${h(m.foerder_m)}" /></td>
-        <td class="delta-cell" data-role="foerder-delta">${fd !== '' ? h(fd) : '—'}</td>
-        <td><input class="mess-input" data-role="schluck-m" data-midx="${mIdx}" type="number" step="0.001" inputmode="decimal" value="${h(m.schluck_m)}" /></td>
-        <td class="delta-cell" data-role="schluck-delta">${sd !== '' ? h(sd) : '—'}</td>
+      <tr data-row="${rowIdx}">
+        <td>
+          <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}" type="number" step="1" inputmode="numeric" value="${h(m.min)}" />
+        </td>
+        <td>
+          <input class="mess-input" data-role="foerder-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(m.foerder_m)}" />
+        </td>
+        <td>
+          <input class="mess-input" data-role="schluck-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(m.schluck_m)}" />
+        </td>
+        <td class="rate-cell">${m3h ? h(m3h) : '—'}</td>
       </tr>
     `;
   }).join('');
 
   return `
-    <section class="versuch-card" data-vid="${h(v.id)}">
-      <div class="versuch-head">
-        <input class="versuch-title-input" data-role="titel" type="text" value="${h(v.titel)}" placeholder="Stufe ${idx + 1}" />
-        <button class="del-btn" data-role="del" type="button">Löschen</button>
-      </div>
-
-      <div class="rate-row">
-        <span class="rate-label">Förderrate</span>
-        <input class="rate-input" data-role="foerderrate" type="number" step="0.01" inputmode="decimal" value="${h(v.foerderrate_ls)}" />
-        <span class="rate-unit">l/s =</span>
-        <span class="rate-conv" data-role="m3h">${m3h ? h(m3h) + ' m³/h' : '—'}</span>
-      </div>
-
-      <div class="interval-row">
-        <span class="interval-label">Intervalle [min]</span>
-        <input class="interval-input" data-role="intervalle" type="text" value="${h(v.intervalleStr)}" />
-      </div>
-
-      <div class="timer-box">
-        <div class="timer-row">
-          <div class="timer-display" data-role="elapsed">${formatElapsed(v.elapsedMs || 0)}</div>
-          <div class="timer-buttons">
-            <button class="timer-btn timer-btn--start" data-role="timer-start" type="button">Start</button>
-            <button class="timer-btn timer-btn--stop" data-role="timer-stop" type="button">Stop</button>
-            <button class="timer-btn timer-btn--ghost" data-role="timer-reset" type="button">Reset</button>
-          </div>
+    <details class="card card--collapsible versuch-card" data-vid="${h(v.id)}" open>
+      <summary class="card__title">
+        <span>${getStageTitle(idx)}</span>
+        <span class="versuch-summary-meta">${summaryRate}</span>
+      </summary>
+      <div class="card__body versuch-body">
+        <div class="versuch-row">
+          <span class="rate-label">Förderrate</span>
+          <input class="rate-input" data-role="foerderrate" type="number" step="0.01" inputmode="decimal" value="${h(v.foerderrate_ls)}" />
+          <span class="rate-unit">l/s =</span>
+          <span class="rate-conv" data-role="m3h">${m3h ? h(m3h) + ' m³/h' : '—'}</span>
         </div>
-        <div class="timer-info" data-role="startzeit">${v.startzeit ? `Startzeit: ${h(v.startzeit)}` : 'Noch nicht gestartet'}</div>
-        <div class="timer-info timer-next" data-role="naechstes"></div>
-      </div>
 
-      <div class="table-wrap">
-        <table class="mess-table">
-          <thead>
-            <tr>
-              <th rowspan="2">Min</th>
-              <th colspan="2" class="th-foerder">Förderbrunnen</th>
-              <th colspan="2" class="th-schluck">Schluckbrunnen</th>
-            </tr>
-            <tr>
-              <th class="th-foerder">m ab OK</th>
-              <th class="th-foerder">Δ Ruhe</th>
-              <th class="th-schluck">m ab OK</th>
-              <th class="th-schluck">Δ Ruhe</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <div class="versuch-row">
+          <span class="interval-label">Intervallzeile [min]</span>
+          <input class="interval-input" data-role="intervalle" type="text" value="${h(v.intervalleStr)}" />
+        </div>
+
+        <div class="timer-box">
+          <div class="timer-row">
+            <div class="timer-display" data-role="elapsed">${formatElapsed(v.elapsedMs || 0)}</div>
+            <div class="timer-buttons">
+              <button class="timer-btn timer-btn--start" data-role="timer-start" type="button">Start</button>
+              <button class="timer-btn timer-btn--stop" data-role="timer-stop" type="button">Stop</button>
+              <button class="timer-btn timer-btn--ghost" data-role="timer-reset" type="button">Reset</button>
+            </div>
+          </div>
+          <div class="timer-info" data-role="startzeit">${v.startzeit ? `Startzeit: ${h(v.startzeit)}` : 'Noch nicht gestartet'}</div>
+          <div class="timer-info timer-next" data-role="naechstes"></div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="mess-table">
+            <thead>
+              <tr>
+                <th>Min</th>
+                <th class="th-foerder">Förderbrunnen m ab OK</th>
+                <th class="th-schluck">Schluckbrunnen m ab OK</th>
+                <th>Förderrate [m³/h]</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+
+        <div class="versuch-tools">
+          <button class="del-btn" data-role="del" type="button">Stufe löschen</button>
+        </div>
       </div>
-    </section>
+    </details>
   `;
 }
 
@@ -385,37 +416,18 @@ function renderVersuche() {
   });
 }
 
-function updateDeltaCell(card, mIdx, role, messwert, ruhe) {
-  const row = card.querySelector(`tr[data-midx="${mIdx}"]`);
-  const cell = row?.querySelector(`[data-role="${role}"]`);
-  if (!cell) return;
-  const d = calcDelta(messwert, ruhe);
-  cell.textContent = d !== '' ? d : '—';
-}
-
-function refreshAllDeltas() {
-  document.querySelectorAll('.versuch-card').forEach(card => {
-    const v = getVersuchById(card.dataset.vid);
-    if (!v) return;
-    v.messungen.forEach((m, mIdx) => {
-      updateDeltaCell(card, mIdx, 'foerder-delta', m.foerder_m, state.foerder.ruhe);
-      updateDeltaCell(card, mIdx, 'schluck-delta', m.schluck_m, state.schluck.ruhe);
-    });
-  });
-}
-
 /* ───────────────── timer ───────────────── */
 
 function ensureTimer(vid, versuch) {
   if (!timerMap[vid]) {
     const elapsedMin = Number(versuch?.elapsedMs || 0) / 60000;
-    const ints = parseIntervalStr(versuch?.intervalleStr || DEFAULT_INTERVALLE.join(', '));
+    const rowMinutes = getSortedMinutesFromRows(versuch);
     timerMap[vid] = {
       running: false,
       startMs: 0,
       accumulatedMs: Number(versuch?.elapsedMs || 0),
       raf: null,
-      alarmCount: ints.filter(iv => iv > 0 && elapsedMin >= iv).length
+      alarmCount: rowMinutes.filter(iv => iv > 0 && elapsedMin >= iv).length
     };
   }
   return timerMap[vid];
@@ -429,6 +441,7 @@ function getElapsedMs(vid, versuch) {
 
 function updateTimerUi(card, versuch) {
   if (!card || !versuch) return;
+
   const vid = versuch.id;
   const t = ensureTimer(vid, versuch);
   const elapsedMs = getElapsedMs(vid, versuch);
@@ -449,10 +462,10 @@ function updateTimerUi(card, versuch) {
   }
   if (stopBtn) stopBtn.disabled = !t.running;
 
-  const ints = parseIntervalStr(versuch.intervalleStr);
-  const alarmInts = ints.filter(iv => iv > 0);
+  const mins = getSortedMinutesFromRows(versuch);
+  const alarmMins = mins.filter(iv => iv > 0);
   const elapsedMin = elapsedMs / 60000;
-  const nextIv = alarmInts.find(iv => elapsedMin < iv);
+  const nextIv = alarmMins.find(iv => elapsedMin < iv);
 
   if (nextEl) {
     if (nextIv !== undefined) {
@@ -463,12 +476,12 @@ function updateTimerUi(card, versuch) {
     }
   }
 
-  card.querySelectorAll('tr[data-midx]').forEach(r => r.classList.remove('row-active'));
-  const passed = ints.filter(iv => elapsedMin >= iv);
-  const lastPassed = passed.length ? passed[passed.length - 1] : ints[0];
+  card.querySelectorAll('tbody tr').forEach(r => r.classList.remove('row-active'));
+  const passed = mins.filter(iv => elapsedMin >= iv);
+  const lastPassed = passed.length ? passed[passed.length - 1] : mins[0];
   const rowIdx = versuch.messungen.findIndex(m => Number(m.min) === Number(lastPassed));
   if (rowIdx >= 0) {
-    const row = card.querySelector(`tr[data-midx="${rowIdx}"]`);
+    const row = card.querySelector(`tr[data-row="${rowIdx}"]`);
     row?.classList.add('row-active');
   }
 }
@@ -484,9 +497,9 @@ function tickTimer(vid) {
   versuch.elapsedMs = getElapsedMs(vid, versuch);
   updateTimerUi(card, versuch);
 
-  const ints = parseIntervalStr(versuch.intervalleStr).filter(iv => iv > 0);
+  const mins = getSortedMinutesFromRows(versuch).filter(iv => iv > 0);
   const elapsedMin = versuch.elapsedMs / 60000;
-  const passedAlarmCount = ints.filter(iv => elapsedMin >= iv).length;
+  const passedAlarmCount = mins.filter(iv => elapsedMin >= iv).length;
 
   if (passedAlarmCount > t.alarmCount) {
     t.alarmCount = passedAlarmCount;
@@ -506,8 +519,8 @@ function startTimer(vid) {
   if (!versuch.startzeit) versuch.startzeit = formatTimeHHMMSS(new Date());
 
   const elapsedMin = t.accumulatedMs / 60000;
-  const ints = parseIntervalStr(versuch.intervalleStr);
-  t.alarmCount = ints.filter(iv => iv > 0 && elapsedMin >= iv).length;
+  const mins = getSortedMinutesFromRows(versuch);
+  t.alarmCount = mins.filter(iv => iv > 0 && elapsedMin >= iv).length;
   t.running = true;
   t.startMs = Date.now();
 
@@ -563,7 +576,7 @@ function hardStopTimer(vid) {
   delete timerMap[vid];
 }
 
-/* ───────────────── event hooks ───────────────── */
+/* ───────────────── static input hooks ───────────────── */
 
 function hookStaticInputs() {
   META_FIELDS.forEach(([id]) => {
@@ -584,16 +597,16 @@ function hookStaticInputs() {
     if (!el) return;
     el.addEventListener('input', () => {
       collectBrunnenFromUi();
-      refreshAllDeltas();
       saveDraftDebounced();
     });
     el.addEventListener('change', () => {
       collectBrunnenFromUi();
-      refreshAllDeltas();
       saveDraftDebounced();
     });
   });
 }
+
+/* ───────────────── versuch events ───────────────── */
 
 function hookVersuchDelegation() {
   const host = $('versucheContainer');
@@ -610,33 +623,39 @@ function hookVersuchDelegation() {
 
     const role = el.dataset.role;
 
-    if (role === 'titel') {
-      versuch.titel = el.value;
-      saveDraftDebounced();
-      return;
-    }
-
     if (role === 'foerderrate') {
       versuch.foerderrate_ls = el.value;
       const out = card.querySelector('[data-role="m3h"]');
       const conv = lsToM3h(el.value);
       if (out) out.textContent = conv ? `${conv} m³/h` : '—';
+      card.querySelectorAll('.rate-cell').forEach(cell => {
+        cell.textContent = conv ? `${conv}` : '—';
+      });
+      const summary = card.querySelector('.versuch-summary-meta');
+      if (summary) {
+        summary.textContent = el.value ? `${el.value} l/s · ${conv || '0'} m³/h` : 'keine Förderrate';
+      }
+      saveDraftDebounced();
+      return;
+    }
+
+    if (role === 'min') {
+      const idx = Number(el.dataset.row);
+      if (versuch.messungen[idx]) versuch.messungen[idx].min = el.value;
       saveDraftDebounced();
       return;
     }
 
     if (role === 'foerder-m') {
-      const idx = Number(el.dataset.midx);
+      const idx = Number(el.dataset.row);
       if (versuch.messungen[idx]) versuch.messungen[idx].foerder_m = el.value;
-      updateDeltaCell(card, idx, 'foerder-delta', el.value, state.foerder.ruhe);
       saveDraftDebounced();
       return;
     }
 
     if (role === 'schluck-m') {
-      const idx = Number(el.dataset.midx);
+      const idx = Number(el.dataset.row);
       if (versuch.messungen[idx]) versuch.messungen[idx].schluck_m = el.value;
-      updateDeltaCell(card, idx, 'schluck-delta', el.value, state.schluck.ruhe);
       saveDraftDebounced();
     }
   });
@@ -649,7 +668,9 @@ function hookVersuchDelegation() {
     const versuch = getVersuchById(card.dataset.vid);
     if (!versuch) return;
 
-    if (el.dataset.role === 'intervalle') {
+    const role = el.dataset.role;
+
+    if (role === 'intervalle') {
       const ints = parseIntervalStr(el.value);
       if (!ints.length) {
         alert('Bitte gültige Intervalle eingeben, z. B. 0, 1, 2, 3, 4, 5, 15, 30.');
@@ -662,6 +683,14 @@ function hookVersuchDelegation() {
         const hit = old.find(m => Number(m.min) === Number(min));
         return hit || { min, foerder_m: '', schluck_m: '' };
       });
+      hardStopTimer(versuch.id);
+      renderVersuche();
+      saveDraftDebounced();
+      return;
+    }
+
+    if (role === 'min') {
+      sortMessungen(versuch);
       hardStopTimer(versuch.id);
       renderVersuche();
       saveDraftDebounced();
@@ -679,7 +708,7 @@ function hookVersuchDelegation() {
     const role = btn.dataset.role;
 
     if (role === 'del') {
-      if (!confirm(`"${versuch.titel || 'Versuch'}" wirklich löschen?`)) return;
+      if (!confirm(`${getStageTitle(state.versuche.findIndex(v => v.id === versuch.id))} wirklich löschen?`)) return;
       hardStopTimer(versuch.id);
       state.versuche = state.versuche.filter(v => v.id !== versuch.id);
       renderVersuche();
@@ -692,6 +721,8 @@ function hookVersuchDelegation() {
     if (role === 'timer-reset') { resetTimer(versuch.id); return; }
   });
 }
+
+/* ───────────────── history ui ───────────────── */
 
 function hookHistoryDelegation() {
   const host = $('historyList');
@@ -732,8 +763,6 @@ function hookHistoryDelegation() {
   });
 }
 
-/* ───────────────── history ui ───────────────── */
-
 function renderHistoryList() {
   const host = $('historyList');
   if (!host) return;
@@ -754,7 +783,7 @@ function renderHistoryList() {
           <span style="color:var(--muted);font-size:.82em">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
         </div>
         <div class="historySub">
-          Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> · Pumpversuche: <b>${h(count)}</b>
+          Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> · Pumpstufen: <b>${h(count)}</b>
         </div>
         <div class="historyBtns">
           <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
@@ -767,6 +796,19 @@ function renderHistoryList() {
 }
 
 /* ───────────────── pdf helpers ───────────────── */
+
+function getRowsForExport(v) {
+  return clone(v.messungen || []).sort((a, b) => {
+    const av = Number(a.min);
+    const bv = Number(b.min);
+    const af = Number.isFinite(av);
+    const bf = Number.isFinite(bv);
+    if (af && bf) return av - bv;
+    if (af) return -1;
+    if (bf) return 1;
+    return 0;
+  });
+}
 
 function numericSeries(messungen, key) {
   return (messungen || [])
@@ -840,49 +882,45 @@ function drawMetaRow(page, x, y, w, h, cells, fontR, fontB, K) {
   cells.forEach((c, i) => {
     const cx = x + i * colW + 5;
     page.drawText(String(c.label || ''), { x: cx, y: y + h - 10, size: 7, font: fontB, color: K });
-    page.drawText(String(c.value || ''), { x: cx, y: y + 5, size: 8.4, font: fontR, color: K });
+    page.drawText(String(c.value || ''), { x: cx, y: y + 5, size: 8.2, font: fontR, color: K });
   });
 }
 
 function drawMeasurementTable(page, opt) {
-  const { x, yTop, w, h, messungen, foerderRuhe, schluckRuhe, fontR, fontB, K, blue, orange } = opt;
+  const { x, yTop, w, h, messungen, foerderRuhe, schluckRuhe, foerderrateM3h, fontR, fontB, K, blue, orange } = opt;
   const rows = messungen || [];
-  const head1 = 16;
-  const head2 = 15;
-  const available = h - head1 - head2;
-  const rowH = Math.max(14, Math.min(18, available / Math.max(1, rows.length)));
+  const head = 18;
+  const available = h - head;
+  const rowH = Math.max(12, Math.min(18, available / Math.max(1, rows.length)));
 
-  const c = [0.15, 0.22, 0.18, 0.22, 0.18];
+  const cols = [0.12, 0.18, 0.16, 0.18, 0.16, 0.20];
   const xs = [x];
-  for (let i = 0; i < c.length; i++) xs.push(xs[i] + w * c[i]);
+  for (let i = 0; i < cols.length; i++) xs.push(xs[i] + w * cols[i]);
 
-  const yHead1 = yTop - head1;
-  const yHead2 = yHead1 - head2;
-  const totalH = head1 + head2 + rows.length * rowH;
+  const yHead = yTop - head;
+  const totalH = head + rows.length * rowH;
 
   page.drawRectangle({ x, y: yTop - totalH, width: w, height: totalH, borderColor: K, borderWidth: 1 });
 
-  page.drawRectangle({ x, y: yHead2, width: xs[1] - xs[0], height: head1 + head2, borderColor: K, borderWidth: 0.6 });
-  page.drawRectangle({ x: xs[1], y: yHead1, width: xs[3] - xs[1], height: head1, borderColor: K, borderWidth: 0.6 });
-  page.drawRectangle({ x: xs[3], y: yHead1, width: xs[5] - xs[3], height: head1, borderColor: K, borderWidth: 0.6 });
-
-  for (let i = 1; i < 5; i++) {
-    page.drawRectangle({ x: xs[i], y: yHead2, width: xs[i + 1] - xs[i], height: head2, borderColor: K, borderWidth: 0.6 });
+  for (let i = 0; i < cols.length; i++) {
+    page.drawRectangle({
+      x: xs[i],
+      y: yHead,
+      width: xs[i + 1] - xs[i],
+      height: head,
+      borderColor: K,
+      borderWidth: 0.6
+    });
   }
-  for (let i = 1; i < xs.length - 1; i++) {
-    page.drawLine({ start: { x: xs[i], y: yTop - totalH }, end: { x: xs[i], y: yHead2 }, thickness: 0.6, color: K });
-  }
 
-  page.drawText('Min', { x: xs[0] + 8, y: yHead2 + 10, size: 8, font: fontB, color: K });
-  page.drawText('Förderbrunnen', { x: xs[1] + 10, y: yHead1 + 4, size: 8.2, font: fontB, color: blue });
-  page.drawText('Schluckbrunnen', { x: xs[3] + 10, y: yHead1 + 4, size: 8.2, font: fontB, color: orange });
+  page.drawText('Min', { x: xs[0] + 8, y: yHead + 5, size: 7.5, font: fontB, color: K });
+  page.drawText('FB m', { x: xs[1] + 6, y: yHead + 5, size: 7.5, font: fontB, color: blue });
+  page.drawText('FB Δ', { x: xs[2] + 6, y: yHead + 5, size: 7.5, font: fontB, color: blue });
+  page.drawText('SB m', { x: xs[3] + 6, y: yHead + 5, size: 7.5, font: fontB, color: orange });
+  page.drawText('SB Δ', { x: xs[4] + 6, y: yHead + 5, size: 7.5, font: fontB, color: orange });
+  page.drawText('Rate m³/h', { x: xs[5] + 6, y: yHead + 5, size: 7.2, font: fontB, color: K });
 
-  page.drawText('m ab OK', { x: xs[1] + 7, y: yHead2 + 4, size: 7, font: fontB, color: K });
-  page.drawText('Δ Ruhe', { x: xs[2] + 10, y: yHead2 + 4, size: 7, font: fontB, color: K });
-  page.drawText('m ab OK', { x: xs[3] + 7, y: yHead2 + 4, size: 7, font: fontB, color: K });
-  page.drawText('Δ Ruhe', { x: xs[4] + 10, y: yHead2 + 4, size: 7, font: fontB, color: K });
-
-  let y = yHead2;
+  let y = yHead;
   rows.forEach((m) => {
     const nextY = y - rowH;
     page.drawLine({ start: { x, y: nextY }, end: { x: x + w, y: nextY }, thickness: 0.6, color: K });
@@ -890,23 +928,24 @@ function drawMeasurementTable(page, opt) {
     const fDelta = calcDelta(m.foerder_m, foerderRuhe);
     const sDelta = calcDelta(m.schluck_m, schluckRuhe);
 
-    page.drawText(String(m.min), { x: xs[0] + 10, y: nextY + 4.5, size: 8, font: fontB, color: K });
-    page.drawText(m.foerder_m !== '' ? fmtComma(m.foerder_m, 3) : '—', { x: xs[1] + 6, y: nextY + 4.5, size: 7.5, font: fontR, color: K });
-    page.drawText(fDelta !== '' ? fmtComma(fDelta, 3) : '—', { x: xs[2] + 6, y: nextY + 4.5, size: 7.5, font: fontR, color: K });
-    page.drawText(m.schluck_m !== '' ? fmtComma(m.schluck_m, 3) : '—', { x: xs[3] + 6, y: nextY + 4.5, size: 7.5, font: fontR, color: K });
-    page.drawText(sDelta !== '' ? fmtComma(sDelta, 3) : '—', { x: xs[4] + 6, y: nextY + 4.5, size: 7.5, font: fontR, color: K });
+    page.drawText(String(m.min ?? ''), { x: xs[0] + 8, y: nextY + 4.2, size: 7.4, font: fontR, color: K });
+    page.drawText(m.foerder_m !== '' ? fmtComma(m.foerder_m, 3) : '—', { x: xs[1] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
+    page.drawText(fDelta !== '' ? fmtComma(fDelta, 3) : '—', { x: xs[2] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
+    page.drawText(m.schluck_m !== '' ? fmtComma(m.schluck_m, 3) : '—', { x: xs[3] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
+    page.drawText(sDelta !== '' ? fmtComma(sDelta, 3) : '—', { x: xs[4] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
+    page.drawText(foerderrateM3h ? fmtComma(foerderrateM3h, 3) : '—', { x: xs[5] + 6, y: nextY + 4.2, size: 7.2, font: fontR, color: K });
 
     y = nextY;
   });
 }
 
 function drawChart(page, opt) {
-  const { x, y, w, h, title, subtitle, color, points, ruhe, fontR, fontB, K, xMax = 180 } = opt;
+  const { x, y, w, h, title, subtitle, color, points, ruhe, fontR, fontB, K, grid, xMax = 180 } = opt;
 
   page.drawRectangle({ x, y, width: w, height: h, borderColor: K, borderWidth: 1 });
 
   page.drawText(title, { x: x + 8, y: y + h - 14, size: 10, font: fontB, color });
-  page.drawText(subtitle || '', { x: x + 8, y: y + h - 25, size: 7.5, font: fontR, color: K });
+  page.drawText(subtitle || '', { x: x + 8, y: y + h - 25, size: 7.2, font: fontR, color: K });
 
   const padL = 40;
   const padR = 10;
@@ -922,7 +961,10 @@ function drawChart(page, opt) {
   if (Number.isFinite(Number(ruhe))) yVals.push(Number(ruhe));
   let yMin = yVals.length ? Math.min(...yVals) : 0;
   let yMax = yVals.length ? Math.max(...yVals) : 10;
-  if (yMin === yMax) { yMin -= 1; yMax += 1; }
+  if (yMin === yMax) {
+    yMin -= 1;
+    yMax += 1;
+  }
 
   const yAxis = niceAxis(yMin, yMax, 5);
   const xAxis = niceAxis(0, xMax, 7);
@@ -932,39 +974,56 @@ function drawChart(page, opt) {
 
   yAxis.ticks.forEach(t => {
     const gy = sy(t);
-    page.drawLine({ start: { x: px, y: gy }, end: { x: px + pw, y: gy }, thickness: 0.4, color: K, opacity: 0.2 });
+    page.drawLine({ start: { x: px, y: gy }, end: { x: px + pw, y: gy }, thickness: 0.4, color: grid });
     page.drawText(fmtComma(t, 2), { x: x + 3, y: gy - 3, size: 7, font: fontR, color: K });
   });
 
   xAxis.ticks.forEach(t => {
     const gx = sx(t);
-    page.drawLine({ start: { x: gx, y: py }, end: { x: gx, y: py + ph }, thickness: 0.4, color: K, opacity: 0.18 });
+    page.drawLine({ start: { x: gx, y: py }, end: { x: gx, y: py + ph }, thickness: 0.4, color: grid });
     page.drawText(String(Math.round(t)), { x: gx - 4, y: y + 7, size: 7, font: fontR, color: K });
   });
 
   page.drawLine({ start: { x: px, y: py }, end: { x: px + pw, y: py }, thickness: 1, color: K });
   page.drawLine({ start: { x: px, y: py }, end: { x: px, y: py + ph }, thickness: 1, color: K });
+
   page.drawText('Min', { x: px + pw - 12, y: y + 7, size: 7.5, font: fontB, color: K });
-  page.drawText('m ab OK', { x: x + 3, y: y + h - 37, size: 7.5, font: fontB, color: K });
 
   if (Number.isFinite(Number(ruhe))) {
     const ry = sy(Number(ruhe));
     drawDashedHLine(page, px, px + pw, ry, K);
-    page.drawText(`Ruhewasser: ${fmtComma(ruhe, 3)} m`, { x: px + 6, y: ry + 3, size: 7, font: fontR, color: K });
+    page.drawText(`Ruhewasser: ${fmtComma(ruhe, 3)} m`, {
+      x: px + 6,
+      y: ry + 3,
+      size: 7,
+      font: fontR,
+      color: K
+    });
   }
 
   if (!points.length) {
-    page.drawText('Keine Messpunkte vorhanden', { x: px + 10, y: py + ph / 2, size: 9, font: fontR, color: K });
+    page.drawText('Keine Messpunkte vorhanden', {
+      x: px + 10,
+      y: py + ph / 2,
+      size: 9,
+      font: fontR,
+      color: K
+    });
     return;
   }
 
   const pts = points.map(p => ({ x: sx(p.x), y: sy(p.y) }));
   for (let i = 1; i < pts.length; i++) {
-    page.drawLine({ start: { x: pts[i - 1].x, y: pts[i - 1].y }, end: { x: pts[i].x, y: pts[i].y }, thickness: 1.6, color });
+    page.drawLine({
+      start: { x: pts[i - 1].x, y: pts[i - 1].y },
+      end: { x: pts[i].x, y: pts[i].y },
+      thickness: 1.6,
+      color
+    });
   }
   pts.forEach(p => {
-    page.drawCircle({ x: p.x, y: p.y, size: 2.3, color });
-    page.drawCircle({ x: p.x, y: p.y, size: 2.7, borderColor: K, borderWidth: 0.4 });
+    page.drawCircle({ x: p.x, y: p.y, size: 2.2, color });
+    page.drawCircle({ x: p.x, y: p.y, size: 2.6, borderColor: K, borderWidth: 0.4 });
   });
 }
 
@@ -990,7 +1049,7 @@ async function exportPdf(snapshot = null) {
 
   let logo = null;
   try {
-    const bytes = await fetch(`${BASE}logo.png?v=7`).then(r => {
+    const bytes = await fetch(`${BASE}logo.png?v=8`).then(r => {
       if (!r.ok) throw new Error(String(r.status));
       return r.arrayBuffer();
     });
@@ -1002,6 +1061,7 @@ async function exportPdf(snapshot = null) {
   const mm = (v) => v * 72 / 25.4;
 
   const K = rgb(0, 0, 0);
+  const GRID = rgb(0.85, 0.85, 0.85);
   const BLUE = rgb(0.231, 0.616, 0.867);
   const ORANGE = rgb(0.961, 0.651, 0.137);
   const YELLOW = rgb(1, 0.929, 0);
@@ -1013,6 +1073,7 @@ async function exportPdf(snapshot = null) {
 
   for (let i = 0; i < versuche.length; i++) {
     const v = hydrateVersuch(versuche[i], i);
+    const rows = getRowsForExport(v);
     const page = pdf.addPage([PAGE_W, PAGE_H]);
 
     const margin = mm(8);
@@ -1024,7 +1085,15 @@ async function exportPdf(snapshot = null) {
     page.drawRectangle({ x: x0, y: y0, width: W, height: H, borderColor: K, borderWidth: 1.2 });
 
     const hdrH = mm(14);
-    page.drawRectangle({ x: x0, y: y0 + H - hdrH, width: W, height: hdrH, color: BLACK, borderColor: K, borderWidth: 0.8 });
+    page.drawRectangle({
+      x: x0,
+      y: y0 + H - hdrH,
+      width: W,
+      height: hdrH,
+      color: BLACK,
+      borderColor: K,
+      borderWidth: 0.8
+    });
 
     if (logo) {
       const lh = hdrH * 0.78;
@@ -1044,6 +1113,7 @@ async function exportPdf(snapshot = null) {
       font: fontB,
       color: rgb(1, 1, 1)
     });
+
     page.drawText('HTB Baugesellschaft m.b.H.', {
       x: x0 + mm(37),
       y: y0 + H - hdrH + mm(1.5),
@@ -1052,7 +1122,7 @@ async function exportPdf(snapshot = null) {
       color: rgb(0.75, 0.75, 0.75)
     });
 
-    page.drawText(`${v.titel || `Stufe ${i + 1}`} · ${v.foerderrate_ls || '—'} l/s · ${lsToM3h(v.foerderrate_ls) || '—'} m³/h`, {
+    page.drawText(`${getStageTitle(i)} · ${v.foerderrate_ls || '—'} l/s · ${lsToM3h(v.foerderrate_ls) || '—'} m³/h`, {
       x: x0 + W - mm(88),
       y: y0 + H - hdrH + mm(4),
       size: 10,
@@ -1091,7 +1161,7 @@ async function exportPdf(snapshot = null) {
     const contentBottom = y0 + mm(8);
     const contentH = contentTop - contentBottom;
 
-    const tableW = W * 0.43;
+    const tableW = W * 0.47;
     const chartsX = x0 + tableW + mm(4);
     const chartsW = W - tableW - mm(4);
 
@@ -1100,9 +1170,10 @@ async function exportPdf(snapshot = null) {
       yTop: contentTop,
       w: tableW,
       h: contentH,
-      messungen: v.messungen || [],
+      messungen: rows,
       foerderRuhe: foerder.ruhe,
       schluckRuhe: schluck.ruhe,
+      foerderrateM3h: lsToM3h(v.foerderrate_ls),
       fontR,
       fontB,
       K,
@@ -1112,7 +1183,7 @@ async function exportPdf(snapshot = null) {
 
     const chartGap = mm(4);
     const chartH = (contentH - chartGap) / 2;
-    const maxX = Math.max(180, ...(v.messungen || []).map(m => Number(m.min) || 0));
+    const maxX = Math.max(180, ...(rows || []).map(m => Number(m.min) || 0));
 
     drawChart(page, {
       x: chartsX,
@@ -1122,11 +1193,12 @@ async function exportPdf(snapshot = null) {
       title: 'Förderbrunnen',
       subtitle: 'Wasserstand [m ab OK Brunnenausbau]',
       color: BLUE,
-      points: numericSeries(v.messungen, 'foerder_m'),
+      points: numericSeries(rows, 'foerder_m'),
       ruhe: Number(foerder.ruhe),
       fontR,
       fontB,
       K,
+      grid: GRID,
       xMax: maxX
     });
 
@@ -1138,139 +1210,17 @@ async function exportPdf(snapshot = null) {
       title: 'Schluckbrunnen',
       subtitle: 'Wasserstand [m ab OK Brunnenausbau]',
       color: ORANGE,
-      points: numericSeries(v.messungen, 'schluck_m'),
+      points: numericSeries(rows, 'schluck_m'),
       ruhe: Number(schluck.ruhe),
       fontR,
       fontB,
       K,
+      grid: GRID,
       xMax: maxX
     });
 
-    page.drawLine({ start: { x: x0, y: y0 + mm(5.5) }, end: { x: x0 + W, y: y0 + mm(5.5) }, thickness: 0.8, color: K });
-    page.drawText(`Exportiert: ${new Date().toLocaleString('de-DE')}`, { x: x0 + 4, y: y0 + 4, size: 7, font: fontR, color: K });
-    page.drawText(`Seite ${i + 1}/${versuche.length}`, { x: x0 + W - 40, y: y0 + 4, size: 7, font: fontR, color: K });
-  }
-
-  const bytes = await pdf.save();
-  const blob = new Blob([bytes], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-
-  const obj = (snap.meta?.objekt || 'Pumpversuch').replace(/[^\wäöüÄÖÜß\- ]+/g, '').trim().replace(/\s+/g, '_');
-  const fileName = `${dateTag(new Date())}_HTB_Pumpversuch_${obj || 'Protokoll'}.pdf`;
-
-  const w = window.open(url, '_blank');
-  if (!w) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.click();
-  }
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
-}
-
-/* ───────────────── reset / install ───────────────── */
-
-function resetAll() {
-  if (!confirm('Alle Eingaben wirklich zurücksetzen?')) return;
-
-  Object.keys(timerMap).forEach(hardStopTimer);
-
-  state.meta = {
-    objekt: '',
-    grundstueck: '',
-    ort: '',
-    geologie: '',
-    auftragsnummer: '',
-    bauleitung: '',
-    bohrmeister: '',
-    koordination: '',
-    geprueftDurch: '',
-    geprueftAm: ''
-  };
-  state.foerder = { dm: '', endteufe: '', ruhe: '' };
-  state.schluck = { dm: '', endteufe: '', ruhe: '' };
-  state.versuche = [];
-
-  syncMetaToUi();
-  syncBrunnenToUi();
-  renderVersuche();
-  saveDraftDebounced();
-}
-
-function initInstallButton() {
-  let installPrompt = null;
-  const btn = $('btnInstall');
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    installPrompt = e;
-    if (btn) btn.hidden = false;
-  });
-
-  btn?.addEventListener('click', async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    await installPrompt.userChoice;
-    installPrompt = null;
-    btn.hidden = true;
-  });
-
-  window.addEventListener('appinstalled', () => {
-    installPrompt = null;
-    if (btn) btn.hidden = true;
-  });
-}
-
-/* ───────────────── init ───────────────── */
-
-window.addEventListener('DOMContentLoaded', () => {
-  state.versuche = [];
-
-  initTabs();
-  hookStaticInputs();
-  hookVersuchDelegation();
-  hookHistoryDelegation();
-
-  loadDraft();
-
-  syncMetaToUi();
-  syncBrunnenToUi();
-  renderVersuche();
-  renderHistoryList();
-  initInstallButton();
-
-  $('btnAddVersuch')?.addEventListener('click', () => {
-    const v = defaultVersuch(state.versuche.length);
-    state.versuche.push(v);
-    renderVersuche();
-    saveDraftDebounced();
-
-    setTimeout(() => {
-      const card = document.querySelector(`.versuch-card[data-vid="${v.id}"]`);
-      card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 40);
-  });
-
-  $('btnSave')?.addEventListener('click', () => {
-    saveCurrentToHistory();
-    saveDraftDebounced();
-    alert('Pumpversuch im Verlauf gespeichert.');
-  });
-
-  $('btnPdf')?.addEventListener('click', async () => {
-    try {
-      await exportPdf();
-    } catch (err) {
-      console.error(err);
-      alert('PDF-Fehler: ' + (err?.message || String(err)));
-    }
-  });
-
-  $('btnReset')?.addEventListener('click', resetAll);
-
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`${BASE}sw.js?v=7`).catch(err => {
-      console.error('SW registration failed:', err);
-    });
-  }
-});
+    page.drawLine({
+      start: { x: x0, y: y0 + mm(5.5) },
+      end: { x: x0 + W, y: y0 + mm(5.5) },
+      thickness: 0.8,
+      color:
