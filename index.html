@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title" content="HTB Pumpversuch" />
   <title>HTB Pumpversuch-Protokoll</title>
 
-  <link rel="manifest" href="/Pumpversuch/manifest.json?v=12" />
-  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=12" />
-  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=12" />
+  <link rel="manifest" href="/Pumpversuch/manifest.json?v=13" />
+  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=13" />
+  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=13" />
 
   <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
@@ -20,9 +20,9 @@
     <div class="brand__bar">
       <div class="brand__logo">
         <img
-          src="/Pumpversuch/logo.svg?v=12"
+          src="/Pumpversuch/logo.svg?v=13"
           alt="HTB Logo"
-          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=12';"
+          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=13';"
         />
       </div>
       <div class="brand__info">
@@ -47,47 +47,38 @@
             <span class="field__label">Objekt</span>
             <input id="meta-objekt" class="field__input" type="text" placeholder="Objekt / Baustelle" />
           </label>
-
           <label class="field">
             <span class="field__label">Grundstück / Straße</span>
             <input id="meta-grundstueck" class="field__input" type="text" />
           </label>
-
           <label class="field">
             <span class="field__label">Ort</span>
             <input id="meta-ort" class="field__input" type="text" />
           </label>
-
           <label class="field">
             <span class="field__label">Geologie</span>
             <input id="meta-geologie" class="field__input" type="text" />
           </label>
-
           <label class="field">
             <span class="field__label">Auftragsnummer</span>
             <input id="meta-auftragsnummer" class="field__input" type="text" />
           </label>
-
           <label class="field">
             <span class="field__label">Bauleitung</span>
             <input id="meta-bauleitung" class="field__input" type="text" />
           </label>
-
           <label class="field">
             <span class="field__label">Bohrmeister</span>
             <input id="meta-bohrmeister" class="field__input" type="text" />
           </label>
-
           <label class="field">
             <span class="field__label">Koordination</span>
             <input id="meta-koordination" class="field__input" type="text" />
           </label>
-
           <label class="field">
             <span class="field__label">Geprüft durch</span>
             <input id="meta-geprueftDurch" class="field__input" type="text" />
           </label>
-
           <label class="field">
             <span class="field__label">Geprüft am</span>
             <input id="meta-geprueftAm" class="field__input" type="date" />
@@ -109,7 +100,6 @@
             <span>Schluckbrunnen verwenden</span>
           </label>
         </div>
-
         <div class="brunnen-grid">
           <section id="box-foerder" class="brunnen-box">
             <div class="brunnen-title brunnen-title--foerder">Förderbrunnen</div>
@@ -128,7 +118,6 @@
               </label>
             </div>
           </section>
-
           <section id="box-schluck" class="brunnen-box">
             <div class="brunnen-title brunnen-title--schluck">Schluckbrunnen</div>
             <div class="form-grid">
@@ -162,7 +151,6 @@
     <section class="card">
       <div class="card__title">Pumpstufen</div>
       <div id="versucheContainer"></div>
-
       <div class="plus-wrap">
         <button id="btnAddVersuch" class="btn-plus" type="button">+</button>
         <div class="plus-label">Pumpstufe hinzufügen</div>
@@ -182,13 +170,12 @@
     <section class="card">
       <div class="card__title">App</div>
       <div class="text">
-        <p><b>Brunnenauswahl:</b> Förderbrunnen und/oder Schluckbrunnen werden über Brunnendaten ausgewählt.</p>
-        <p><b>Stufenkopf:</b> Eingabe der Rate in m³/h, l/s wird automatisch berechnet und angezeigt.</p>
-        <p><b>Intervall:</b> Über das kleine Plus in der Minuten-Spalte kann das letzte Intervall weitergeführt werden.</p>
-        <p><b>PDF:</b> Jede Pumpstufe wird auf ein eigenes A4-Hochformat-Blatt ausgegeben.</p>
+        <p><b>Brunnenauswahl:</b> Förderbrunnen und/oder Schluckbrunnen über Brunnendaten auswählen.</p>
+        <p><b>Pumpstufen:</b> Header zeigt nur Stufennummer. Förderrate und Fördermenge je Zeile im Body eingeben.</p>
+        <p><b>Fördermenge:</b> Neue Spalte in der Messtabelle – händisch je Messzeile eintragbar.</p>
+        <p><b>PDF:</b> A4 Hochformat, eine Pumpstufe pro Seite, graue Kopfzeile.</p>
       </div>
     </section>
-
     <section class="card">
       <div class="card__title">Installation</div>
       <div class="text">
@@ -204,6 +191,6 @@
     <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
   </footer>
 
-  <script src="/Pumpversuch/app.js?v=12"></script>
+  <script src="/Pumpversuch/app.js?v=13"></script>
 </body>
 </html>
