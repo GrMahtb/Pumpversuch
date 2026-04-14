@@ -1,15 +1,15 @@
+const BASE = '/Pumpversuch/';
+const CACHE = 'htb-pumpversuch-v5';
 
-const CACHE = 'htb-pumpversuch-v3';
 const ASSETS = [
-  './',
-  './index.html',
-  './styles.css',
-  './app.js',
-  './manifest.json',
-  './icon.svg',
-  './logo.png',
-  './launchericon-192x192.png',
-  './launchericon-512x512.png'
+  BASE,
+  BASE + 'index.html',
+  BASE + 'styles.css',
+  BASE + 'app.js',
+  BASE + 'manifest.json',
+  BASE + 'logo.svg',
+  BASE + 'logo.png',
+  BASE + 'icon.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -40,7 +40,7 @@ self.addEventListener('fetch', (event) => {
         const cached = await caches.match(event.request);
         if (cached) return cached;
         if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
+          return caches.match(BASE + 'index.html');
         }
       })
   );
