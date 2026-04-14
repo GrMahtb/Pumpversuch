@@ -167,6 +167,17 @@ body{
   text-transform:uppercase;
   letter-spacing:.5px;
 }
+
+/* WICHTIG: 16px verhindert iPhone-Zoom beim Tippen */
+.field__input,
+.field__select,
+.field__textarea,
+.rate-input,
+.interval-input,
+.mess-input{
+  font-size:16px;
+}
+
 .field__input,
 .field__select,
 .field__textarea{
@@ -175,7 +186,6 @@ body{
   border:1px solid var(--border);
   border-radius:10px;
   padding:10px 12px;
-  font-size:.92em;
   outline:none;
   font-family:inherit;
   transition:border-color .15s ease,box-shadow .15s ease;
@@ -227,12 +237,6 @@ body{
 }
 
 /* Buttons */
-.buttons{
-  display:flex;
-  gap:10px;
-  justify-content:center;
-  flex-wrap:wrap;
-}
 .btn{
   border:none;
   border-radius:999px;
@@ -305,61 +309,37 @@ body{
   padding:18px 14px;
   text-align:center;
   color:var(--muted);
-  font-size:.9em;
+  font-size:.95em;
   line-height:1.6;
   margin-bottom:10px;
 }
 
 /* Versuch cards */
 .versuch-card{
-  background:var(--card2);
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:12px;
   margin-bottom:12px;
 }
-.versuch-head{
+.versuch-summary-meta{
+  margin-left:auto;
+  color:var(--muted);
+  font-size:.9em;
+  font-weight:800;
+  text-transform:none;
+  letter-spacing:0;
+  padding-right:8px;
+}
+.versuch-body{
   display:flex;
-  align-items:center;
-  justify-content:space-between;
+  flex-direction:column;
   gap:10px;
-  flex-wrap:wrap;
-  margin-bottom:10px;
 }
-.versuch-title-input{
-  background:transparent;
-  border:none;
-  border-bottom:2px solid var(--border);
-  color:var(--accent);
-  font-size:1.05em;
-  font-weight:900;
-  font-family:inherit;
-  outline:none;
-  padding:2px 4px;
-  min-width:110px;
-}
-.versuch-title-input:focus{border-bottom-color:var(--accent)}
-.del-btn{
-  border:1px solid var(--border);
-  background:#111214;
-  color:var(--err);
-  border-radius:999px;
-  padding:7px 12px;
-  cursor:pointer;
-  font-weight:900;
-  font-size:.82em;
-  font-family:inherit;
-}
-.del-btn:hover{border-color:var(--err)}
-
-.rate-row{
+.versuch-row{
   display:flex;
   flex-wrap:wrap;
   gap:8px;
   align-items:center;
-  margin-bottom:10px;
 }
-.rate-label{
+.rate-label,
+.interval-label{
   font-size:.75em;
   color:var(--muted);
   font-weight:900;
@@ -384,26 +364,11 @@ body{
 .rate-conv{
   color:var(--accent);
   font-weight:900;
-  font-size:.88em;
-}
-
-.interval-row{
-  display:flex;
-  gap:8px;
-  align-items:center;
-  flex-wrap:wrap;
-  margin-bottom:10px;
-}
-.interval-label{
-  font-size:.75em;
-  color:var(--muted);
-  font-weight:900;
-  text-transform:uppercase;
-  white-space:nowrap;
+  font-size:.9em;
 }
 .interval-input{
   flex:1;
-  min-width:200px;
+  min-width:220px;
   background:#111214;
   color:var(--text);
   border:1px solid var(--border);
@@ -414,13 +379,29 @@ body{
 }
 .interval-input:focus{border-color:#5b5500}
 
+.versuch-tools{
+  display:flex;
+  justify-content:flex-end;
+}
+.del-btn{
+  border:1px solid var(--border);
+  background:#111214;
+  color:var(--err);
+  border-radius:999px;
+  padding:8px 12px;
+  cursor:pointer;
+  font-weight:900;
+  font-size:.82em;
+  font-family:inherit;
+}
+.del-btn:hover{border-color:var(--err)}
+
 /* Timer */
 .timer-box{
   background:#111214;
   border:1px solid var(--border);
   border-radius:12px;
   padding:10px 12px;
-  margin-bottom:12px;
 }
 .timer-row{
   display:flex;
@@ -476,15 +457,15 @@ body{
 .table-wrap{overflow-x:auto}
 .mess-table{
   width:100%;
-  min-width:520px;
+  min-width:620px;
   border-collapse:collapse;
-  font-size:.82em;
+  font-size:.88em;
 }
 .mess-table th{
   background:#111214;
   color:var(--muted);
   border:1px solid var(--border);
-  padding:7px 6px;
+  padding:8px 6px;
   text-align:center;
   font-weight:900;
   white-space:nowrap;
@@ -497,32 +478,26 @@ body{
   text-align:center;
   vertical-align:middle;
 }
-.mess-table .min-cell{
-  background:#111214;
-  color:var(--muted);
-  font-weight:900;
-  white-space:nowrap;
-}
-.mess-table .delta-cell{
+.mess-table .rate-cell{
   color:var(--accent);
   font-weight:900;
   background:rgba(255,237,0,.03);
-  min-width:72px;
+  min-width:92px;
 }
 .mess-table tr.row-active td{
   background:rgba(0,204,102,.08);
 }
-.mess-table tr.row-active .min-cell{
-  color:var(--ok2);
+.minute-input{
+  width:74px;
 }
 .mess-input{
-  width:80px;
+  width:86px;
   background:transparent;
   color:var(--text);
   border:none;
   outline:none;
   text-align:center;
-  padding:5px 2px;
+  padding:6px 2px;
   font-family:inherit;
 }
 .mess-input:focus{
@@ -622,4 +597,10 @@ body{
   .brand__subtitle{font-size:.72em}
   .tab{font-size:.8em;padding:9px 4px}
   .card{padding:12px}
+  .versuch-summary-meta{
+    width:100%;
+    margin-left:0;
+    padding-right:0;
+    margin-top:4px;
+  }
 }
