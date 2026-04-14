@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title" content="HTB Pumpversuch" />
   <title>HTB Pumpversuch-Protokoll</title>
 
-  <link rel="manifest" href="/Pumpversuch/manifest.json?v=11" />
-  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=11" />
-  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=11" />
+  <link rel="manifest" href="/Pumpversuch/manifest.json?v=12" />
+  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=12" />
+  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=12" />
 
   <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
@@ -20,9 +20,9 @@
     <div class="brand__bar">
       <div class="brand__logo">
         <img
-          src="/Pumpversuch/logo.svg?v=11"
+          src="/Pumpversuch/logo.svg?v=12"
           alt="HTB Logo"
-          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=11';"
+          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=12';"
         />
       </div>
       <div class="brand__info">
@@ -156,7 +156,7 @@
         <button id="btnPdf" class="btn btn--ghost btn--small" type="button">PDF</button>
         <button id="btnReset" class="btn btn--ghost btn--small" type="button">Reset</button>
       </div>
-      <div class="hint">Speichern im Verlauf · PDF im Excel-Stil exportieren</div>
+      <div class="hint">Speichern im Verlauf · PDF pro Pumpstufe als A4-Hochformat</div>
     </section>
 
     <section class="card">
@@ -182,10 +182,10 @@
     <section class="card">
       <div class="card__title">App</div>
       <div class="text">
-        <p><b>Brunnenauswahl:</b> Förderbrunnen und/oder Schluckbrunnen können angehakt werden.</p>
-        <p><b>Pumpstufen:</b> Die Eingabetabelle zeigt automatisch nur die ausgewählten Brunnen-Spalten.</p>
-        <p><b>Förderrate:</b> Pro Zeile bearbeitbar; im Stufenkopf wird ohne Vorgabe der Mittelwert angezeigt.</p>
-        <p><b>PDF:</b> A4 Hochformat mit grauer Kopfzeile, 3 Stufen pro Blatt.</p>
+        <p><b>Brunnenauswahl:</b> Förderbrunnen und/oder Schluckbrunnen werden über Brunnendaten ausgewählt.</p>
+        <p><b>Stufenkopf:</b> Eingabe der Rate in m³/h, l/s wird automatisch berechnet und angezeigt.</p>
+        <p><b>Intervall:</b> Über das kleine Plus in der Minuten-Spalte kann das letzte Intervall weitergeführt werden.</p>
+        <p><b>PDF:</b> Jede Pumpstufe wird auf ein eigenes A4-Hochformat-Blatt ausgegeben.</p>
       </div>
     </section>
 
@@ -204,6 +204,6 @@
     <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
   </footer>
 
-  <script src="/Pumpversuch/app.js?v=11"></script>
+  <script src="/Pumpversuch/app.js?v=12"></script>
 </body>
 </html>
