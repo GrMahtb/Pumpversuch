@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="de">
 <head>
@@ -9,9 +10,9 @@
   <meta name="apple-mobile-web-app-title" content="HTB Pumpversuch" />
   <title>HTB Pumpversuch-Protokoll</title>
 
-  <link rel="manifest" href="/Pumpversuch/manifest.json?v=5" />
-  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=5" />
-  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=5" />
+  <link rel="manifest" href="/Pumpversuch/manifest.json?v=7" />
+  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=7" />
+  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=7" />
 
   <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
@@ -20,14 +21,14 @@
     <div class="brand__bar">
       <div class="brand__logo">
         <img
-          src="/Pumpversuch/logo.svg?v=5"
+          src="/Pumpversuch/logo.svg?v=7"
           alt="HTB Logo"
-          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=5';"
+          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=7';"
         />
       </div>
       <div class="brand__info">
         <div class="brand__company">HTB Baugesellschaft m.b.H.</div>
-        <div class="brand__subtitle">Pumpversuch-Protokoll · Förderbrunnen &amp; Schluckbrunnen</div>
+        <div class="brand__subtitle">Pumpversuch-Protokoll · Förderbrunnen und Schluckbrunnen</div>
       </div>
     </div>
   </header>
@@ -102,7 +103,7 @@
       <div class="card__body">
         <div class="brunnen-grid">
           <section class="brunnen-box">
-            <div class="brunnen-title brunnen-title--foerder">🔵 Förderbrunnen</div>
+            <div class="brunnen-title brunnen-title--foerder">Förderbrunnen</div>
             <div class="form-grid">
               <label class="field">
                 <span class="field__label">Brunnendurchmesser [mm]</span>
@@ -120,7 +121,7 @@
           </section>
 
           <section class="brunnen-box">
-            <div class="brunnen-title brunnen-title--schluck">🟠 Schluckbrunnen</div>
+            <div class="brunnen-title brunnen-title--schluck">Schluckbrunnen</div>
             <div class="form-grid">
               <label class="field">
                 <span class="field__label">Brunnendurchmesser [mm]</span>
@@ -142,20 +143,20 @@
 
     <section class="card card--actions">
       <div class="action-row">
-        <button id="btnSave" class="icon-btn icon-btn--save" type="button" title="Speichern">💾</button>
-        <button id="btnPdf" class="icon-btn" type="button" title="PDF Export">📄</button>
+        <button id="btnSave" class="btn btn--save btn--small" type="button">Speichern</button>
+        <button id="btnPdf" class="btn btn--ghost btn--small" type="button">PDF</button>
         <button id="btnReset" class="btn btn--ghost btn--small" type="button">Reset</button>
       </div>
-      <div class="hint">💾 lokal speichern · 📄 PDF mit Tabelle und Diagrammen</div>
+      <div class="hint">Speichern im Verlauf · PDF mit Tabelle und Diagrammen exportieren</div>
     </section>
 
     <section class="card">
       <div class="card__title">Pumpversuche</div>
-      <div id="versucheContainer" class="versuchList"></div>
+      <div id="versucheContainer"></div>
 
       <div class="plus-wrap">
-        <button id="btnAddVersuch" class="btn-plus" type="button" title="Pumpversuch hinzufügen">＋</button>
-        <div class="plus-label">weiteren Pumpversuch hinzufügen</div>
+        <button id="btnAddVersuch" class="btn-plus" type="button">+</button>
+        <div class="plus-label">Pumpversuch hinzufügen</div>
       </div>
     </section>
   </main>
@@ -174,28 +175,28 @@
     <section class="card">
       <div class="card__title">App</div>
       <div class="text">
-        <p><b>Start:</b> Die App startet mit 3 Stufen, weil das im Alltag meist gebraucht wird.</p>
-        <p><b>Timer:</b> Jede Stufe hat eigene Start-/Stop-/Reset-Funktion und vibriert bei erreichtem Intervall.</p>
-        <p><b>PDF:</b> Je Stufe wird eine Seite mit Tabelle sowie Diagramm für Förder- und Schluckbrunnen erzeugt.</p>
-        <p><b>Offline:</b> Die App speichert lokal und ist als PWA installierbar.</p>
+        <p><b>Startzustand:</b> Die App startet leer. Ein neuer Versuch wird erst über den Plus-Button angelegt.</p>
+        <p><b>Timer:</b> Jeder Pumpversuch hat eine eigene Zeitmessung mit Intervallhinweis.</p>
+        <p><b>Export:</b> PDF mit Messtabelle sowie Diagrammen für Förderbrunnen und Schluckbrunnen.</p>
+        <p><b>Speicherung:</b> Daten bleiben lokal auf dem Gerät erhalten.</p>
       </div>
     </section>
 
     <section class="card">
       <div class="card__title">Installation</div>
       <div class="text">
-        <p><b>Android:</b> Chrome-Menü → „App installieren“</p>
-        <p><b>iPhone:</b> Safari → Teilen → „Zum Home-Bildschirm“</p>
+        <p><b>Android:</b> Chrome-Menü → App installieren</p>
+        <p><b>iPhone:</b> Safari → Teilen → Zum Home-Bildschirm</p>
       </div>
     </section>
   </main>
 
   <footer class="footer">
-    &copy; <b>HTB Baugesellschaft m.b.H.</b> – Pumpversuch-Protokoll PWA
+    &copy; <b>HTB Baugesellschaft m.b.H.</b> – Pumpversuch PWA
     <br />
-    <button id="btnInstall" class="btn btn--install" type="button" hidden>⬇ App installieren</button>
+    <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
   </footer>
 
-  <script src="/Pumpversuch/app.js?v=5"></script>
+  <script src="/Pumpversuch/app.js?v=7"></script>
 </body>
 </html>
