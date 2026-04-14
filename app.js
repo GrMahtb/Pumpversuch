@@ -1,9 +1,9 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v11 loaded');
+console.log('HTB Pumpversuch app.js v12 loaded');
 
 const BASE = '/Pumpversuch/';
-const STORAGE_DRAFT = 'htb-pumpversuch-draft-v11';
-const STORAGE_HISTORY = 'htb-pumpversuch-history-v11';
+const STORAGE_DRAFT = 'htb-pumpversuch-draft-v12';
+const STORAGE_HISTORY = 'htb-pumpversuch-history-v12';
 const HISTORY_MAX = 30;
 const DEFAULT_INTERVALLE = [0, 1, 2, 3, 4, 5, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180];
 
@@ -103,9 +103,9 @@ function parseIntervalStr(str) {
       .filter(n => Number.isFinite(n) && n >= 0)
   )].sort((a, b) => a - b);
 }
-function lsToM3h(v) {
+function m3hToLs(v) {
   const n = Number(v);
-  return Number.isFinite(n) ? (n * 3.6).toFixed(3) : '';
+  return Number.isFinite(n) ? (n / 3.6).toFixed(3) : '';
 }
 function calcDelta(messwert, ruhe) {
   const m = Number(messwert);
@@ -138,9 +138,6 @@ function getWellLabel(key) {
 function getWellLabelPdf(key) {
   return key === 'foerder' ? 'Foerderbrunnen' : 'Schluckbrunnen';
 }
-function getWellData(key) {
-  return key === 'foerder' ? state.foerder : state.schluck;
-}
 function getValueField(key) {
   return key === 'foerder' ? 'foerder_m' : 'schluck_m';
 }
@@ -164,22 +161,23 @@ function sortMessungen(v) {
   });
   syncIntervalleStrFromRows(v);
 }
-function getAutoRateLs(v) {
-  const vals = (v.messungen || [])
-    .map(r => Number(r.rate_ls))
-    .filter(n => Number.isFinite(n));
-  if (!vals.length) return '';
-  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-  return mean.toFixed(3);
+function getEffectiveRateM3h(v) {
+  const n = Number(v.manualRateM3h);
+  return Number.isFinite(n) ? n.toFixed(3) : '';
 }
 function getEffectiveRateLs(v) {
-  const manual = Number(v.manualRateLs);
-  if (Number.isFinite(manual)) return manual.toFixed(3);
-  return getAutoRateLs(v);
+  const m3h = Number(v.manualRateM3h);
+  return Number.isFinite(m3h) ? (m3h / 3.6).toFixed(3) : '';
 }
-function getEffectiveRateM3h(v) {
-  const rate = Number(getEffectiveRateLs(v));
-  return Number.isFinite(rate) ? (rate * 3.6).toFixed(3) : '';
+function getContinueStep(v) {
+  const rows = (v.messungen || []).slice().sort((a, b) => Number(a.min) - Number(b.min));
+  if (rows.length >= 2) {
+    const last = Number(rows[rows.length - 1].min);
+    const prev = Number(rows[rows.length - 2].min);
+    const step = last - prev;
+    if (Number.isFinite(step) && step > 0) return step;
+  }
+  return 15;
 }
 
 /* ───────────────── defaults ───────────────── */
@@ -188,13 +186,12 @@ function defaultVersuch() {
   const ints = [...DEFAULT_INTERVALLE];
   return {
     id: uid(),
-    manualRateLs: '',
+    manualRateM3h: '',
     startzeit: '',
     elapsedMs: 0,
     intervalleStr: ints.join(', '),
     messungen: ints.map(min => ({
       min,
-      rate_ls: '',
       foerder_m: '',
       schluck_m: ''
     }))
@@ -214,12 +211,10 @@ function hydrateVersuch(v) {
       const hit = existing.find(m => Number(m.min) === Number(min));
       return hit ? {
         min,
-        rate_ls: hit.rate_ls ?? '',
         foerder_m: hit.foerder_m ?? '',
         schluck_m: hit.schluck_m ?? ''
       } : {
         min,
-        rate_ls: '',
         foerder_m: '',
         schluck_m: ''
       };
@@ -310,7 +305,7 @@ function collectSnapshot() {
   collectSelectionFromUi();
 
   return {
-    v: 11,
+    v: 12,
     meta: clone(state.meta),
     selection: clone(state.selection),
     foerder: clone(state.foerder),
@@ -410,54 +405,55 @@ function buildTableHeadHtml() {
   let html = '<tr><th>Min</th>';
   if (sel.foerder) html += '<th class="th-foerder">Förderbrunnen m ab OK</th>';
   if (sel.schluck) html += '<th class="th-schluck">Schluckbrunnen m ab OK</th>';
-  html += '<th>Förderrate [l/s]</th>';
-  html += '<th>Förderrate [m³/h]</th>';
   html += '</tr>';
   return html;
 }
 
-function buildTableRowHtml(row, rowIdx) {
+function buildTableRowHtml(v, row, rowIdx) {
   const sel = getSelectedWells();
-  const rowM3h = lsToM3h(row.rate_ls);
+  const isLast = rowIdx === v.messungen.length - 1;
 
   let html = `<tr data-row="${rowIdx}">`;
-  html += `<td><input class="mess-input minute-input" data-role="min" data-row="${rowIdx}" type="number" step="1" inputmode="numeric" value="${h(row.min)}" /></td>`;
+  html += `
+    <td>
+      <div class="minute-cell">
+        <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}" type="number" step="1" inputmode="numeric" value="${h(row.min)}" />
+        ${isLast ? `<button class="row-plus" data-role="row-plus" data-row="${rowIdx}" type="button">+</button>` : ``}
+      </div>
+    </td>
+  `;
+
   if (sel.foerder) {
     html += `<td><input class="mess-input" data-role="foerder-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_m)}" /></td>`;
   }
   if (sel.schluck) {
     html += `<td><input class="mess-input" data-role="schluck-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.schluck_m)}" /></td>`;
   }
-  html += `<td><input class="mess-input" data-role="rate-ls" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.rate_ls)}" /></td>`;
-  html += `<td class="rate-cell" data-role="rate-m3h">${rowM3h ? h(rowM3h) : '—'}</td>`;
+
   html += `</tr>`;
   return html;
 }
 
 function buildVersuchHtml(v, idx) {
-  const effLs = getEffectiveRateLs(v);
   const effM3h = getEffectiveRateM3h(v);
-  const autoLs = getAutoRateLs(v);
+  const effLs = getEffectiveRateLs(v);
+  const wellText = getSelectedWellKeys().map(getWellLabel).join(' / ');
 
-  const selected = getSelectedWellKeys();
-  const wellText = selected.map(getWellLabel).join(' / ');
-
-  const rowsHtml = v.messungen.map((row, rowIdx) => buildTableRowHtml(row, rowIdx)).join('');
+  const rowsHtml = v.messungen.map((row, rowIdx) => buildTableRowHtml(v, row, rowIdx)).join('');
 
   return `
     <details class="card card--collapsible versuch-card" data-vid="${h(v.id)}" open>
       <summary class="card__title">
         <span>${getStageTitle(idx)}</span>
-        <span class="versuch-summary-meta">${h(wellText)} · ${effLs ? `${effLs} l/s · ${effM3h} m³/h` : 'keine Förderrate'}</span>
+        <span class="versuch-summary-meta">${h(wellText)} · ${effM3h ? `${effM3h} m³/h · ${effLs} l/s` : 'keine Förderrate'}</span>
       </summary>
 
       <div class="card__body versuch-body">
         <div class="versuch-row">
-          <span class="rate-label">Förderrate Kopf [l/s]</span>
-          <input class="rate-input" data-role="manual-rate" type="number" step="0.001" inputmode="decimal" value="${h(v.manualRateLs)}" />
+          <span class="rate-label">Förderrate Kopf [m³/h]</span>
+          <input class="rate-input" data-role="manual-rate-m3h" type="number" step="0.001" inputmode="decimal" value="${h(v.manualRateM3h)}" />
           <span class="rate-unit">=</span>
-          <span class="rate-conv" data-role="head-rate-m3h">${effM3h ? `${h(effM3h)} m³/h` : '—'}</span>
-          <span class="auto-rate" data-role="auto-rate-info">${autoLs ? `Automatisch aus Tabelle: ${autoLs} l/s` : 'Automatisch aus Tabelle: —'}</span>
+          <span class="rate-conv" data-role="head-rate-ls">${effLs ? `${h(effLs)} l/s` : '—'}</span>
         </div>
 
         <div class="versuch-row">
@@ -694,26 +690,17 @@ function hardStopTimer(vid) {
 /* ───────────────── computed stage info ───────────────── */
 
 function updateStageComputed(card, versuch) {
-  const effLs = getEffectiveRateLs(versuch);
   const effM3h = getEffectiveRateM3h(versuch);
-  const autoLs = getAutoRateLs(versuch);
+  const effLs = getEffectiveRateLs(versuch);
 
-  const m3hEl = card.querySelector('[data-role="head-rate-m3h"]');
-  if (m3hEl) m3hEl.textContent = effM3h ? `${effM3h} m³/h` : '—';
-
-  const autoEl = card.querySelector('[data-role="auto-rate-info"]');
-  if (autoEl) {
-    autoEl.textContent = autoLs
-      ? `Automatisch aus Tabelle: ${autoLs} l/s`
-      : 'Automatisch aus Tabelle: —';
-  }
+  const lsEl = card.querySelector('[data-role="head-rate-ls"]');
+  if (lsEl) lsEl.textContent = effLs ? `${effLs} l/s` : '—';
 
   const summary = card.querySelector('.versuch-summary-meta');
-  const selected = getSelectedWellKeys();
-  const wellText = selected.map(getWellLabel).join(' / ');
+  const wellText = getSelectedWellKeys().map(getWellLabel).join(' / ');
   if (summary) {
-    summary.textContent = effLs
-      ? `${wellText} · ${effLs} l/s · ${effM3h} m³/h`
+    summary.textContent = effM3h
+      ? `${wellText} · ${effM3h} m³/h · ${effLs} l/s`
       : `${wellText} · keine Förderrate`;
   }
 }
@@ -777,22 +764,8 @@ function hookVersuchDelegation() {
 
     const role = el.dataset.role;
 
-    if (role === 'manual-rate') {
-      versuch.manualRateLs = el.value;
-      updateStageComputed(card, versuch);
-      saveDraftDebounced();
-      return;
-    }
-
-    if (role === 'rate-ls') {
-      const idx = Number(el.dataset.row);
-      if (versuch.messungen[idx]) versuch.messungen[idx].rate_ls = el.value;
-
-      const row = card.querySelector(`tr[data-row="${idx}"]`);
-      const m3hCell = row?.querySelector('[data-role="rate-m3h"]');
-      const rowM3h = lsToM3h(el.value);
-      if (m3hCell) m3hCell.textContent = rowM3h ? rowM3h : '—';
-
+    if (role === 'manual-rate-m3h') {
+      versuch.manualRateM3h = el.value;
       updateStageComputed(card, versuch);
       saveDraftDebounced();
       return;
@@ -842,7 +815,7 @@ function hookVersuchDelegation() {
       versuch.intervalleStr = ints.join(', ');
       versuch.messungen = ints.map(min => {
         const hit = old.find(m => Number(m.min) === Number(min));
-        return hit || { min, rate_ls: '', foerder_m: '', schluck_m: '' };
+        return hit || { min, foerder_m: '', schluck_m: '' };
       });
 
       hardStopTimer(versuch.id);
@@ -868,6 +841,22 @@ function hookVersuchDelegation() {
     if (!versuch) return;
 
     const role = btn.dataset.role;
+
+    if (role === 'row-plus') {
+      sortMessungen(versuch);
+      const step = getContinueStep(versuch);
+      const last = versuch.messungen.length ? Number(versuch.messungen[versuch.messungen.length - 1].min) : 0;
+      const nextMin = Number.isFinite(last) ? last + step : step;
+      versuch.messungen.push({
+        min: nextMin,
+        foerder_m: '',
+        schluck_m: ''
+      });
+      syncIntervalleStrFromRows(versuch);
+      renderVersuche();
+      saveDraftDebounced();
+      return;
+    }
 
     if (role === 'del') {
       const idx = state.versuche.findIndex(v => v.id === versuch.id);
@@ -1024,27 +1013,24 @@ function drawMetaGrid(page, x, yTop, w, rowH, meta, fontR, fontB, K) {
 }
 
 function buildPdfCols(selection) {
-  const cols = [{ key: 'min', label: 'Min', w: 0.10 }];
+  const cols = [{ key: 'min', label: 'Minuten', w: 0.14 }];
   if (selection.foerder) {
-    cols.push({ key: 'foerder_m', label: 'Foerderbrunnen m ab OK', w: 0.18 });
-    cols.push({ key: 'foerder_diff', label: 'Diff. Ruhe', w: 0.11 });
+    cols.push({ key: 'foerder_m', label: 'Foerderbrunnen m ab OK', w: 0.24 });
+    cols.push({ key: 'foerder_diff', label: 'Diff. Ruhe', w: 0.14 });
   }
   if (selection.schluck) {
-    cols.push({ key: 'schluck_m', label: 'Schluckbrunnen m ab OK', w: 0.18 });
-    cols.push({ key: 'schluck_diff', label: 'Diff. Ruhe', w: 0.11 });
+    cols.push({ key: 'schluck_m', label: 'Schluckbrunnen m ab OK', w: 0.24 });
+    cols.push({ key: 'schluck_diff', label: 'Diff. Ruhe', w: 0.14 });
   }
-  cols.push({ key: 'rate_ls', label: 'Rate [l/s]', w: 0.15 });
-  cols.push({ key: 'rate_m3h', label: 'Rate [m3/h]', w: 0.17 });
 
   const sum = cols.reduce((a, c) => a + c.w, 0);
   cols.forEach(c => { c.w = c.w / sum; });
   return cols;
 }
 
-function drawStageBlock(page, opt) {
+function drawStageTable(page, opt) {
   const {
     x, yTop, w,
-    stageIndex,
     versuch,
     selection,
     foerder,
@@ -1057,19 +1043,21 @@ function drawStageBlock(page, opt) {
 
   const rows = getRowsForExport(versuch);
   const cols = buildPdfCols(selection);
-  const titleH = 15;
-  const headH = 17;
-  const rowH = 8.2;
+
+  const titleH = 16;
+  const headH = 18;
+  const rowH = 11.2;
   const totalH = titleH + headH + rows.length * rowH;
 
   page.drawRectangle({ x, y: yTop - titleH, width: w, height: titleH, color: grey, borderColor: K, borderWidth: 0.8 });
 
-  const effLs = getEffectiveRateLs(versuch);
-  const effM3h = getEffectiveRateM3h(versuch);
-  drawTextSafe(page, `${getStageTitle(stageIndex)}   ${effLs || '—'} l/s   ${effM3h || '—'} m3/h`, {
+  const rateM3h = getEffectiveRateM3h(versuch);
+  const rateLs = getEffectiveRateLs(versuch);
+
+  drawTextSafe(page, `${pdfSafe(versuch._stageTitle || 'Stufe')}   ${rateLs || '—'} l/s   ${rateM3h || '—'} m3/h`, {
     x: x + 4,
     y: yTop - titleH + 4,
-    size: 8.3,
+    size: 8.7,
     font: fontB,
     color: K
   });
@@ -1092,8 +1080,8 @@ function drawStageBlock(page, opt) {
   cols.forEach((c, i) => {
     drawTextSafe(page, c.label, {
       x: xs[i] + 3,
-      y: yHead + 5,
-      size: 6.5,
+      y: yHead + 6,
+      size: 7,
       font: fontB,
       color: K
     });
@@ -1117,13 +1105,11 @@ function drawStageBlock(page, opt) {
       if (c.key === 'foerder_diff') text = calcDelta(r.foerder_m, foerder.ruhe) || '—';
       if (c.key === 'schluck_m') text = r.schluck_m !== '' ? fmtComma(r.schluck_m, 3) : '—';
       if (c.key === 'schluck_diff') text = calcDelta(r.schluck_m, schluck.ruhe) || '—';
-      if (c.key === 'rate_ls') text = r.rate_ls !== '' ? fmtComma(r.rate_ls, 3) : '—';
-      if (c.key === 'rate_m3h') text = r.rate_ls !== '' ? fmtComma(lsToM3h(r.rate_ls), 3) : '—';
 
       drawTextSafe(page, text, {
         x: xs[i] + 3,
-        y: nextY + 2.2,
-        size: 6.5,
+        y: nextY + 3,
+        size: 7.2,
         font: fontR,
         color: K
       });
@@ -1163,14 +1149,14 @@ async function exportPdf(snapshot = null) {
 
   let logo = null;
   try {
-    const bytes = await fetch(`${BASE}logo.png?v=11`).then(r => {
+    const bytes = await fetch(`${BASE}logo.png?v=12`).then(r => {
       if (!r.ok) throw new Error(String(r.status));
       return r.arrayBuffer();
     });
     logo = await pdf.embedPng(bytes);
   } catch {}
 
-  const PAGE_W = 595.28; // A4 hoch
+  const PAGE_W = 595.28; // A4 Hochformat
   const PAGE_H = 841.89;
   const mm = (v) => v * 72 / 25.4;
 
@@ -1181,13 +1167,11 @@ async function exportPdf(snapshot = null) {
   const foerder = snap.foerder || {};
   const schluck = snap.schluck || {};
 
-  const pageSets = [];
-  for (let i = 0; i < versuche.length; i += 3) {
-    pageSets.push(versuche.slice(i, i + 3));
-  }
-
-  for (let p = 0; p < pageSets.length; p++) {
+  for (let i = 0; i < versuche.length; i++) {
     const page = pdf.addPage([PAGE_W, PAGE_H]);
+
+    const v = hydrateVersuch(versuche[i]);
+    v._stageTitle = getStageTitle(i);
 
     const margin = mm(8);
     const x0 = margin;
@@ -1261,33 +1245,25 @@ async function exportPdf(snapshot = null) {
     drawTextSafe(page, wellTexts.join('   |   '), {
       x: x0 + 4,
       y: cy - metaRowH + 6,
-      size: 7.1,
+      size: 7.2,
       font: fontR,
       color: K
     });
 
-    cy -= metaRowH + mm(2);
+    cy -= metaRowH + mm(3);
 
-    const gap = mm(2.5);
-    const availableH = cy - (y0 + mm(8));
-    const stageH = (availableH - gap * 2) / 3;
-
-    pageSets[p].forEach((stage, localIdx) => {
-      const topY = cy - localIdx * (stageH + gap);
-      drawStageBlock(page, {
-        x: x0,
-        yTop: topY,
-        w: W,
-        stageIndex: p * 3 + localIdx,
-        versuch: hydrateVersuch(stage),
-        selection,
-        foerder,
-        schluck,
-        fontR,
-        fontB,
-        K,
-        grey: GREY
-      });
+    drawStageTable(page, {
+      x: x0,
+      yTop: cy,
+      w: W,
+      versuch: v,
+      selection,
+      foerder,
+      schluck,
+      fontR,
+      fontB,
+      K,
+      grey: GREY
     });
 
     page.drawLine({
@@ -1305,7 +1281,7 @@ async function exportPdf(snapshot = null) {
       color: K
     });
 
-    drawTextSafe(page, `Seite ${p + 1}/${pageSets.length}`, {
+    drawTextSafe(page, `Seite ${i + 1}/${versuche.length}`, {
       x: x0 + W - 40,
       y: y0 + 4,
       size: 7,
@@ -1336,6 +1312,83 @@ async function exportPdf(snapshot = null) {
 }
 
 /* ───────────────── history ui ───────────────── */
+
+function hookHistoryDelegation() {
+  const host = $('historyList');
+  if (!host || host.dataset.bound === '1') return;
+  host.dataset.bound = '1';
+
+  host.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-hact]');
+    if (!btn) return;
+
+    const id = btn.dataset.id;
+    const act = btn.dataset.hact;
+    const list = readHistory();
+    const entry = list.find(x => x.id === id);
+
+    if (act === 'del') {
+      writeHistory(list.filter(x => x.id !== id));
+      renderHistoryList();
+      return;
+    }
+    if (!entry) return;
+
+    if (act === 'load') {
+      applySnapshot(entry.snapshot, true);
+      saveDraftDebounced();
+      document.querySelector('.tab[data-tab="protokoll"]')?.click();
+      return;
+    }
+
+    if (act === 'pdf') {
+      try {
+        await exportPdf(entry.snapshot);
+      } catch (err) {
+        console.error(err);
+        alert('PDF-Fehler: ' + (err?.message || String(err)));
+      }
+    }
+  });
+}
+
+function renderHistoryList() {
+  const host = $('historyList');
+  if (!host) return;
+  const list = readHistory();
+
+  if (!list.length) {
+    host.innerHTML = `<div class="text"><p>Noch keine Protokolle gespeichert.</p></div>`;
+    return;
+  }
+
+  host.innerHTML = list.map(entry => {
+    const snap = entry.snapshot || {};
+    const count = Array.isArray(snap.versuche) ? snap.versuche.length : 0;
+    const wells = [];
+    if (snap.selection?.foerder) wells.push('Förderbrunnen');
+    if (snap.selection?.schluck) wells.push('Schluckbrunnen');
+
+    return `
+      <div class="historyItem">
+        <div class="historyTop">
+          <span>${h(entry.title)}</span>
+          <span style="color:var(--muted);font-size:.82em">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
+        </div>
+        <div class="historySub">
+          Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> · Brunnen: <b>${h(wells.join(' / ') || '—')}</b> · Stufen: <b>${h(count)}</b>
+        </div>
+        <div class="historyBtns">
+          <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
+          <button type="button" data-hact="pdf" data-id="${h(entry.id)}">PDF</button>
+          <button type="button" data-hact="del" data-id="${h(entry.id)}">Löschen</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ───────────────── reset / install ───────────────── */
 
 function resetAll() {
   if (!confirm('Alle Eingaben wirklich zurücksetzen?')) return;
@@ -1441,7 +1494,7 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btnReset')?.addEventListener('click', resetAll);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`${BASE}sw.js?v=11`).catch(err => {
+    navigator.serviceWorker.register(`${BASE}sw.js?v=12`).catch(err => {
       console.error('SW registration failed:', err);
     });
   }
