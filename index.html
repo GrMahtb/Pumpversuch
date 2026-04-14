@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title" content="HTB Pumpversuch" />
   <title>HTB Pumpversuch-Protokoll</title>
 
-  <link rel="manifest" href="/Pumpversuch/manifest.json?v=9" />
-  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=9" />
-  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=9" />
+  <link rel="manifest" href="/Pumpversuch/manifest.json?v=10" />
+  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=10" />
+  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=10" />
 
   <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
@@ -20,9 +20,9 @@
     <div class="brand__bar">
       <div class="brand__logo">
         <img
-          src="/Pumpversuch/logo.svg?v=9"
+          src="/Pumpversuch/logo.svg?v=10"
           alt="HTB Logo"
-          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=9';"
+          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=10';"
         />
       </div>
       <div class="brand__info">
@@ -102,17 +102,17 @@
       <div class="card__body">
         <div class="select-grid">
           <label class="select-card">
-            <input type="radio" name="activeBrunnen" id="active-foerder" value="foerder" checked />
-            <span>Förderbrunnen im Pumpversuch</span>
+            <input type="checkbox" id="sel-foerder" checked />
+            <span>Förderbrunnen verwenden</span>
           </label>
           <label class="select-card">
-            <input type="radio" name="activeBrunnen" id="active-schluck" value="schluck" />
-            <span>Schluckbrunnen im Pumpversuch</span>
+            <input type="checkbox" id="sel-schluck" checked />
+            <span>Schluckbrunnen verwenden</span>
           </label>
         </div>
 
         <div class="brunnen-grid">
-          <section class="brunnen-box">
+          <section id="box-foerder" class="brunnen-box">
             <div class="brunnen-title brunnen-title--foerder">Förderbrunnen</div>
             <div class="form-grid">
               <label class="field">
@@ -130,7 +130,7 @@
             </div>
           </section>
 
-          <section class="brunnen-box">
+          <section id="box-schluck" class="brunnen-box">
             <div class="brunnen-title brunnen-title--schluck">Schluckbrunnen</div>
             <div class="form-grid">
               <label class="field">
@@ -157,16 +157,16 @@
         <button id="btnPdf" class="btn btn--ghost btn--small" type="button">PDF</button>
         <button id="btnReset" class="btn btn--ghost btn--small" type="button">Reset</button>
       </div>
-      <div class="hint">Speichern im Verlauf · PDF mit Tabelle und Diagramm exportieren</div>
+      <div class="hint">Speichern im Verlauf · PDF als A4-Hochformat exportieren</div>
     </section>
 
     <section class="card">
-      <div class="card__title">Pumpversuche</div>
+      <div class="card__title">Pumpstufen</div>
       <div id="versucheContainer"></div>
 
       <div class="plus-wrap">
         <button id="btnAddVersuch" class="btn-plus" type="button">+</button>
-        <div class="plus-label">Pumpversuch hinzufügen</div>
+        <div class="plus-label">Pumpstufe hinzufügen</div>
       </div>
     </section>
   </main>
@@ -185,9 +185,10 @@
     <section class="card">
       <div class="card__title">App</div>
       <div class="text">
-        <p><b>Brunnenwahl:</b> Im Bereich Brunnendaten wird festgelegt, ob im Pumpversuch mit Förderbrunnen oder Schluckbrunnen gearbeitet wird.</p>
-        <p><b>Eingabe:</b> Dadurch gibt es in jeder Stufe nur noch eine Brunnen-Spalte und keine seitliche Scrolltabelle mehr.</p>
-        <p><b>PDF:</b> Im PDF wird ebenfalls nur die gewählte Brunnenart ausgegeben; die Differenz zum Ruhewasserstand bleibt dort enthalten.</p>
+        <p><b>Brunnenauswahl:</b> Förderbrunnen und/oder Schluckbrunnen können angehakt werden.</p>
+        <p><b>Pumpstufen:</b> Die Spalten richten sich automatisch nach der Auswahl bei den Brunnendaten.</p>
+        <p><b>Förderrate:</b> Kann je Zeile eingegeben werden. Wenn im Stufenkopf nichts manuell gesetzt ist, wird der Mittelwert verwendet.</p>
+        <p><b>PDF:</b> Hochformat A4, graue Kopfzeile, drei Stufen pro Blatt.</p>
       </div>
     </section>
 
@@ -206,6 +207,6 @@
     <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
   </footer>
 
-  <script src="/Pumpversuch/app.js?v=9"></script>
+  <script src="/Pumpversuch/app.js?v=10"></script>
 </body>
 </html>
