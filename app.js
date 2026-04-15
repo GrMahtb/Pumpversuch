@@ -1,6 +1,6 @@
 'use strict';
 
-console.log('HTB Pumpversuch app.js v13 loaded');
+console.log('HTB Pumpversuch app.js v26 loaded');
 
 const BASE = '/Pumpversuch/';
 const STORAGE_DRAFT = 'htb-pumpversuch-draft-v13';
@@ -31,6 +31,8 @@ const state = {
 };
 
 const timerMap = {};
+let _saveT = null;
+let _liveT = null;
 
 /* ───────────────── helpers ───────────────── */
 function uid() {
@@ -49,13 +51,33 @@ function h(v) {
 
 function pdfSafe(v) {
   return String(v ?? '')
-    .replace(/[–—]/g, '-').replace(/[•→]/g, '-')
+    .replace(/[–—]/g, '-')
+    .replace(/[•→]/g, '-')
     .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, '?');
 }
 
 function fmtComma(v, d = 3) {
   const n = Number(v);
   return Number.isFinite(n) ? n.toFixed(d).replace('.', ',') : '—';
+}
+
+function fmtMaybe(v, d = 3) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(d).replace('.', ',') : '—';
+}
+
+function fmtSci(v, digits = 2) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  const [m, e] = n.toExponential(digits).split('e');
+  return `${m.replace('.', ',')}e${Number(e)}`;
+}
+
+function fmtKf(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  if (n >= 0.001) return `${fmtComma(n, 6)} m/s`;
+  return `${fmtSci(n, 2)} m/s`;
 }
 
 function dateTag(d = new Date()) {
@@ -116,14 +138,6 @@ function getSelectedWells() {
   return { foerder: !!state.selection.foerder, schluck: !!state.selection.schluck };
 }
 
-function getSelectedWellKeys() {
-  const sel = getSelectedWells();
-  const keys = [];
-  if (sel.foerder) keys.push('foerder');
-  if (sel.schluck) keys.push('schluck');
-  return keys;
-}
-
 function getWellLabel(key) {
   return key === 'foerder' ? 'Förderbrunnen' : 'Schluckbrunnen';
 }
@@ -148,17 +162,22 @@ function sortMessungen(v) {
   syncIntervalleStrFromRows(v);
 }
 
+function getManualRateM3hNumber(v) {
+  const n = Number(v?.manualRateM3h);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 function getEffectiveRateM3h(v) {
-  const n = Number(v.manualRateM3h);
+  const n = getManualRateM3hNumber(v);
   return Number.isFinite(n) ? n.toFixed(3) : '';
 }
 
 function getEffectiveRateLs(v) {
-  const m3h = Number(v.manualRateM3h);
+  const m3h = getManualRateM3hNumber(v);
   return Number.isFinite(m3h) ? (m3h / 3.6).toFixed(3) : '';
 }
 
-function getAverageFoerderMenge(v) {
+function getAverageFoerderMengeNumber(v) {
   const values = (v.messungen || [])
     .filter(m =>
       String(m.foerder_menge ?? '').trim() !== '' &&
@@ -166,10 +185,41 @@ function getAverageFoerderMenge(v) {
     )
     .map(m => Number(m.foerder_menge));
 
-  if (!values.length) return '';
+  if (!values.length) return NaN;
+  return values.reduce((sum, n) => sum + n, 0) / values.length;
+}
 
-  const avg = values.reduce((sum, n) => sum + n, 0) / values.length;
-  return avg.toFixed(3);
+function getAverageFoerderMenge(v) {
+  const avg = getAverageFoerderMengeNumber(v);
+  return Number.isFinite(avg) ? avg.toFixed(3) : '';
+}
+
+function getCalcRateM3hNumber(v) {
+  const manual = getManualRateM3hNumber(v);
+  if (Number.isFinite(manual) && manual > 0) return manual;
+
+  const avg = getAverageFoerderMengeNumber(v);
+  if (Number.isFinite(avg) && avg > 0) return avg;
+
+  return NaN;
+}
+
+function getCalcRateM3h(v) {
+  const n = getCalcRateM3hNumber(v);
+  return Number.isFinite(n) ? n.toFixed(3) : '';
+}
+
+function getCalcRateLs(v) {
+  const n = getCalcRateM3hNumber(v);
+  return Number.isFinite(n) ? (n / 3.6).toFixed(3) : '';
+}
+
+function getCalcRateSource(v) {
+  const manual = getManualRateM3hNumber(v);
+  if (Number.isFinite(manual) && manual > 0) return 'manuelle Förderrate';
+  const avg = getAverageFoerderMengeNumber(v);
+  if (Number.isFinite(avg) && avg > 0) return 'Ø Fördermenge';
+  return '';
 }
 
 function getContinueStep(v) {
@@ -179,6 +229,222 @@ function getContinueStep(v) {
     if (Number.isFinite(step) && step > 0) return step;
   }
   return 15;
+}
+
+function getRowsForExport(v) {
+  return clone(v.messungen || []).sort((a, b) => {
+    const av = Number(a.min), bv = Number(b.min);
+    if (Number.isFinite(av) && Number.isFinite(bv)) return av - bv;
+    return Number.isFinite(av) ? -1 : 1;
+  });
+}
+
+function scheduleLiveRender() {
+  clearTimeout(_liveT);
+  _liveT = setTimeout(() => renderLiveTab(), 90);
+}
+
+/* ───────────────── Kf / Diagramm helpers ───────────────── */
+function getDisplacementCm(raw, ruhe) {
+  const m = Number(raw);
+  const r = Number(ruhe);
+  if (!Number.isFinite(m) || !Number.isFinite(r) || String(raw ?? '').trim() === '') return NaN;
+  return Math.abs((m - r) * 100);
+}
+
+function getProcessHeadChangeM(raw, ruhe, key) {
+  const m = Number(raw);
+  const r = Number(ruhe);
+  if (!Number.isFinite(m) || !Number.isFinite(r) || String(raw ?? '').trim() === '') return NaN;
+  return key === 'foerder' ? (m - r) : (r - m);
+}
+
+function getWellChartPoints(versuch, key, brunnen) {
+  const field = key === 'foerder' ? 'foerder_m' : 'schluck_m';
+  const ruhe = Number(brunnen?.ruhe);
+
+  return getRowsForExport(versuch)
+    .map(row => {
+      const x = Number(row.min);
+      const y = getDisplacementCm(row[field], ruhe);
+      return {
+        x,
+        y
+      };
+    })
+    .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
+    .sort((a, b) => a.x - b.x);
+}
+
+function niceNum(range, round) {
+  if (!Number.isFinite(range) || range <= 0) return 1;
+
+  const exponent = Math.floor(Math.log10(range));
+  const fraction = range / Math.pow(10, exponent);
+  let niceFraction;
+
+  if (round) {
+    if (fraction < 1.5) niceFraction = 1;
+    else if (fraction < 3) niceFraction = 2;
+    else if (fraction < 7) niceFraction = 5;
+    else niceFraction = 10;
+  } else {
+    if (fraction <= 1) niceFraction = 1;
+    else if (fraction <= 2) niceFraction = 2;
+    else if (fraction <= 5) niceFraction = 5;
+    else niceFraction = 10;
+  }
+
+  return niceFraction * Math.pow(10, exponent);
+}
+
+function getNiceAxis(minVal, maxVal, ticks = 6) {
+  let min = Number.isFinite(minVal) ? minVal : 0;
+  let max = Number.isFinite(maxVal) ? maxVal : 1;
+
+  if (min === max) {
+    if (min === 0) max = 1;
+    else {
+      min = Math.min(0, min);
+      max = max * 1.1;
+    }
+  }
+
+  const range = niceNum(max - min, false);
+  const step = niceNum(range / Math.max(2, ticks - 1), true);
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+
+  return { min: niceMin, max: niceMax, step };
+}
+
+function buildTicks(axis) {
+  const ticks = [];
+  for (let v = axis.min; v <= axis.max + axis.step / 2; v += axis.step) {
+    ticks.push(Number(v.toFixed(10)));
+  }
+  return ticks;
+}
+
+function fmtAxisTick(v, decimals = 0) {
+  if (!Number.isFinite(v)) return '—';
+  return String(Number(v.toFixed(decimals))).replace('.', ',');
+}
+
+function estimateRowKfDupuitSichardt({ qM3h, dmMm, endteufe, ruhe, dyn, key }) {
+  const Q = Number(qM3h) / 3600; // m³/s
+  const rw = Number(dmMm) / 2000; // Radius [m]
+  const ET = Number(endteufe);
+  const RWS = Number(ruhe);
+  const dynLevel = Number(dyn);
+
+  if (![Q, rw, ET, RWS, dynLevel].every(Number.isFinite)) return NaN;
+  if (Q <= 0 || rw <= 0 || ET <= 0) return NaN;
+
+  const H0 = ET - RWS;
+  const Hd = ET - dynLevel;
+  const s = key === 'foerder' ? (dynLevel - RWS) : (RWS - dynLevel);
+
+  if (!Number.isFinite(H0) || !Number.isFinite(Hd) || !Number.isFinite(s)) return NaN;
+  if (H0 <= 0 || Hd <= 0 || s <= 0) return NaN;
+
+  const denom = key === 'foerder'
+    ? (H0 * H0 - Hd * Hd)
+    : (Hd * Hd - H0 * H0);
+
+  if (!(denom > 0)) return NaN;
+
+  let k = 1e-4;
+
+  for (let i = 0; i < 40; i++) {
+    const R = Math.max(rw * 20, 3000 * s * Math.sqrt(Math.max(k, 1e-12)));
+    const ln = Math.log(R / rw);
+    if (!(ln > 0)) return NaN;
+
+    const kNew = (Q * ln) / (Math.PI * denom);
+    if (!Number.isFinite(kNew) || kNew <= 0) return NaN;
+
+    if (Math.abs(kNew - k) / k < 1e-6) {
+      k = kNew;
+      break;
+    }
+    k = kNew;
+  }
+
+  return Number.isFinite(k) && k > 0 ? k : NaN;
+}
+
+function getStageKfEstimate(versuch, key, brunnen) {
+  const rateM3h = getCalcRateM3hNumber(versuch);
+  if (!Number.isFinite(rateM3h) || rateM3h <= 0) {
+    return {
+      kf: NaN,
+      used: 0,
+      total: 0,
+      reason: 'Keine gültige Förderrate vorhanden'
+    };
+  }
+
+  const field = key === 'foerder' ? 'foerder_m' : 'schluck_m';
+  const series = getRowsForExport(versuch)
+    .map(row => {
+      const min = Number(row.min);
+      const raw = row[field];
+      const kf = estimateRowKfDupuitSichardt({
+        qM3h: rateM3h,
+        dmMm: brunnen?.dm,
+        endteufe: brunnen?.endteufe,
+        ruhe: brunnen?.ruhe,
+        dyn: raw,
+        key
+      });
+
+      const s = getProcessHeadChangeM(raw, brunnen?.ruhe, key);
+
+      if (!Number.isFinite(kf) || !Number.isFinite(min) || !Number.isFinite(s) || s <= 0) return null;
+
+      return { min, kf, s };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.min - b.min);
+
+  if (!series.length) {
+    return {
+      kf: NaN,
+      used: 0,
+      total: 0,
+      reason: 'Noch keine auswertbaren Messpunkte'
+    };
+  }
+
+  const tail = series.length >= 4 ? series.slice(Math.floor(series.length / 2)) : series;
+  const weights = tail.map(p => Math.max(1, p.min || 1));
+  const sumW = weights.reduce((a, b) => a + b, 0);
+
+  const logMean = Math.exp(
+    tail.reduce((sum, item, idx) => sum + Math.log(item.kf) * weights[idx], 0) / sumW
+  );
+
+  const minK = Math.min(...tail.map(x => x.kf));
+  const maxK = Math.max(...tail.map(x => x.kf));
+  const spread = maxK / minK;
+
+  let quality = 'gering';
+  if (tail.length >= 4 && spread <= 3) quality = 'gut';
+  else if (tail.length >= 3 && spread <= 10) quality = 'mittel';
+
+  return {
+    kf: logMean,
+    used: tail.length,
+    total: series.length,
+    minK,
+    maxK,
+    spread,
+    quality,
+    rateM3h,
+    rateSource: getCalcRateSource(versuch),
+    method: 'Dupuit/Thiem + Sichardt (iterativ)'
+  };
 }
 
 /* ───────────────── defaults ───────────────── */
@@ -202,6 +468,7 @@ function hydrateVersuch(v) {
   const base = defaultVersuch();
   const ints = v?.intervalleStr ? parseIntervalStr(v.intervalleStr) : [...DEFAULT_INTERVALLE];
   const existing = Array.isArray(v?.messungen) ? v.messungen : [];
+
   return {
     ...base,
     ...v,
@@ -333,10 +600,9 @@ function applySnapshot(snapshot, render = true) {
     syncBrunnenToUi();
     syncSelectionToUi();
     renderVersuche();
+    renderLiveTab();
   }
 }
-
-let _saveT = null;
 
 function saveDraftDebounced() {
   clearTimeout(_saveT);
@@ -393,7 +659,9 @@ function initTabs() {
         p.classList.toggle('is-active', on);
         p.hidden = !on;
       });
+
       if (btn.dataset.tab === 'verlauf') renderHistoryList();
+      if (btn.dataset.tab === 'live') renderLiveTab();
     });
   });
 }
@@ -716,7 +984,7 @@ function hardStopTimer(vid) {
   delete timerMap[vid];
 }
 
-/* ───────────────── stage computed (rate header only) ───────────────── */
+/* ───────────────── stage header computed ───────────────── */
 function updateStageRateDisplay(card, versuch) {
   const effLs = getEffectiveRateLs(versuch);
   const avgFoerderMenge = getAverageFoerderMenge(versuch);
@@ -726,6 +994,152 @@ function updateStageRateDisplay(card, versuch) {
 
   if (lsEl) lsEl.textContent = effLs ? `${effLs} l/s` : '—';
   if (avgEl) avgEl.value = avgFoerderMenge || '—';
+}
+
+/* ───────────────── live tab ───────────────── */
+function buildLiveChartSvg(points, key) {
+  const color = key === 'foerder' ? '#56b7ff' : '#ffb45a';
+  const W = 560;
+  const H = 280;
+  const ml = 58;
+  const mr = 18;
+  const mt = 18;
+  const mb = 42;
+  const pw = W - ml - mr;
+  const ph = H - mt - mb;
+
+  const xMaxData = points.length ? Math.max(...points.map(p => p.x)) : 10;
+  const yMaxData = points.length ? Math.max(...points.map(p => p.y)) : 10;
+
+  const xAxis = getNiceAxis(0, xMaxData > 0 ? xMaxData : 10, 6);
+  const yAxis = getNiceAxis(0, yMaxData > 0 ? yMaxData : 10, 6);
+
+  const xTicks = buildTicks(xAxis);
+  const yTicks = buildTicks(yAxis);
+
+  const tx = (v) => ml + ((v - xAxis.min) / (xAxis.max - xAxis.min || 1)) * pw;
+  const ty = (v) => mt + ph - ((v - yAxis.min) / (yAxis.max - yAxis.min || 1)) * ph;
+
+  const gridY = yTicks.map(v => `
+    <line x1="${ml}" y1="${ty(v)}" x2="${W - mr}" y2="${ty(v)}" stroke="rgba(255,255,255,.12)" stroke-width="1" />
+    <text x="${ml - 8}" y="${ty(v) + 4}" text-anchor="end" fill="rgba(220,240,255,.75)" font-size="11">${h(fmtAxisTick(v, 0))}</text>
+  `).join('');
+
+  const gridX = xTicks.map(v => `
+    <line x1="${tx(v)}" y1="${mt}" x2="${tx(v)}" y2="${mt + ph}" stroke="rgba(255,255,255,.08)" stroke-width="1" />
+    <text x="${tx(v)}" y="${H - 16}" text-anchor="middle" fill="rgba(220,240,255,.75)" font-size="11">${h(fmtAxisTick(v, 0))}</text>
+  `).join('');
+
+  const polyPoints = points.map(p => `${tx(p.x)},${ty(p.y)}`).join(' ');
+  const circles = points.map(p => `
+    <circle cx="${tx(p.x)}" cy="${ty(p.y)}" r="3.5" fill="${color}" stroke="#ffffff" stroke-width="1.2" />
+  `).join('');
+
+  return `
+<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="Diagramm">
+  <rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="#0b1725" />
+  ${gridY}
+  ${gridX}
+  <rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.2" />
+  <line x1="${ml}" y1="${mt + ph}" x2="${W - mr}" y2="${mt + ph}" stroke="rgba(255,255,255,.35)" stroke-width="1.2" />
+  <line x1="${ml}" y1="${mt}" x2="${ml}" y2="${mt + ph}" stroke="rgba(255,255,255,.35)" stroke-width="1.2" />
+  ${points.length ? `<polyline points="${polyPoints}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />` : ''}
+  ${circles}
+  <text x="${ml + pw / 2}" y="${H - 4}" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700">Zeit [min]</text>
+  <text x="16" y="${mt + ph / 2}" transform="rotate(-90 16 ${mt + ph / 2})" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700">Absenkung [cm]</text>
+  ${!points.length ? `<text x="${ml + pw / 2}" y="${mt + ph / 2}" text-anchor="middle" fill="rgba(220,240,255,.72)" font-size="13">Noch keine Messwerte</text>` : ''}
+</svg>`;
+}
+
+function buildLiveWellPanelHtml(versuch, idx, key, brunnen) {
+  const est = getStageKfEstimate(versuch, key, brunnen);
+  const points = getWellChartPoints(versuch, key, brunnen);
+  const title = getWellLabel(key);
+  const wellCls = key === 'foerder' ? 'live-well--foerder' : 'live-well--schluck';
+
+  const qClass = est.quality ? `kf-quality kf-quality--${est.quality}` : '';
+  const qualityText = est.quality === 'gut'
+    ? 'stabil'
+    : est.quality === 'mittel'
+      ? 'mittel'
+      : 'vorläufig';
+
+  return `
+    <section class="live-well ${wellCls}">
+      <div class="live-well__head">
+        <div>
+          <div class="live-well__title">${h(title)}</div>
+          <div class="live-well__sub">
+            Ø ${h(fmtMaybe(brunnen?.dm, 0))} mm ·
+            ET ${h(fmtMaybe(brunnen?.endteufe, 2))} m ·
+            RW ${h(fmtMaybe(brunnen?.ruhe, 3))} m
+          </div>
+        </div>
+
+        <div class="kf-box">
+          <div class="kf-box__label">Kf-Abschätzung</div>
+          <div class="kf-box__value">${Number.isFinite(est.kf) ? h(fmtKf(est.kf)) : '—'}</div>
+          <div class="kf-box__note">
+            ${
+              Number.isFinite(est.kf)
+                ? `Basis: ${h(est.rateSource || 'Rate')} · ${h(fmtMaybe(est.rateM3h, 3))} m³/h · ${h(String(est.used))} Messpunkte`
+                : h(est.reason || 'Noch keine Auswertung möglich')
+            }
+          </div>
+          ${Number.isFinite(est.kf) ? `<div class="${qClass}">${h(qualityText)}</div>` : ''}
+        </div>
+      </div>
+
+      <div class="live-chart">
+        ${buildLiveChartSvg(points, key)}
+      </div>
+    </section>
+  `;
+}
+
+function renderLiveTab() {
+  const host = $('liveContainer');
+  if (!host) return;
+
+  if (!state.versuche.length) {
+    host.innerHTML = `
+      <section class="card">
+        <div class="empty-state">
+          Noch keine Pumpstufe vorhanden.<br />
+          Bitte zuerst im Protokoll eine Pumpstufe anlegen.
+        </div>
+      </section>
+    `;
+    return;
+  }
+
+  const sel = getSelectedWells();
+
+  host.innerHTML = state.versuche.map((v, idx) => {
+    const rateM3h = getCalcRateM3h(v);
+    const rateLs = getCalcRateLs(v);
+    const rateSource = getCalcRateSource(v);
+
+    return `
+      <section class="card live-stage">
+        <div class="live-stage__head">
+          <div>
+            <div class="live-stage__title">${h(getStageTitle(idx))}</div>
+            <div class="live-stage__meta">
+              Rate für Auswertung: <b>${h(rateM3h || '—')} m³/h</b> ·
+              <b>${h(rateLs || '—')} l/s</b>
+              ${rateSource ? ` · Quelle: ${h(rateSource)}` : ''}
+            </div>
+          </div>
+        </div>
+
+        <div class="live-grid">
+          ${sel.foerder ? buildLiveWellPanelHtml(v, idx, 'foerder', state.foerder) : ''}
+          ${sel.schluck ? buildLiveWellPanelHtml(v, idx, 'schluck', state.schluck) : ''}
+        </div>
+      </section>
+    `;
+  }).join('');
 }
 
 /* ───────────────── input hooks ───────────────── */
@@ -749,22 +1163,26 @@ function hookStaticInputs() {
     el.addEventListener('input', () => {
       collectBrunnenFromUi();
       saveDraftDebounced();
+      scheduleLiveRender();
     });
     el.addEventListener('change', () => {
       collectBrunnenFromUi();
       saveDraftDebounced();
+      scheduleLiveRender();
     });
   });
 
   $('sel-foerder')?.addEventListener('change', () => {
     if (!collectSelectionFromUi()) return;
     renderVersuche();
+    renderLiveTab();
     saveDraftDebounced();
   });
 
   $('sel-schluck')?.addEventListener('change', () => {
     if (!collectSelectionFromUi()) return;
     renderVersuche();
+    renderLiveTab();
     saveDraftDebounced();
   });
 }
@@ -791,24 +1209,28 @@ function hookVersuchDelegation() {
       versuch.manualRateM3h = el.value;
       updateStageRateDisplay(card, versuch);
       saveDraftDebounced();
+      scheduleLiveRender();
       return;
     }
 
     if (role === 'min') {
       if (versuch.messungen[idx]) versuch.messungen[idx].min = el.value;
       saveDraftDebounced();
+      scheduleLiveRender();
       return;
     }
 
     if (role === 'foerder-m') {
       if (versuch.messungen[idx]) versuch.messungen[idx].foerder_m = el.value;
       saveDraftDebounced();
+      scheduleLiveRender();
       return;
     }
 
     if (role === 'schluck-m') {
       if (versuch.messungen[idx]) versuch.messungen[idx].schluck_m = el.value;
       saveDraftDebounced();
+      scheduleLiveRender();
       return;
     }
 
@@ -816,6 +1238,7 @@ function hookVersuchDelegation() {
       if (versuch.messungen[idx]) versuch.messungen[idx].foerder_menge = el.value;
       updateStageRateDisplay(card, versuch);
       saveDraftDebounced();
+      scheduleLiveRender();
       return;
     }
   });
@@ -849,6 +1272,7 @@ function hookVersuchDelegation() {
 
       hardStopTimer(versuch.id);
       renderVersuche();
+      renderLiveTab();
       saveDraftDebounced();
       return;
     }
@@ -857,6 +1281,7 @@ function hookVersuchDelegation() {
       sortMessungen(versuch);
       hardStopTimer(versuch.id);
       renderVersuche();
+      renderLiveTab();
       saveDraftDebounced();
     }
   });
@@ -883,6 +1308,7 @@ function hookVersuchDelegation() {
       versuch.messungen.push(defaultMessung(Number.isFinite(last) ? last + step : step));
       syncIntervalleStrFromRows(versuch);
       renderVersuche();
+      renderLiveTab();
       saveDraftDebounced();
       return;
     }
@@ -894,6 +1320,7 @@ function hookVersuchDelegation() {
       hardStopTimer(versuch.id);
       state.versuche = state.versuche.filter(v => v.id !== versuch.id);
       renderVersuche();
+      renderLiveTab();
       saveDraftDebounced();
       return;
     }
@@ -905,6 +1332,32 @@ function hookVersuchDelegation() {
 }
 
 /* ───────────────── history ui ───────────────── */
+function buildHistoryKfHtml(snapshot) {
+  const versuche = Array.isArray(snapshot?.versuche) ? snapshot.versuche : [];
+  if (!versuche.length) return '';
+
+  const lines = versuche.map((raw, idx) => {
+    const v = hydrateVersuch(raw);
+    const parts = [];
+    if (snapshot.selection?.foerder) {
+      const estF = getStageKfEstimate(v, 'foerder', snapshot.foerder || {});
+      parts.push(`Förder: ${Number.isFinite(estF.kf) ? fmtKf(estF.kf) : '—'}`);
+    }
+    if (snapshot.selection?.schluck) {
+      const estS = getStageKfEstimate(v, 'schluck', snapshot.schluck || {});
+      parts.push(`Schluck: ${Number.isFinite(estS.kf) ? fmtKf(estS.kf) : '—'}`);
+    }
+    return `<div class="historyKf__line">${h(`${getStageTitle(idx)} · ${parts.join(' · ')}`)}</div>`;
+  });
+
+  return `
+    <div class="historyKf">
+      <div class="historyKf__title">Kf-Abschätzung</div>
+      ${lines.join('')}
+    </div>
+  `;
+}
+
 function hookHistoryDelegation() {
   const host = $('historyList');
   if (!host || host.dataset.bound === '1') return;
@@ -972,6 +1425,7 @@ function renderHistoryList() {
     Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> ·
     Brunnen: <b>${h(wells.join(' / ') || '—')}</b> · Stufen: <b>${h(count)}</b>
   </div>
+  ${buildHistoryKfHtml(snap)}
   <div class="historyBtns">
     <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
     <button type="button" data-hact="pdf"  data-id="${h(entry.id)}">PDF</button>
@@ -987,11 +1441,25 @@ function drawTextSafe(page, text, options) {
   page.drawText(pdfSafe(text), options);
 }
 
-function getRowsForExport(v) {
-  return clone(v.messungen || []).sort((a, b) => {
-    const av = Number(a.min), bv = Number(b.min);
-    if (Number.isFinite(av) && Number.isFinite(bv)) return av - bv;
-    return Number.isFinite(av) ? -1 : 1;
+function getWellRowsForPdf(versuch, key, ruhe) {
+  const field = key === 'foerder' ? 'foerder_m' : 'schluck_m';
+  const ruheNum = Number(ruhe);
+
+  return getRowsForExport(versuch).map(r => {
+    const min = Number(r.min);
+    const raw = r[field];
+    const hasValue = String(raw ?? '').trim() !== '' && Number.isFinite(Number(raw));
+    const valueNum = hasValue ? Number(raw) : null;
+
+    const deltaM = (hasValue && Number.isFinite(ruheNum)) ? Math.abs(valueNum - ruheNum) : null;
+    const deltaCm = deltaM !== null ? deltaM * 100 : null;
+
+    return {
+      min: Number.isFinite(min) ? min : null,
+      valueNum,
+      deltaM,
+      deltaCm
+    };
   });
 }
 
@@ -1025,55 +1493,37 @@ function drawMetaGrid(page, x, yTop, w, rowH, meta, fontR, fontB, K) {
   });
 }
 
-function buildPdfCols(selection) {
-  const cols = [{ key: 'min', label: 'Minuten', w: 0.11 }];
+function drawWellTable(page, opt) {
+  const {
+    x, yTop, w, key, rows, ruhe,
+    fontR, fontB, K, grey
+  } = opt;
 
-  if (selection.foerder) {
-    cols.push({ key: 'foerder_m', label: 'Foerderbrunnen m ab OK', w: 0.20 });
-    cols.push({ key: 'foerder_diff', label: 'Diff. Ruhe', w: 0.12 });
-  }
-
-  if (selection.schluck) {
-    cols.push({ key: 'schluck_m', label: 'Schluckbrunnen m ab OK', w: 0.20 });
-    cols.push({ key: 'schluck_diff', label: 'Diff. Ruhe', w: 0.12 });
-  }
-
-  cols.push({ key: 'foerder_menge', label: 'Foerdermenge [m3/h]', w: 0.25 });
-
-  const sum = cols.reduce((a, c) => a + c.w, 0);
-  cols.forEach(c => { c.w = c.w / sum; });
-
-  return cols;
-}
-
-function drawStageTable(page, opt) {
-  const { x, yTop, w, versuch, selection, foerder, schluck, fontR, fontB, K, grey } = opt;
-  const rows = getRowsForExport(versuch);
-  const cols = buildPdfCols(selection);
-
-  const titleH = 16;
-  const headH = 18;
-  const rowH = 11.2;
+  const title = key === 'foerder' ? 'Förderbrunnen' : 'Schluckbrunnen';
+  const titleH = 13;
+  const headH = 15;
+  const rowH = 8.2;
   const totalH = titleH + headH + rows.length * rowH;
 
-  page.drawRectangle({ x, y: yTop - titleH, width: w, height: titleH, color: grey, borderColor: K, borderWidth: 0.8 });
+  page.drawRectangle({
+    x, y: yTop - titleH, width: w, height: titleH,
+    color: grey, borderColor: K, borderWidth: 0.7
+  });
 
-  const rateM3h = getEffectiveRateM3h(versuch);
-  const rateLs = getEffectiveRateLs(versuch);
-
-  drawTextSafe(page, `${pdfSafe(versuch._stageTitle || 'Stufe')}   ${rateLs || '—'} l/s   ${rateM3h || '—'} m3/h`, {
-    x: x + 4,
-    y: yTop - titleH + 4,
-    size: 8.7,
-    font: fontB,
-    color: K
+  drawTextSafe(page, `${title} · RW ${fmtComma(ruhe, 3)} m`, {
+    x: x + 4, y: yTop - titleH + 3.8, size: 7.8, font: fontB, color: K
   });
 
   const yHead = yTop - titleH - headH;
-  page.drawRectangle({ x, y: yHead, width: w, height: headH, borderColor: K, borderWidth: 0.8 });
 
+  page.drawRectangle({
+    x, y: yHead, width: w, height: headH,
+    borderColor: K, borderWidth: 0.7
+  });
+
+  const colWidths = [0.18, 0.42, 0.40];
   const xs = [x];
-  cols.forEach(c => xs.push(xs[xs.length - 1] + w * c.w));
+  colWidths.forEach(cw => xs.push(xs[xs.length - 1] + w * cw));
 
   for (let i = 1; i < xs.length - 1; i++) {
     page.drawLine({
@@ -1084,8 +1534,14 @@ function drawStageTable(page, opt) {
     });
   }
 
-  cols.forEach((c, i) => {
-    drawTextSafe(page, c.label, { x: xs[i] + 3, y: yHead + 6, size: 7, font: fontB, color: K });
+  drawTextSafe(page, 'Min', {
+    x: xs[0] + 3, y: yHead + 5, size: 6.8, font: fontB, color: K
+  });
+  drawTextSafe(page, 'm ab OK', {
+    x: xs[1] + 3, y: yHead + 5, size: 6.8, font: fontB, color: K
+  });
+  drawTextSafe(page, 'Δ Ruhe [m]', {
+    x: xs[2] + 3, y: yHead + 5, size: 6.8, font: fontB, color: K
   });
 
   let y = yHead;
@@ -1100,19 +1556,230 @@ function drawStageTable(page, opt) {
       color: K
     });
 
-    cols.forEach((c, i) => {
-      let text = '—';
-      if (c.key === 'min')           text = String(r.min ?? '');
-      if (c.key === 'foerder_m')     text = r.foerder_m !== '' ? fmtComma(r.foerder_m, 3) : '—';
-      if (c.key === 'foerder_diff')  text = calcDelta(r.foerder_m, foerder.ruhe) || '—';
-      if (c.key === 'schluck_m')     text = r.schluck_m !== '' ? fmtComma(r.schluck_m, 3) : '—';
-      if (c.key === 'schluck_diff')  text = calcDelta(r.schluck_m, schluck.ruhe) || '—';
-      if (c.key === 'foerder_menge') text = r.foerder_menge !== '' ? fmtComma(r.foerder_menge, 3) : '—';
+    drawTextSafe(page, Number.isFinite(r.min) ? String(r.min) : '—', {
+      x: xs[0] + 3, y: nextY + 2.4, size: 6.7, font: fontR, color: K
+    });
 
-      drawTextSafe(page, text, { x: xs[i] + 3, y: nextY + 3, size: 7.2, font: fontR, color: K });
+    drawTextSafe(page, r.valueNum !== null ? fmtComma(r.valueNum, 3) : '—', {
+      x: xs[1] + 3, y: nextY + 2.4, size: 6.7, font: fontR, color: K
+    });
+
+    drawTextSafe(page, r.deltaM !== null ? fmtComma(r.deltaM, 3) : '—', {
+      x: xs[2] + 3, y: nextY + 2.4, size: 6.7, font: fontR, color: K
     });
 
     y = nextY;
+  });
+
+  return totalH;
+}
+
+function drawWellChart(page, opt) {
+  const {
+    x, y, w, h, key, rows,
+    fontR, fontB, K, grey, degrees, gridColor, lineColor
+  } = opt;
+
+  const title = key === 'foerder' ? 'Diagramm Förderbrunnen' : 'Diagramm Schluckbrunnen';
+
+  page.drawRectangle({
+    x, y, width: w, height: h,
+    borderColor: K, borderWidth: 0.7
+  });
+
+  page.drawRectangle({
+    x, y: y + h - 13, width: w, height: 13,
+    color: grey, borderColor: K, borderWidth: 0.7
+  });
+
+  drawTextSafe(page, title, {
+    x: x + 4, y: y + h - 9, size: 7.6, font: fontB, color: K
+  });
+
+  const plotPadL = 34;
+  const plotPadR = 10;
+  const plotPadT = 19;
+  const plotPadB = 22;
+
+  const px = x + plotPadL;
+  const py = y + plotPadB;
+  const pw = w - plotPadL - plotPadR;
+  const ph = h - plotPadT - plotPadB;
+
+  const valid = rows.filter(r => Number.isFinite(r.min) && Number.isFinite(r.deltaCm));
+  const maxXData = valid.length ? Math.max(...valid.map(p => p.min)) : 10;
+  const maxYData = valid.length ? Math.max(...valid.map(p => p.deltaCm)) : 10;
+
+  const xAxis = getNiceAxis(0, maxXData > 0 ? maxXData : 10, 6);
+  const yAxis = getNiceAxis(0, maxYData > 0 ? maxYData : 10, 6);
+
+  const xTicks = buildTicks(xAxis);
+  const yTicks = buildTicks(yAxis);
+
+  const tx = (v) => px + ((v - xAxis.min) / (xAxis.max - xAxis.min || 1)) * pw;
+  const ty = (v) => py + ((v - yAxis.min) / (yAxis.max - yAxis.min || 1)) * ph;
+
+  yTicks.forEach(v => {
+    const yy = ty(v);
+    page.drawLine({
+      start: { x: px, y: yy },
+      end: { x: px + pw, y: yy },
+      thickness: 0.5,
+      color: gridColor
+    });
+    drawTextSafe(page, fmtAxisTick(v, 0), {
+      x: px - 20,
+      y: yy - 2,
+      size: 6.2,
+      font: fontR,
+      color: K
+    });
+  });
+
+  xTicks.forEach(v => {
+    const xx = tx(v);
+    page.drawLine({
+      start: { x: xx, y: py },
+      end: { x: xx, y: py + ph },
+      thickness: 0.5,
+      color: gridColor
+    });
+    drawTextSafe(page, fmtAxisTick(v, 0), {
+      x: xx - 6,
+      y: py - 13,
+      size: 6.2,
+      font: fontR,
+      color: K
+    });
+  });
+
+  page.drawRectangle({
+    x: px, y: py, width: pw, height: ph,
+    borderColor: K, borderWidth: 0.7
+  });
+
+  drawTextSafe(page, 'Zeit [min]', {
+    x: px + pw / 2 - 18,
+    y: y + 5,
+    size: 6.8,
+    font: fontB,
+    color: K
+  });
+
+  drawTextSafe(page, 'Absenkung [cm]', {
+    x: x + 9,
+    y: py + ph / 2 - 24,
+    size: 6.8,
+    font: fontB,
+    color: K,
+    rotate: degrees(90)
+  });
+
+  if (!valid.length) {
+    drawTextSafe(page, 'Noch keine Messwerte', {
+      x: px + pw / 2 - 28,
+      y: py + ph / 2,
+      size: 7,
+      font: fontR,
+      color: K
+    });
+    return;
+  }
+
+  for (let i = 0; i < valid.length - 1; i++) {
+    const a = valid[i];
+    const b = valid[i + 1];
+    page.drawLine({
+      start: { x: tx(a.min), y: ty(a.deltaCm) },
+      end: { x: tx(b.min), y: ty(b.deltaCm) },
+      thickness: 1.3,
+      color: lineColor
+    });
+  }
+
+  valid.forEach(p => {
+    page.drawCircle({
+      x: tx(p.min),
+      y: ty(p.deltaCm),
+      size: 2.1,
+      color: lineColor,
+      borderColor: K,
+      borderWidth: 0.3
+    });
+  });
+}
+
+function drawStageSplitLayout(page, opt) {
+  const {
+    x, yTop, yBottom, w, versuch, selection,
+    foerder, schluck, fontR, fontB, K, grey, degrees,
+    rgb
+  } = opt;
+
+  const stageH = 22;
+  page.drawRectangle({
+    x, y: yTop - stageH, width: w, height: stageH,
+    color: grey, borderColor: K, borderWidth: 0.8
+  });
+
+  const rateLs = getCalcRateLs(versuch) || '—';
+  const rateM3h = getCalcRateM3h(versuch) || '—';
+
+  drawTextSafe(page, `Pumpversuch   ${versuch._stageTitle || 'Stufe'}   ${rateLs} [l/s]`, {
+    x: x + 4, y: yTop - stageH + 11, size: 8.5, font: fontB, color: K
+  });
+  drawTextSafe(page, `${rateM3h} [m3/h]`, {
+    x: x + 4, y: yTop - stageH + 4, size: 7.5, font: fontR, color: K
+  });
+
+  const keys = [];
+  if (selection.foerder) keys.push('foerder');
+  if (selection.schluck) keys.push('schluck');
+
+  if (!keys.length) return;
+
+  const gap = keys.length === 2 ? 10 : 0;
+  const colW = (w - gap * (keys.length - 1)) / keys.length;
+  const contentTop = yTop - stageH - 6;
+
+  keys.forEach((key, i) => {
+    const well = key === 'foerder' ? foerder : schluck;
+    const rows = getWellRowsForPdf(versuch, key, well?.ruhe);
+    const colX = x + i * (colW + gap);
+    const tableTop = contentTop;
+
+    const tableH = drawWellTable(page, {
+      x: colX,
+      yTop: tableTop,
+      w: colW,
+      key,
+      rows,
+      ruhe: well?.ruhe,
+      fontR,
+      fontB,
+      K,
+      grey
+    });
+
+    const chartTop = tableTop - tableH - 6;
+    const chartY = yBottom;
+    const chartH = Math.max(90, chartTop - chartY);
+
+    drawWellChart(page, {
+      x: colX,
+      y: chartY,
+      w: colW,
+      h: chartH,
+      key,
+      rows,
+      fontR,
+      fontB,
+      K,
+      grey,
+      degrees,
+      gridColor: rgb(0.82, 0.82, 0.82),
+      lineColor: key === 'foerder' ? rgb(0.16, 0.46, 0.84) : rgb(0.90, 0.56, 0.16)
+    });
   });
 }
 
@@ -1136,14 +1803,14 @@ async function exportPdf(snapshot = null) {
     return;
   }
 
-  const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+  const { PDFDocument, StandardFonts, rgb, degrees } = window.PDFLib;
   const pdf = await PDFDocument.create();
   const fontR = await pdf.embedFont(StandardFonts.Helvetica);
   const fontB = await pdf.embedFont(StandardFonts.HelveticaBold);
 
   let logo = null;
   try {
-    const bytes = await fetch(`${BASE}logo.png?v=13`).then(r => {
+    const bytes = await fetch(`${BASE}logo.png?v=26`).then(r => {
       if (!r.ok) throw new Error(r.status);
       return r.arrayBuffer();
     });
@@ -1187,8 +1854,21 @@ async function exportPdf(snapshot = null) {
       });
     }
 
-    drawTextSafe(page, 'Pumpversuch', { x: x0 + mm(32), y: y0 + H - hdrH + mm(4.2), size: 13, font: fontB, color: K });
-    drawTextSafe(page, 'HTB Baugesellschaft m.b.H.', { x: x0 + mm(32), y: y0 + H - hdrH + mm(1.5), size: 8, font: fontR, color: K });
+    drawTextSafe(page, 'Pumpversuch', {
+      x: x0 + mm(32),
+      y: y0 + H - hdrH + mm(4.2),
+      size: 13,
+      font: fontB,
+      color: K
+    });
+
+    drawTextSafe(page, 'HTB Baugesellschaft m.b.H.', {
+      x: x0 + mm(32),
+      y: y0 + H - hdrH + mm(1.5),
+      size: 8,
+      font: fontR,
+      color: K
+    });
 
     let cy = y0 + H - hdrH - mm(2);
     const metaRowH = mm(9);
@@ -1196,7 +1876,10 @@ async function exportPdf(snapshot = null) {
     drawMetaGrid(page, x0, cy, W, metaRowH, meta, fontR, fontB, K);
     cy -= metaRowH * 3;
 
-    page.drawRectangle({ x: x0, y: cy - metaRowH, width: W, height: metaRowH, color: GREY, borderColor: K, borderWidth: 0.7 });
+    page.drawRectangle({
+      x: x0, y: cy - metaRowH, width: W, height: metaRowH,
+      color: GREY, borderColor: K, borderWidth: 0.7
+    });
 
     const wellTexts = [];
     if (selection.foerder) wellTexts.push(`Foerderbrunnen: Oe ${foerder.dm || '—'} mm · ET ${foerder.endteufe || '—'} m · RW ${foerder.ruhe || '—'} m`);
@@ -1205,16 +1888,17 @@ async function exportPdf(snapshot = null) {
     drawTextSafe(page, wellTexts.join('   |   '), {
       x: x0 + 4,
       y: cy - metaRowH + 6,
-      size: 7.2,
+      size: 7.1,
       font: fontR,
       color: K
     });
 
     cy -= metaRowH + mm(3);
 
-    drawStageTable(page, {
+    drawStageSplitLayout(page, {
       x: x0,
       yTop: cy,
+      yBottom: y0 + mm(9),
       w: W,
       versuch: v,
       selection,
@@ -1223,7 +1907,9 @@ async function exportPdf(snapshot = null) {
       fontR,
       fontB,
       K,
-      grey: GREY
+      grey: GREY,
+      degrees,
+      rgb
     });
 
     page.drawLine({
@@ -1300,6 +1986,7 @@ function resetAll() {
   syncBrunnenToUi();
   syncSelectionToUi();
   renderVersuche();
+  renderLiveTab();
   saveDraftDebounced();
 }
 
@@ -1342,6 +2029,7 @@ window.addEventListener('DOMContentLoaded', () => {
   syncBrunnenToUi();
   syncSelectionToUi();
   renderVersuche();
+  renderLiveTab();
   renderHistoryList();
   initInstallButton();
 
@@ -1349,6 +2037,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const v = defaultVersuch();
     state.versuche.push(v);
     renderVersuche();
+    renderLiveTab();
     saveDraftDebounced();
 
     setTimeout(() => {
@@ -1377,6 +2066,6 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btnReset')?.addEventListener('click', resetAll);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`${BASE}sw.js?v=13`).catch(err => console.error('SW:', err));
+    navigator.serviceWorker.register(`${BASE}sw.js?v=26`).catch(err => console.error('SW:', err));
   }
 });
