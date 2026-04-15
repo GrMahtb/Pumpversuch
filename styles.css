@@ -74,39 +74,52 @@ body{
 }
 
 /* Header */
-.brand{margin:0 -14px 12px;overflow:hidden}
+.brand{
+  margin: 0 -14px 12px;
+  overflow: hidden;
+}
+
 .brand__bar{
-  background:#000;
-  display:flex;
-  align-items:center;
-  gap:14px;
-  padding:10px 16px;
+  background: transparent;   /* schwarzer Balken weg */
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(143,231,255,.10); /* optional, sehr dezent */
 }
+
 .brand__logo{
-  display:flex;
-  align-items:center;
-  flex-shrink:0;
-  line-height:0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  line-height: 0;
 }
+
 .brand__logo img{
-  height:46px;
-  width:auto;
-  display:block;
+  height: 46px;
+  width: auto;
+  display: block;
 }
-.brand__info{flex:1;min-width:0}
+
+.brand__info{
+  flex: 1;
+  min-width: 0;
+}
+
 .brand__company{
-  color:#fff;
-  font-weight:900;
-  font-size:1.05em;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  color: #fff;
+  font-weight: 900;
+  font-size: 1.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
 .brand__subtitle{
-  color:rgba(255,255,255,.55);
-  font-size:.75em;
-  margin-top:3px;
-  line-height:1.35;
+  color: rgba(220,240,255,.72);
+  font-size: .75em;
+  margin-top: 3px;
+  line-height: 1.35;
 }
 
 /* Tabs */
