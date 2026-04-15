@@ -1817,14 +1817,14 @@ async function exportPdf(snapshot = null) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  const fontBytesR = await fetch(`${BASE}fonts/arial.ttf?v=28`).then(r => {
+  const fontBytesR = await fetch(`${BASE}fonts/arial.ttf?v=60`).then(r => {
     if (!r.ok) throw new Error('arial.ttf nicht gefunden');
     return r.arrayBuffer();
   });
 
   let fontBytesB = null;
   try {
-    fontBytesB = await fetch(`${BASE}fonts/arialbd.ttf?v=28`).then(r => {
+    fontBytesB = await fetch(`${BASE}fonts/arialbd.ttf?v=60`).then(r => {
       if (!r.ok) throw new Error('arialbd.ttf nicht gefunden');
       return r.arrayBuffer();
     });
