@@ -1524,10 +1524,9 @@ function drawWellTable(page, opt) {
     color: grey, borderColor: K, borderWidth: 0.7
   });
 
-  drawTextSafe(page, `${title} · RW ${fmtComma(ruhe, 3)} m`, {
-    x: x + 4, y: yTop - titleH + 3.8, size: 7.8, font: fontB, color: K
-  });
-
+  drawTextSafe(page, `${title}`, {
+  x: x + 4, y: yTop - titleH + 3.8, size: 7.8, font: fontB, color: K
+});
   const yHead = yTop - titleH - headH;
 
   page.drawRectangle({
@@ -1967,10 +1966,10 @@ page.drawRectangle({
   color: GREY, borderColor: K, borderWidth: 0.7
 });
 
-    const wellTexts = [
-      `Förderbrunnen: Ø ${foerder.dm || '—'} mm · ET ${foerder.endteufe || '—'} m · RW ${foerder.ruhe || '—'} m`,
-      `Schluckbrunnen: Ø ${schluck.dm || '—'} mm · ET ${schluck.endteufe || '—'} m · RW ${schluck.ruhe || '—'} m`
-    ];
+  const wellTexts = [
+  `Förderbrunnen: Ø ${foerder.dm || '—'} mm · ET ${foerder.endteufe || '—'} m`,
+  `Schluckbrunnen: Ø ${schluck.dm || '—'} mm · ET ${schluck.endteufe || '—'} m`
+];
 
     drawTextSafe(page, wellTexts.join('   |   '), {
       x: x0 + 4,
@@ -2005,13 +2004,6 @@ page.drawRectangle({
       color: K
     });
 
-    drawTextSafe(page, `Exportiert: ${new Date().toLocaleString('de-DE')}`, {
-      x: x0 + 4,
-      y: y0 + 4,
-      size: 7,
-      font: fontR,
-      color: K
-    });
 
     drawTextSafe(page, `Seite ${i + 1}/${versuche.length}`, {
       x: x0 + W - 40,
