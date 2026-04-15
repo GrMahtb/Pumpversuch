@@ -1,5 +1,5 @@
 const BASE  = '/Pumpversuch/';
-const CACHE = 'htb-pumpversuch-v45';
+const CACHE = 'htb-pumpversuch-v50';
 
 const ASSETS = [
   BASE,
@@ -8,7 +8,10 @@ const ASSETS = [
   BASE + 'app.js',
   BASE + 'manifest.json',
   BASE + 'logo.svg',
-  BASE + 'icon.svg'
+  BASE + 'icon.svg',
+  BASE + 'fonts/arial.ttf'
+  // optional zusätzlich:
+  // BASE + 'fonts/arialbd.ttf'
 ];
 
 self.addEventListener('install', (event) => {
