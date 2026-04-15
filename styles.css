@@ -1,5 +1,5 @@
 :root{
-  --bg:#0f0f10;
+  --bg:#081522;          /* neues Grundblau */
   --card:#171718;
   --card2:#202022;
   --border:#2a2a2d;
@@ -15,19 +15,63 @@
   --shadow:0 10px 24px rgba(0,0,0,.22);
 }
 
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
 body{
-  background:var(--bg);
-  color:var(--text);
-  font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;
-  padding:0 14px 24px;
-  max-width:960px;
-  margin:0 auto;
-  -webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility;
+  background-color: var(--bg);
+  background-image:
+    /* leichter technischer Glanz oben */
+    linear-gradient(145deg, rgba(255,255,255,.06) 0%, rgba(255,255,255,0) 18%),
+
+    /* blauer Lichtschein oben */
+    radial-gradient(1100px 420px at 50% -6%,
+      rgba(123,190,255,.14) 0%,
+      rgba(123,190,255,0) 62%
+    ),
+
+    /* Wasserfläche / Reflektion unten */
+    radial-gradient(460px 58px at 50% 83%,
+      rgba(49,136,196,.20) 0%,
+      rgba(49,136,196,0) 72%
+    ),
+
+    /* abstrahierte Wasserlinien wie im Bild */
+    radial-gradient(1200px 130px at 50% 44%,
+      transparent 0%,
+      transparent 52.7%,
+      rgba(143,231,255,.11) 53%,
+      transparent 54.1%
+    ),
+    radial-gradient(1200px 130px at 50% 52%,
+      transparent 0%,
+      transparent 52.7%,
+      rgba(143,231,255,.10) 53%,
+      transparent 54.1%
+    ),
+    radial-gradient(1200px 130px at 50% 60%,
+      transparent 0%,
+      transparent 52.7%,
+      rgba(143,231,255,.09) 53%,
+      transparent 54.1%
+    ),
+    radial-gradient(1200px 130px at 50% 68%,
+      transparent 0%,
+      transparent 52.7%,
+      rgba(143,231,255,.08) 53%,
+      transparent 54.1%
+    ),
+
+    /* dunkler Grundverlauf */
+    linear-gradient(180deg, #263140 0%, #10233a 34%, #081522 100%);
+
+  color: var(--text);
+  font-family: system-ui,-apple-system,Segoe UI,Arial,sans-serif;
+  padding: 0 14px 24px;
+  max-width: 960px;
+  margin: 0 auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
-[hidden]{display:none !important}
 
 /* Header */
 .brand{margin:0 -14px 12px;overflow:hidden}
