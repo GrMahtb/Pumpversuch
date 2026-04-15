@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#111111" />
+  <meta name="theme-color" content="#0d2f4f" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-  <meta name="apple-mobile-web-app-title" content="HTB Pumpversuch" />
-  <title>HTB Pumpversuch-Protokoll</title>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Pumpversuch" />
+  <title>Pumpversuch-Protokoll</title>
 
   <link rel="manifest" href="/Pumpversuch/manifest.json?v=13" />
   <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=13" />
@@ -27,7 +27,7 @@
       </div>
       <div class="brand__info">
         <div class="brand__company">Pumpversuch-Protokoll</div>
-        <div class="brand__subtitle">HTB Baugesellschaft m.b.H.</div>
+        <div class="brand__subtitle">HTB Baugesellschaft m.b.H. · Förderbrunnen und Schluckbrunnen</div>
       </div>
     </div>
   </header>
@@ -100,6 +100,7 @@
             <span>Schluckbrunnen verwenden</span>
           </label>
         </div>
+
         <div class="brunnen-grid">
           <section id="box-foerder" class="brunnen-box">
             <div class="brunnen-title brunnen-title--foerder">Förderbrunnen</div>
@@ -118,6 +119,7 @@
               </label>
             </div>
           </section>
+
           <section id="box-schluck" class="brunnen-box">
             <div class="brunnen-title brunnen-title--schluck">Schluckbrunnen</div>
             <div class="form-grid">
@@ -171,11 +173,12 @@
       <div class="card__title">App</div>
       <div class="text">
         <p><b>Brunnenauswahl:</b> Förderbrunnen und/oder Schluckbrunnen über Brunnendaten auswählen.</p>
-        <p><b>Pumpstufen:</b> Header zeigt nur Stufennummer. Förderrate und Fördermenge je Zeile im Body eingeben.</p>
+        <p><b>Pumpstufen:</b> Header zeigt Stufennummer, Förderrate, Umrechnung in l/s und den Mittelwert der Fördermenge je Stufe.</p>
         <p><b>Fördermenge:</b> Neue Spalte in der Messtabelle – händisch je Messzeile eintragbar.</p>
         <p><b>PDF:</b> A4 Hochformat, eine Pumpstufe pro Seite, graue Kopfzeile.</p>
       </div>
     </section>
+
     <section class="card">
       <div class="card__title">Installation</div>
       <div class="text">
