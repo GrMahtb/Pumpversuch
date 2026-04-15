@@ -1,7 +1,7 @@
 {
   "name": "HTB Pumpversuch-Protokoll",
-  "short_name": "HTB Pumpversuch",
-  "description": "Pumpversuch-Protokoll für Förderbrunnen und Schluckbrunnen mit Zeitmessung, Diagrammen und PDF-Export.",
+  "short_name": "Pumpversuch",
+  "description": "Pumpversuch-Protokoll für Förderbrunnen und Schluckbrunnen mit Zeitmessung, Live-Diagrammen, Kf-Abschätzung und PDF-Export.",
   "start_url": "/Pumpversuch/",
   "scope": "/Pumpversuch/",
   "display": "standalone",
