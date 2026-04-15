@@ -9,9 +9,9 @@
   <meta name="apple-mobile-web-app-title" content="Pumpversuch" />
   <title>Pumpversuch-Protokoll</title>
 
-  <link rel="manifest" href="/Pumpversuch/manifest.json?v=13" />
-  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=13" />
-  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=13" />
+  <link rel="manifest" href="/Pumpversuch/manifest.json?v=26" />
+  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=26" />
+  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=26" />
 
   <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
@@ -20,9 +20,9 @@
     <div class="brand__bar">
       <div class="brand__logo">
         <img
-          src="/Pumpversuch/logo.svg?v=13"
+          src="/Pumpversuch/logo.svg?v=26"
           alt="HTB Logo"
-          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=13';"
+          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=26';"
         />
       </div>
       <div class="brand__info">
@@ -35,7 +35,7 @@
   <nav class="tabs" role="tablist" aria-label="Menü">
     <button class="tab is-active" data-tab="protokoll" type="button">Protokoll</button>
     <button class="tab" data-tab="verlauf" type="button">Verlauf</button>
-    <button class="tab" data-tab="app" type="button">App</button>
+    <button class="tab" data-tab="live" type="button">Live</button>
   </nav>
 
   <main id="tab-protokoll" class="pane is-active" role="tabpanel">
@@ -168,24 +168,17 @@
     </section>
   </main>
 
-  <main id="tab-app" class="pane" role="tabpanel" hidden>
+  <main id="tab-live" class="pane" role="tabpanel" hidden>
     <section class="card">
-      <div class="card__title">App</div>
+      <div class="card__title">Live-Auswertung</div>
       <div class="text">
-        <p><b>Brunnenauswahl:</b> Förderbrunnen und/oder Schluckbrunnen über Brunnendaten auswählen.</p>
-        <p><b>Pumpstufen:</b> Header zeigt Stufennummer, Förderrate, Umrechnung in l/s und den Mittelwert der Fördermenge je Stufe.</p>
-        <p><b>Fördermenge:</b> Neue Spalte in der Messtabelle – händisch je Messzeile eintragbar.</p>
-        <p><b>PDF:</b> A4 Hochformat, eine Pumpstufe pro Seite, graue Kopfzeile.</p>
+        <p><b>Diagramm:</b> Förderbrunnen links, Schluckbrunnen rechts – die Achsen passen sich automatisch an die eingegebenen Werte an.</p>
+        <p><b>Kf-Abschätzung:</b> wird nur in der App und im Verlauf angezeigt, nicht im PDF.</p>
+        <p><b>Hinweis:</b> Die Berechnung ist eine erste ingenieurmäßige Näherung aus Rate, Brunnengeometrie und Wasserstandsänderung.</p>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card__title">Installation</div>
-      <div class="text">
-        <p><b>Android:</b> Chrome-Menü → App installieren</p>
-        <p><b>iPhone:</b> Safari → Teilen → Zum Home-Bildschirm</p>
-      </div>
-    </section>
+    <div id="liveContainer"></div>
   </main>
 
   <footer class="footer">
@@ -194,6 +187,6 @@
     <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
   </footer>
 
-  <script src="/Pumpversuch/app.js?v=13"></script>
+  <script src="/Pumpversuch/app.js?v=26"></script>
 </body>
 </html>
