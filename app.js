@@ -1584,7 +1584,10 @@ function drawWellTable(page, opt) {
 
     y = nextY;
   });
-
+  page.drawRectangle({
+    x, y: yTop - totalH, width: w, height: totalH,
+    borderColor: K, borderWidth: 0.7
+  });
   return totalH;
 }
 
@@ -1898,13 +1901,71 @@ async function exportPdf(snapshot = null) {
     let cy = y0 + H - hdrH - mm(2);
     const metaRowH = mm(9);
 
-    drawMetaGrid(page, x0, cy, W, metaRowH, meta, fontR, fontB, K);
-    cy -= metaRowH * 3;
+  drawMetaGrid(page, x0, cy, W, metaRowH, meta, fontR, fontB, K);
+cy -= metaRowH * 3;
 
-    page.drawRectangle({
-      x: x0, y: cy - metaRowH, width: W, height: metaRowH,
-      color: GREY, borderColor: K, borderWidth: 0.7
-    });
+// ─── Ruhewasserspiegel Block ───────────────────────────────────
+const ruheHdrH = 10;
+const ruheRowH = 13;
+
+// Überschrift – volle Breite
+page.drawRectangle({
+  x: x0, y: cy - ruheHdrH, width: W, height: ruheHdrH,
+  color: GREY, borderColor: K, borderWidth: 0.7
+});
+drawTextSafe(page, 'Ruhewasserspiegel [m]', {
+  x: x0 + 4, y: cy - ruheHdrH + 2.5,
+  size: 7.5, font: fontB, color: K
+});
+cy -= ruheHdrH;
+
+// 4 Zellen: Label | Wert | Label | Wert
+const rwLabelW = W * 0.37;
+const rwValueW = W * 0.13;
+const rwXs = [
+  x0,
+  x0 + rwLabelW,
+  x0 + rwLabelW + rwValueW,
+  x0 + rwLabelW + rwValueW + rwLabelW,
+  x0 + W
+];
+
+page.drawRectangle({
+  x: x0, y: cy - ruheRowH, width: W, height: ruheRowH,
+  borderColor: K, borderWidth: 0.7
+});
+
+for (let i = 1; i < 4; i++) {
+  page.drawLine({
+    start: { x: rwXs[i], y: cy - ruheRowH },
+    end:   { x: rwXs[i], y: cy },
+    thickness: 0.7, color: K
+  });
+}
+
+drawTextSafe(page, 'Förderbrunnen ab OK Brunnenausbau', {
+  x: rwXs[0] + 3, y: cy - ruheRowH + 4,
+  size: 6.2, font: fontR, color: K
+});
+drawTextSafe(page, foerder.ruhe ? fmtComma(foerder.ruhe, 3) : '—', {
+  x: rwXs[1] + 3, y: cy - ruheRowH + 4,
+  size: 7.2, font: fontR, color: K
+});
+drawTextSafe(page, 'Schluckbrunnen ab OK Brunnenausbau', {
+  x: rwXs[2] + 3, y: cy - ruheRowH + 4,
+  size: 6.2, font: fontR, color: K
+});
+drawTextSafe(page, schluck.ruhe ? fmtComma(schluck.ruhe, 3) : '—', {
+  x: rwXs[3] + 3, y: cy - ruheRowH + 4,
+  size: 7.2, font: fontR, color: K
+});
+cy -= ruheRowH;
+// ─────────────────────────────────────────────────────────────
+
+page.drawRectangle({
+  x: x0, y: cy - metaRowH, width: W, height: metaRowH,
+  color: GREY, borderColor: K, borderWidth: 0.7
+});
 
     const wellTexts = [
       `Förderbrunnen: Ø ${foerder.dm || '—'} mm · ET ${foerder.endteufe || '—'} m · RW ${foerder.ruhe || '—'} m`,
