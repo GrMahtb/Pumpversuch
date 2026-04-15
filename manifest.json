@@ -5,8 +5,8 @@
   "start_url": "/Pumpversuch/",
   "scope": "/Pumpversuch/",
   "display": "standalone",
-  "background_color": "#111111",
-  "theme_color": "#111111",
+  "background_color": "#0d2f4f",
+  "theme_color": "#0d2f4f",
   "orientation": "portrait",
   "icons": [
     {
