@@ -198,7 +198,6 @@ body{
   letter-spacing:.5px;
 }
 
-/* 16px verhindert iPhone-Zoom beim Tippen */
 .field__input,
 .field__select,
 .field__textarea,
