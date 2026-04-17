@@ -523,6 +523,7 @@ body{
   border:1px solid var(--border);
   border-radius:12px;
   padding:10px 12px;
+  transition:border-color .3s ease, box-shadow .3s ease;
 }
 
 .timer-row{
@@ -954,4 +955,69 @@ body{
     margin-top:4px;
   }
   .kf-box{min-width:100%}
+}
+
+/* ═══════════════════════════════════════════
+   ALARM – Intervall erreicht
+   ═══════════════════════════════════════════ */
+
+@keyframes screenFlash {
+  0%,100% { opacity:0; }
+  10%,30%,50% { opacity:1; }
+  20%,40%,60% { opacity:0; }
+}
+
+@keyframes cardAlarm {
+  0%,100% {
+    border-color:var(--border);
+    box-shadow:var(--shadow);
+  }
+  50% {
+    border-color:var(--accent);
+    box-shadow:
+      0 0 0 2px rgba(255,237,0,.55),
+      0 0 28px rgba(255,237,0,.28);
+  }
+}
+
+@keyframes displayAlarm {
+  0%,100% {
+    color:var(--accent);
+    transform:scale(1);
+  }
+  50% {
+    color:#fff;
+    transform:scale(1.08);
+  }
+}
+
+body.screen-flash::after {
+  content:"";
+  position:fixed;
+  inset:0;
+  background:rgba(255,237,0,.28);
+  pointer-events:none;
+  z-index:9999;
+  animation:screenFlash .9s ease-out 1;
+}
+
+.versuch-card--alarm {
+  animation:cardAlarm 1.2s ease-in-out 2;
+}
+
+.timer-box--alarm {
+  border-color:var(--accent) !important;
+  box-shadow:
+    0 0 0 2px rgba(255,237,0,.18) inset,
+    0 0 18px rgba(255,237,0,.18);
+}
+
+.timer-display--alarm {
+  animation:displayAlarm .45s ease-in-out 4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.screen-flash::after,
+  .versuch-card--alarm,
+  .timer-display--alarm { animation:none; }
 }
