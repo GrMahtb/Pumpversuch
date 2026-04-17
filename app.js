@@ -1,6 +1,6 @@
 'use strict';
 
-console.log('HTB Pumpversuch app.js v29 loaded');
+console.log('HTB Pumpversuch app.js v30 loaded');
 
 const BASE = '/Pumpversuch/';
 const STORAGE_DRAFT   = 'htb-pumpversuch-draft-v13';
@@ -26,6 +26,7 @@ const state = {
 const timerMap = {};
 let _saveT = null;
 let _liveT = null;
+let _audioCtx = null;
 
 /* ───────────────── helpers ───────────────── */
 function uid() {
@@ -214,6 +215,74 @@ function getRowsForExport(v) {
 function scheduleLiveRender() {
   clearTimeout(_liveT);
   _liveT = setTimeout(() => renderLiveTab(), 90);
+}
+
+/* ───────────────── audio alarm ───────────────── */
+function getAlarmAudioContext() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!_audioCtx) {
+    try {
+      _audioCtx = new AC();
+    } catch {
+      return null;
+    }
+  }
+  return _audioCtx;
+}
+
+function unlockAlarmAudio() {
+  const ctx = getAlarmAudioContext();
+  if (!ctx) return false;
+  try {
+    if (ctx.state === 'suspended') ctx.resume();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function playTone(ctx, { start, duration=0.12, freq=880, volume=0.045, type='sine' }) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, start);
+
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), start + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(start);
+  osc.stop(start + duration + 0.03);
+}
+
+function playIntervalBeep() {
+  const ctx = getAlarmAudioContext();
+  if (!ctx) return false;
+
+  try {
+    if (ctx.state === 'suspended') ctx.resume();
+  } catch {}
+
+  if (ctx.state === 'suspended') return false;
+
+  const now = ctx.currentTime + 0.02;
+  playTone(ctx, { start: now + 0.00, duration: 0.10, freq: 880,  volume: 0.040, type: 'sine' });
+  playTone(ctx, { start: now + 0.18, duration: 0.10, freq: 988,  volume: 0.040, type: 'sine' });
+  playTone(ctx, { start: now + 0.36, duration: 0.18, freq: 1174, volume: 0.045, type: 'sine' });
+
+  return true;
+}
+
+function installAudioUnlock() {
+  const unlock = () => { unlockAlarmAudio(); };
+  window.addEventListener('pointerdown', unlock, { passive:true });
+  window.addEventListener('touchstart', unlock, { passive:true });
+  window.addEventListener('keydown', unlock, { passive:true });
 }
 
 /* ───────────────── Kf / Diagramm helpers ───────────────── */
@@ -496,46 +565,24 @@ function buildTableHeadHtml() {
 }
 
 function buildTableRowHtml(v, row, rowIdx) {
-  const sel = getSelectedWells();
-  const isLast = rowIdx === v.messungen.length - 1;
-
+  const sel    = getSelectedWells();
+  const isLast = rowIdx===v.messungen.length-1;
   let html = `<tr data-row="${rowIdx}">`;
-
-  html += `
-    <td>
-      <div class="minute-cell">
-        <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}"
-          type="number" step="1" inputmode="numeric" value="${h(row.min)}" />
-        ${isLast ? `<button class="row-plus" data-role="row-plus" data-row="${rowIdx}" type="button">+</button>` : ''}
-      </div>
-    </td>
-  `;
-
+  html += `<td><div class="minute-cell">
+    <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}"
+      type="number" step="1" inputmode="numeric" value="${h(row.min)}" />
+    ${isLast?`<button class="row-plus" data-role="row-plus" data-row="${rowIdx}" type="button">+</button>`:''}
+  </div></td>`;
   if (sel.foerder) {
-    html += `
-      <td>
-        <input class="mess-input" data-role="foerder-m" data-row="${rowIdx}"
-          type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_m)}" />
-      </td>
-    `;
+    html += `<td><input class="mess-input" data-role="foerder-m" data-row="${rowIdx}"
+      type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_m)}" /></td>`;
   }
-
   if (sel.schluck) {
-    html += `
-      <td>
-        <input class="mess-input" data-role="schluck-m" data-row="${rowIdx}"
-          type="number" step="0.001" inputmode="decimal" value="${h(row.schluck_m)}" />
-      </td>
-    `;
+    html += `<td><input class="mess-input" data-role="schluck-m" data-row="${rowIdx}"
+      type="number" step="0.001" inputmode="decimal" value="${h(row.schluck_m)}" /></td>`;
   }
-
-  html += `
-    <td>
-      <input class="mess-input menge-input" data-role="foerder-menge" data-row="${rowIdx}"
-        type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_menge)}" />
-    </td>
-  `;
-
+  html += `<td><input class="mess-input menge-input" data-role="foerder-menge" data-row="${rowIdx}"
+    type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_menge)}" /></td>`;
   html += `</tr>`;
   return html;
 }
@@ -738,9 +785,7 @@ function triggerIntervalAlarm(vid) {
     display.classList.add('timer-display--alarm');
   }
 
-  if ('vibrate' in navigator) {
-    navigator.vibrate([220, 120, 220, 120, 420]);
-  }
+  playIntervalBeep();
 
   setTimeout(() => {
     document.body.classList.remove('screen-flash');
@@ -781,6 +826,8 @@ function tickTimer(vid) {
 function startTimer(vid) {
   const versuch = getVersuchById(vid);
   if (!versuch) return;
+
+  unlockAlarmAudio();
 
   const t = ensureTimer(vid, versuch);
   if (t.running) return;
@@ -1725,7 +1772,7 @@ async function exportPdf(snapshot = null) {
 
   let logo = null;
   try {
-    const bytes = await fetch(`${BASE}logo.png?v=29`).then(r => {
+    const bytes = await fetch(`${BASE}logo.png?v=30`).then(r => {
       if (!r.ok) throw new Error(r.status);
       return r.arrayBuffer();
     });
@@ -1987,6 +2034,7 @@ window.addEventListener('DOMContentLoaded', () => {
   state.versuche = [];
   state.selection = { foerder: true, schluck: true };
 
+  installAudioUnlock();
   initTabs();
   hookStaticInputs();
   hookVersuchDelegation();
@@ -2034,6 +2082,6 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btnReset')?.addEventListener('click', resetAll);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`${BASE}sw.js?v=29`).catch(err => console.error('SW:', err));
+    navigator.serviceWorker.register(`${BASE}sw.js?v=30`).catch(err => console.error('SW:', err));
   }
 });
