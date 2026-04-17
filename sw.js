@@ -1,5 +1,5 @@
 const BASE  = '/Pumpversuch/';
-const CACHE = 'htb-pumpversuch-v71';
+const CACHE = 'htb-pumpversuch-v72';
 
 const ASSETS = [
   BASE,
@@ -10,6 +10,7 @@ const ASSETS = [
   BASE + 'logo.svg',
   BASE + 'icon.svg',
   BASE + 'fonts/arial.ttf'
+  // optional zusätzlich:
   // BASE + 'fonts/arialbd.ttf'
 ];
 
