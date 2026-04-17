@@ -1,33 +1,26 @@
 'use strict';
 
-console.log('HTB Pumpversuch app.js v28 loaded');
+console.log('HTB Pumpversuch app.js v29 loaded');
 
 const BASE = '/Pumpversuch/';
-const STORAGE_DRAFT = 'htb-pumpversuch-draft-v13';
+const STORAGE_DRAFT   = 'htb-pumpversuch-draft-v13';
 const STORAGE_HISTORY = 'htb-pumpversuch-history-v13';
 const HISTORY_MAX = 30;
 
-const DEFAULT_INTERVALLE = [0, 1, 2, 3, 4, 5, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180];
+const DEFAULT_INTERVALLE = [0,1,2,3,4,5,15,30,45,60,75,90,105,120,135,150,165,180];
 
 const $ = (id) => document.getElementById(id);
 
 const state = {
   meta: {
-    objekt: '',
-    grundstueck: '',
-    ort: '',
-    geologie: '',
-    auftragsnummer: '',
-    bauleitung: '',
-    bohrmeister: '',
-    koordination: '',
-    geprueftDurch: '',
-    geprueftAm: ''
+    objekt:'', grundstueck:'', ort:'', geologie:'',
+    auftragsnummer:'', bauleitung:'', bohrmeister:'',
+    koordination:'', geprueftDurch:'', geprueftAm:''
   },
-  selection: { foerder: true, schluck: true },
-  foerder: { dm: '', endteufe: '', ruhe: '' },
-  schluck: { dm: '', endteufe: '', ruhe: '' },
-  versuche: []
+  selection: { foerder:true, schluck:true },
+  foerder:   { dm:'', endteufe:'', ruhe:'' },
+  schluck:   { dm:'', endteufe:'', ruhe:'' },
+  versuche:  []
 };
 
 const timerMap = {};
@@ -39,124 +32,109 @@ function uid() {
   return crypto?.randomUUID?.() || ('id_' + Date.now() + '_' + Math.random().toString(16).slice(2));
 }
 
-function clone(v) {
-  return JSON.parse(JSON.stringify(v));
-}
+function clone(v) { return JSON.parse(JSON.stringify(v)); }
 
 function h(v) {
   return String(v ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function pdfSafe(v) {
   return String(v ?? '')
-    .replace(/[–—]/g, '-')
-    .replace(/[•→]/g, '-')
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+    .replace(/[–—]/g,'-').replace(/[•→]/g,'-')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,'');
 }
 
-function fmtComma(v, d = 3) {
+function fmtComma(v, d=3) {
   const n = Number(v);
-  return Number.isFinite(n) ? n.toFixed(d).replace('.', ',') : '—';
+  return Number.isFinite(n) ? n.toFixed(d).replace('.',',') : '—';
 }
 
-function fmtMaybe(v, d = 3) {
+function fmtMaybe(v, d=3) {
   const n = Number(v);
-  return Number.isFinite(n) ? n.toFixed(d).replace('.', ',') : '—';
+  return Number.isFinite(n) ? n.toFixed(d).replace('.',',') : '—';
 }
 
-function fmtSci(v, digits = 2) {
+function fmtSci(v, digits=2) {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return '—';
   const [m, e] = n.toExponential(digits).split('e');
-  return `${m.replace('.', ',')}e${Number(e)}`;
+  return `${m.replace('.',',')}e${Number(e)}`;
 }
 
 function fmtKf(v) {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return '—';
-  if (n >= 0.001) return `${fmtComma(n, 6)} m/s`;
-  return `${fmtSci(n, 2)} m/s`;
+  if (n >= 0.001) return `${fmtComma(n,6)} m/s`;
+  return `${fmtSci(n,2)} m/s`;
 }
 
-function dateTag(d = new Date()) {
-  return String(d.getDate()).padStart(2, '0') +
-         String(d.getMonth() + 1).padStart(2, '0') +
+function dateTag(d=new Date()) {
+  return String(d.getDate()).padStart(2,'0') +
+         String(d.getMonth()+1).padStart(2,'0') +
          String(d.getFullYear());
 }
 
 function dateDE(iso) {
-  const s = String(iso || '').trim();
+  const s = String(iso||'').trim();
   if (!s) return '';
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}.${m[2]}.${m[1]}` : s;
 }
 
-function formatTimeHHMMSS(date = new Date()) {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+function formatTimeHHMMSS(date=new Date()) {
+  return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`;
 }
 
 function formatElapsed(ms) {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const hh = Math.floor(total / 3600);
-  const mm = Math.floor((total % 3600) / 60);
-  const ss = total % 60;
-  if (hh > 0) return `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
-  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  const total = Math.max(0, Math.floor(ms/1000));
+  const hh = Math.floor(total/3600);
+  const mm = Math.floor((total%3600)/60);
+  const ss = total%60;
+  if (hh > 0) return `${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  return `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
 }
 
 function parseIntervalStr(str) {
   return [...new Set(
-    String(str || '').split(',')
+    String(str||'').split(',')
       .map(s => Number(String(s).trim()))
       .filter(n => Number.isFinite(n) && n >= 0)
-  )].sort((a, b) => a - b);
+  )].sort((a,b) => a-b);
 }
 
 function m3hToLs(v) {
   const n = Number(v);
-  return Number.isFinite(n) ? (n / 3.6).toFixed(3) : '';
+  return Number.isFinite(n) ? (n/3.6).toFixed(3) : '';
 }
 
 function calcDelta(messwert, ruhe) {
-  const m = Number(messwert);
-  const r = Number(ruhe);
-  if (!Number.isFinite(m) || !Number.isFinite(r) || String(messwert).trim() === '') return '';
-  return (m - r).toFixed(3);
+  const m = Number(messwert), r = Number(ruhe);
+  if (!Number.isFinite(m)||!Number.isFinite(r)||String(messwert).trim()==='') return '';
+  return (m-r).toFixed(3);
 }
 
-function getVersuchById(id) {
-  return state.versuche.find(v => v.id === id);
-}
-
-function getStageTitle(idx) {
-  return `Stufe ${idx + 1}`;
-}
-
-function getSelectedWells() {
-  return { foerder: !!state.selection.foerder, schluck: !!state.selection.schluck };
-}
-
-function getWellLabel(key) {
-  return key === 'foerder' ? 'Förderbrunnen' : 'Schluckbrunnen';
-}
+function getVersuchById(id) { return state.versuche.find(v => v.id===id); }
+function getStageTitle(idx) { return `Stufe ${idx+1}`; }
+function getSelectedWells() { return { foerder:!!state.selection.foerder, schluck:!!state.selection.schluck }; }
+function getWellLabel(key) { return key==='foerder' ? 'Förderbrunnen' : 'Schluckbrunnen'; }
 
 function syncIntervalleStrFromRows(v) {
-  v.intervalleStr = (v.messungen || [])
+  v.intervalleStr = (v.messungen||[])
     .map(m => Number(m.min))
     .filter(n => Number.isFinite(n) && n >= 0)
-    .sort((a, b) => a - b)
+    .sort((a,b) => a-b)
     .join(', ');
 }
 
 function sortMessungen(v) {
-  v.messungen.sort((a, b) => {
-    const av = Number(a.min), bv = Number(b.min);
-    const af = Number.isFinite(av), bf = Number.isFinite(bv);
-    if (af && bf) return av - bv;
-    if (af) return -1;
-    if (bf) return 1;
+  v.messungen.sort((a,b) => {
+    const av=Number(a.min), bv=Number(b.min);
+    const af=Number.isFinite(av), bf=Number.isFinite(bv);
+    if(af&&bf) return av-bv;
+    if(af) return -1;
+    if(bf) return 1;
     return 0;
   });
   syncIntervalleStrFromRows(v);
@@ -174,19 +152,15 @@ function getEffectiveRateM3h(v) {
 
 function getEffectiveRateLs(v) {
   const m3h = getManualRateM3hNumber(v);
-  return Number.isFinite(m3h) ? (m3h / 3.6).toFixed(3) : '';
+  return Number.isFinite(m3h) ? (m3h/3.6).toFixed(3) : '';
 }
 
 function getAverageFoerderMengeNumber(v) {
-  const values = (v.messungen || [])
-    .filter(m =>
-      String(m.foerder_menge ?? '').trim() !== '' &&
-      Number.isFinite(Number(m.foerder_menge))
-    )
+  const values = (v.messungen||[])
+    .filter(m => String(m.foerder_menge??'').trim()!=='' && Number.isFinite(Number(m.foerder_menge)))
     .map(m => Number(m.foerder_menge));
-
   if (!values.length) return NaN;
-  return values.reduce((sum, n) => sum + n, 0) / values.length;
+  return values.reduce((sum,n) => sum+n, 0) / values.length;
 }
 
 function getAverageFoerderMenge(v) {
@@ -196,11 +170,9 @@ function getAverageFoerderMenge(v) {
 
 function getCalcRateM3hNumber(v) {
   const manual = getManualRateM3hNumber(v);
-  if (Number.isFinite(manual) && manual > 0) return manual;
-
+  if (Number.isFinite(manual) && manual>0) return manual;
   const avg = getAverageFoerderMengeNumber(v);
-  if (Number.isFinite(avg) && avg > 0) return avg;
-
+  if (Number.isFinite(avg) && avg>0) return avg;
   return NaN;
 }
 
@@ -211,32 +183,30 @@ function getCalcRateM3h(v) {
 
 function getCalcRateLs(v) {
   const n = getCalcRateM3hNumber(v);
-  return Number.isFinite(n) ? (n / 3.6).toFixed(3) : '';
+  return Number.isFinite(n) ? (n/3.6).toFixed(3) : '';
 }
 
 function getCalcRateSource(v) {
   const manual = getManualRateM3hNumber(v);
-  if (Number.isFinite(manual) && manual > 0) return 'manuelle Förderrate';
-
+  if (Number.isFinite(manual) && manual>0) return 'manuelle Förderrate';
   const avg = getAverageFoerderMengeNumber(v);
-  if (Number.isFinite(avg) && avg > 0) return 'Ø Fördermenge';
-
+  if (Number.isFinite(avg) && avg>0) return 'Ø Fördermenge';
   return '';
 }
 
 function getContinueStep(v) {
-  const rows = (v.messungen || []).slice().sort((a, b) => Number(a.min) - Number(b.min));
+  const rows = (v.messungen||[]).slice().sort((a,b) => Number(a.min)-Number(b.min));
   if (rows.length >= 2) {
-    const step = Number(rows[rows.length - 1].min) - Number(rows[rows.length - 2].min);
-    if (Number.isFinite(step) && step > 0) return step;
+    const step = Number(rows[rows.length-1].min) - Number(rows[rows.length-2].min);
+    if (Number.isFinite(step) && step>0) return step;
   }
   return 15;
 }
 
 function getRowsForExport(v) {
-  return clone(v.messungen || []).sort((a, b) => {
-    const av = Number(a.min), bv = Number(b.min);
-    if (Number.isFinite(av) && Number.isFinite(bv)) return av - bv;
+  return clone(v.messungen||[]).sort((a,b) => {
+    const av=Number(a.min), bv=Number(b.min);
+    if(Number.isFinite(av)&&Number.isFinite(bv)) return av-bv;
     return Number.isFinite(av) ? -1 : 1;
   });
 }
@@ -248,211 +218,137 @@ function scheduleLiveRender() {
 
 /* ───────────────── Kf / Diagramm helpers ───────────────── */
 function getDisplacementCm(raw, ruhe) {
-  const m = Number(raw);
-  const r = Number(ruhe);
-  if (!Number.isFinite(m) || !Number.isFinite(r) || String(raw ?? '').trim() === '') return NaN;
-  return Math.abs((m - r) * 100);
+  const m=Number(raw), r=Number(ruhe);
+  if (!Number.isFinite(m)||!Number.isFinite(r)||String(raw??'').trim()==='') return NaN;
+  return Math.abs((m-r)*100);
 }
 
 function getProcessHeadChangeM(raw, ruhe, key) {
-  const m = Number(raw);
-  const r = Number(ruhe);
-  if (!Number.isFinite(m) || !Number.isFinite(r) || String(raw ?? '').trim() === '') return NaN;
-  return key === 'foerder' ? (m - r) : (r - m);
+  const m=Number(raw), r=Number(ruhe);
+  if (!Number.isFinite(m)||!Number.isFinite(r)||String(raw??'').trim()==='') return NaN;
+  return key==='foerder' ? (m-r) : (r-m);
 }
 
 function getWellChartPoints(versuch, key, brunnen) {
-  const field = key === 'foerder' ? 'foerder_m' : 'schluck_m';
-  const ruhe = Number(brunnen?.ruhe);
-
+  const field = key==='foerder' ? 'foerder_m' : 'schluck_m';
+  const ruhe  = Number(brunnen?.ruhe);
   return getRowsForExport(versuch)
-    .map(row => ({ x: Number(row.min), y: getDisplacementCm(row[field], ruhe) }))
-    .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
-    .sort((a, b) => a.x - b.x);
+    .map(row => ({ x:Number(row.min), y:getDisplacementCm(row[field],ruhe) }))
+    .filter(p => Number.isFinite(p.x)&&Number.isFinite(p.y))
+    .sort((a,b) => a.x-b.x);
 }
 
 function niceNum(range, round) {
-  if (!Number.isFinite(range) || range <= 0) return 1;
-
+  if (!Number.isFinite(range)||range<=0) return 1;
   const exponent = Math.floor(Math.log10(range));
-  const fraction = range / Math.pow(10, exponent);
+  const fraction = range / Math.pow(10,exponent);
   let niceFraction;
-
   if (round) {
-    if (fraction < 1.5) niceFraction = 1;
-    else if (fraction < 3) niceFraction = 2;
-    else if (fraction < 7) niceFraction = 5;
-    else niceFraction = 10;
+    if (fraction<1.5) niceFraction=1;
+    else if (fraction<3) niceFraction=2;
+    else if (fraction<7) niceFraction=5;
+    else niceFraction=10;
   } else {
-    if (fraction <= 1) niceFraction = 1;
-    else if (fraction <= 2) niceFraction = 2;
-    else if (fraction <= 5) niceFraction = 5;
-    else niceFraction = 10;
+    if (fraction<=1) niceFraction=1;
+    else if (fraction<=2) niceFraction=2;
+    else if (fraction<=5) niceFraction=5;
+    else niceFraction=10;
   }
-
-  return niceFraction * Math.pow(10, exponent);
+  return niceFraction * Math.pow(10,exponent);
 }
 
-function getNiceAxis(minVal, maxVal, ticks = 6) {
-  let min = Number.isFinite(minVal) ? minVal : 0;
-  let max = Number.isFinite(maxVal) ? maxVal : 1;
-
-  if (min === max) {
-    if (min === 0) max = 1;
-    else {
-      min = Math.min(0, min);
-      max = max * 1.1;
-    }
+function getNiceAxis(minVal, maxVal, ticks=6) {
+  let min=Number.isFinite(minVal)?minVal:0;
+  let max=Number.isFinite(maxVal)?maxVal:1;
+  if (min===max) {
+    if (min===0) max=1;
+    else { min=Math.min(0,min); max=max*1.1; }
   }
-
-  const range = niceNum(max - min, false);
-  const step = niceNum(range / Math.max(2, ticks - 1), true);
-  const niceMin = Math.floor(min / step) * step;
-  const niceMax = Math.ceil(max / step) * step;
-
-  return { min: niceMin, max: niceMax, step };
+  const range = niceNum(max-min,false);
+  const step  = niceNum(range/Math.max(2,ticks-1),true);
+  const niceMin = Math.floor(min/step)*step;
+  const niceMax = Math.ceil(max/step)*step;
+  return { min:niceMin, max:niceMax, step };
 }
 
 function buildTicks(axis) {
-  const ticks = [];
-  for (let v = axis.min; v <= axis.max + axis.step / 2; v += axis.step) {
-    ticks.push(Number(v.toFixed(10)));
-  }
+  const ticks=[];
+  for (let v=axis.min; v<=axis.max+axis.step/2; v+=axis.step) ticks.push(Number(v.toFixed(10)));
   return ticks;
 }
 
-function fmtAxisTick(v, decimals = 0) {
+function fmtAxisTick(v, decimals=0) {
   if (!Number.isFinite(v)) return '—';
-  return String(Number(v.toFixed(decimals))).replace('.', ',');
+  return String(Number(v.toFixed(decimals))).replace('.',',');
 }
 
 function estimateRowKfDupuitSichardt({ qM3h, dmMm, endteufe, ruhe, dyn, key }) {
-  const Q = Number(qM3h) / 3600;
-  const rw = Number(dmMm) / 2000;
-  const ET = Number(endteufe);
-  const RWS = Number(ruhe);
-  const dynLevel = Number(dyn);
-
-  if (![Q, rw, ET, RWS, dynLevel].every(Number.isFinite)) return NaN;
-  if (Q <= 0 || rw <= 0 || ET <= 0) return NaN;
-
-  const H0 = ET - RWS;
-  const Hd = ET - dynLevel;
-  const s = key === 'foerder' ? (dynLevel - RWS) : (RWS - dynLevel);
-
-  if (!Number.isFinite(H0) || !Number.isFinite(Hd) || !Number.isFinite(s)) return NaN;
-  if (H0 <= 0 || Hd <= 0 || s <= 0) return NaN;
-
-  const denom = key === 'foerder'
-    ? (H0 * H0 - Hd * Hd)
-    : (Hd * Hd - H0 * H0);
-
-  if (!(denom > 0)) return NaN;
-
-  let k = 1e-4;
-
-  for (let i = 0; i < 40; i++) {
-    const R = Math.max(rw * 20, 3000 * s * Math.sqrt(Math.max(k, 1e-12)));
-    const ln = Math.log(R / rw);
-    if (!(ln > 0)) return NaN;
-
-    const kNew = (Q * ln) / (Math.PI * denom);
-    if (!Number.isFinite(kNew) || kNew <= 0) return NaN;
-
-    if (Math.abs(kNew - k) / k < 1e-6) {
-      k = kNew;
-      break;
-    }
-    k = kNew;
+  const Q=Number(qM3h)/3600, rw=Number(dmMm)/2000;
+  const ET=Number(endteufe), RWS=Number(ruhe), dynLevel=Number(dyn);
+  if (![Q,rw,ET,RWS,dynLevel].every(Number.isFinite)) return NaN;
+  if (Q<=0||rw<=0||ET<=0) return NaN;
+  const H0=ET-RWS, Hd=ET-dynLevel;
+  const s = key==='foerder' ? (dynLevel-RWS) : (RWS-dynLevel);
+  if (!Number.isFinite(H0)||!Number.isFinite(Hd)||!Number.isFinite(s)) return NaN;
+  if (H0<=0||Hd<=0||s<=0) return NaN;
+  const denom = key==='foerder' ? (H0*H0-Hd*Hd) : (Hd*Hd-H0*H0);
+  if (!(denom>0)) return NaN;
+  let k=1e-4;
+  for (let i=0; i<40; i++) {
+    const R  = Math.max(rw*20, 3000*s*Math.sqrt(Math.max(k,1e-12)));
+    const ln = Math.log(R/rw);
+    if (!(ln>0)) return NaN;
+    const kNew = (Q*ln)/(Math.PI*denom);
+    if (!Number.isFinite(kNew)||kNew<=0) return NaN;
+    if (Math.abs(kNew-k)/k < 1e-6) { k=kNew; break; }
+    k=kNew;
   }
-
-  return Number.isFinite(k) && k > 0 ? k : NaN;
+  return Number.isFinite(k)&&k>0 ? k : NaN;
 }
 
 function getStageKfEstimate(versuch, key, brunnen) {
   const rateM3h = getCalcRateM3hNumber(versuch);
-  if (!Number.isFinite(rateM3h) || rateM3h <= 0) {
-    return {
-      kf: NaN,
-      used: 0,
-      total: 0,
-      reason: 'Keine gültige Förderrate vorhanden'
-    };
+  if (!Number.isFinite(rateM3h)||rateM3h<=0) {
+    return { kf:NaN, used:0, total:0, reason:'Keine gültige Förderrate vorhanden' };
   }
-
-  const field = key === 'foerder' ? 'foerder_m' : 'schluck_m';
+  const field = key==='foerder' ? 'foerder_m' : 'schluck_m';
   const series = getRowsForExport(versuch)
     .map(row => {
-      const min = Number(row.min);
-      const raw = row[field];
-      const kf = estimateRowKfDupuitSichardt({
-        qM3h: rateM3h,
-        dmMm: brunnen?.dm,
-        endteufe: brunnen?.endteufe,
-        ruhe: brunnen?.ruhe,
-        dyn: raw,
-        key
-      });
-
-      const s = getProcessHeadChangeM(raw, brunnen?.ruhe, key);
-
-      if (!Number.isFinite(kf) || !Number.isFinite(min) || !Number.isFinite(s) || s <= 0) return null;
+      const min=Number(row.min), raw=row[field];
+      const kf=estimateRowKfDupuitSichardt({ qM3h:rateM3h, dmMm:brunnen?.dm, endteufe:brunnen?.endteufe, ruhe:brunnen?.ruhe, dyn:raw, key });
+      const s=getProcessHeadChangeM(raw,brunnen?.ruhe,key);
+      if (!Number.isFinite(kf)||!Number.isFinite(min)||!Number.isFinite(s)||s<=0) return null;
       return { min, kf, s };
     })
     .filter(Boolean)
-    .sort((a, b) => a.min - b.min);
-
+    .sort((a,b) => a.min-b.min);
   if (!series.length) {
-    return {
-      kf: NaN,
-      used: 0,
-      total: 0,
-      reason: 'Noch keine auswertbaren Messpunkte'
-    };
+    return { kf:NaN, used:0, total:0, reason:'Noch keine auswertbaren Messpunkte' };
   }
-
-  const tail = series.length >= 4 ? series.slice(Math.floor(series.length / 2)) : series;
-  const weights = tail.map(p => Math.max(1, p.min || 1));
-  const sumW = weights.reduce((a, b) => a + b, 0);
-
-  const logMean = Math.exp(
-    tail.reduce((sum, item, idx) => sum + Math.log(item.kf) * weights[idx], 0) / sumW
-  );
-
-  const minK = Math.min(...tail.map(x => x.kf));
-  const maxK = Math.max(...tail.map(x => x.kf));
-  const spread = maxK / minK;
-
-  let quality = 'gering';
-  if (tail.length >= 4 && spread <= 3) quality = 'gut';
-  else if (tail.length >= 3 && spread <= 10) quality = 'mittel';
-
-  return {
-    kf: logMean,
-    used: tail.length,
-    total: series.length,
-    minK,
-    maxK,
-    spread,
-    quality,
-    rateM3h,
-    rateSource: getCalcRateSource(versuch),
-    method: 'Dupuit/Thiem + Sichardt (iterativ)'
-  };
+  const tail    = series.length>=4 ? series.slice(Math.floor(series.length/2)) : series;
+  const weights = tail.map(p => Math.max(1,p.min||1));
+  const sumW    = weights.reduce((a,b) => a+b, 0);
+  const logMean = Math.exp(tail.reduce((sum,item,idx) => sum+Math.log(item.kf)*weights[idx], 0)/sumW);
+  const minK=Math.min(...tail.map(x=>x.kf)), maxK=Math.max(...tail.map(x=>x.kf));
+  const spread=maxK/minK;
+  let quality='gering';
+  if (tail.length>=4&&spread<=3) quality='gut';
+  else if (tail.length>=3&&spread<=10) quality='mittel';
+  return { kf:logMean, used:tail.length, total:series.length, minK, maxK, spread, quality, rateM3h, rateSource:getCalcRateSource(versuch), method:'Dupuit/Thiem + Sichardt (iterativ)' };
 }
 
 /* ───────────────── defaults ───────────────── */
 function defaultMessung(min) {
-  return { min, foerder_m: '', schluck_m: '', foerder_menge: '' };
+  return { min, foerder_m:'', schluck_m:'', foerder_menge:'' };
 }
 
 function defaultVersuch() {
   const ints = [...DEFAULT_INTERVALLE];
   return {
     id: uid(),
-    manualRateM3h: '',
-    startzeit: '',
-    elapsedMs: 0,
+    manualRateM3h:'',
+    startzeit:'',
+    elapsedMs:0,
     intervalleStr: ints.join(', '),
     messungen: ints.map(min => defaultMessung(min))
   };
@@ -462,182 +358,112 @@ function hydrateVersuch(v) {
   const base = defaultVersuch();
   const ints = v?.intervalleStr ? parseIntervalStr(v.intervalleStr) : [...DEFAULT_INTERVALLE];
   const existing = Array.isArray(v?.messungen) ? v.messungen : [];
-
   return {
-    ...base,
-    ...v,
-    elapsedMs: Number(v?.elapsedMs || 0),
+    ...base, ...v,
+    elapsedMs: Number(v?.elapsedMs||0),
     intervalleStr: ints.join(', '),
     messungen: ints.map(min => {
-      const hit = existing.find(m => Number(m.min) === Number(min));
-      return hit ? {
-        min,
-        foerder_m: hit.foerder_m ?? '',
-        schluck_m: hit.schluck_m ?? '',
-        foerder_menge: hit.foerder_menge ?? ''
-      } : defaultMessung(min);
+      const hit = existing.find(m => Number(m.min)===Number(min));
+      return hit ? { min, foerder_m:hit.foerder_m??'', schluck_m:hit.schluck_m??'', foerder_menge:hit.foerder_menge??'' } : defaultMessung(min);
     })
   };
 }
 
 /* ───────────────── sync ui ───────────────── */
 const META_FIELDS = [
-  ['meta-objekt', 'objekt'],
-  ['meta-grundstueck', 'grundstueck'],
-  ['meta-ort', 'ort'],
-  ['meta-geologie', 'geologie'],
-  ['meta-auftragsnummer', 'auftragsnummer'],
-  ['meta-bauleitung', 'bauleitung'],
-  ['meta-bohrmeister', 'bohrmeister'],
-  ['meta-koordination', 'koordination'],
-  ['meta-geprueftDurch', 'geprueftDurch'],
-  ['meta-geprueftAm', 'geprueftAm']
+  ['meta-objekt','objekt'],['meta-grundstueck','grundstueck'],['meta-ort','ort'],
+  ['meta-geologie','geologie'],['meta-auftragsnummer','auftragsnummer'],
+  ['meta-bauleitung','bauleitung'],['meta-bohrmeister','bohrmeister'],
+  ['meta-koordination','koordination'],['meta-geprueftDurch','geprueftDurch'],
+  ['meta-geprueftAm','geprueftAm']
 ];
 
 const BRUNNEN_FIELDS = [
-  ['foerder-dm', 'foerder', 'dm'],
-  ['foerder-endteufe', 'foerder', 'endteufe'],
-  ['foerder-ruhe', 'foerder', 'ruhe'],
-  ['schluck-dm', 'schluck', 'dm'],
-  ['schluck-endteufe', 'schluck', 'endteufe'],
-  ['schluck-ruhe', 'schluck', 'ruhe']
+  ['foerder-dm','foerder','dm'],['foerder-endteufe','foerder','endteufe'],['foerder-ruhe','foerder','ruhe'],
+  ['schluck-dm','schluck','dm'],['schluck-endteufe','schluck','endteufe'],['schluck-ruhe','schluck','ruhe']
 ];
 
 function syncMetaToUi() {
-  META_FIELDS.forEach(([id, key]) => {
-    const el = $(id);
-    if (el) el.value = state.meta[key] || '';
-  });
+  META_FIELDS.forEach(([id,key]) => { const el=$(id); if(el) el.value=state.meta[key]||''; });
 }
 
 function syncBrunnenToUi() {
-  BRUNNEN_FIELDS.forEach(([id, group, key]) => {
-    const el = $(id);
-    if (el) el.value = state[group][key] || '';
-  });
+  BRUNNEN_FIELDS.forEach(([id,group,key]) => { const el=$(id); if(el) el.value=state[group][key]||''; });
 }
 
 function syncSelectionToUi() {
-  if ($('sel-foerder')) $('sel-foerder').checked = !!state.selection.foerder;
-  if ($('sel-schluck')) $('sel-schluck').checked = !!state.selection.schluck;
+  if($('sel-foerder')) $('sel-foerder').checked=!!state.selection.foerder;
+  if($('sel-schluck')) $('sel-schluck').checked=!!state.selection.schluck;
   updateBrunnenVisibility();
 }
 
 function updateBrunnenVisibility() {
-  if ($('box-foerder')) $('box-foerder').hidden = !state.selection.foerder;
-  if ($('box-schluck')) $('box-schluck').hidden = !state.selection.schluck;
+  if($('box-foerder')) $('box-foerder').hidden=!state.selection.foerder;
+  if($('box-schluck')) $('box-schluck').hidden=!state.selection.schluck;
 }
 
 function collectMetaFromUi() {
-  META_FIELDS.forEach(([id, key]) => {
-    const el = $(id);
-    if (el) state.meta[key] = el.value || '';
-  });
+  META_FIELDS.forEach(([id,key]) => { const el=$(id); if(el) state.meta[key]=el.value||''; });
 }
 
 function collectBrunnenFromUi() {
-  BRUNNEN_FIELDS.forEach(([id, group, key]) => {
-    const el = $(id);
-    if (el) state[group][key] = el.value || '';
-  });
+  BRUNNEN_FIELDS.forEach(([id,group,key]) => { const el=$(id); if(el) state[group][key]=el.value||''; });
 }
 
 function collectSelectionFromUi() {
-  const foerder = !!$('sel-foerder')?.checked;
-  const schluck = !!$('sel-schluck')?.checked;
-
-  if (!foerder && !schluck) {
-    state.selection.foerder = true;
-    state.selection.schluck = false;
+  const foerder=!!$('sel-foerder')?.checked, schluck=!!$('sel-schluck')?.checked;
+  if (!foerder&&!schluck) {
+    state.selection.foerder=true; state.selection.schluck=false;
     syncSelectionToUi();
     alert('Mindestens ein Brunnen muss ausgewählt sein.');
     return false;
   }
-
-  state.selection.foerder = foerder;
-  state.selection.schluck = schluck;
+  state.selection.foerder=foerder; state.selection.schluck=schluck;
   updateBrunnenVisibility();
   return true;
 }
 
 /* ───────────────── draft / history ───────────────── */
 function collectSnapshot() {
-  collectMetaFromUi();
-  collectBrunnenFromUi();
-  collectSelectionFromUi();
-
-  return {
-    v: 13,
-    meta: clone(state.meta),
-    selection: clone(state.selection),
-    foerder: clone(state.foerder),
-    schluck: clone(state.schluck),
-    versuche: clone(state.versuche)
-  };
+  collectMetaFromUi(); collectBrunnenFromUi(); collectSelectionFromUi();
+  return { v:13, meta:clone(state.meta), selection:clone(state.selection), foerder:clone(state.foerder), schluck:clone(state.schluck), versuche:clone(state.versuche) };
 }
 
-function applySnapshot(snapshot, render = true) {
+function applySnapshot(snapshot, render=true) {
   if (!snapshot) return;
-
-  state.meta = { ...state.meta, ...(snapshot.meta || {}) };
-  state.selection = { ...state.selection, ...(snapshot.selection || {}) };
-  state.foerder = { ...state.foerder, ...(snapshot.foerder || {}) };
-  state.schluck = { ...state.schluck, ...(snapshot.schluck || {}) };
-  state.versuche = Array.isArray(snapshot.versuche) && snapshot.versuche.length
-    ? snapshot.versuche.map(v => hydrateVersuch(v))
-    : [];
-
+  state.meta      = { ...state.meta,      ...(snapshot.meta||{}) };
+  state.selection = { ...state.selection, ...(snapshot.selection||{}) };
+  state.foerder   = { ...state.foerder,   ...(snapshot.foerder||{}) };
+  state.schluck   = { ...state.schluck,   ...(snapshot.schluck||{}) };
+  state.versuche  = Array.isArray(snapshot.versuche)&&snapshot.versuche.length
+    ? snapshot.versuche.map(v => hydrateVersuch(v)) : [];
   Object.keys(timerMap).forEach(hardStopTimer);
-
-  if (render) {
-    syncMetaToUi();
-    syncBrunnenToUi();
-    syncSelectionToUi();
-    renderVersuche();
-    renderLiveTab();
-  }
+  if (render) { syncMetaToUi(); syncBrunnenToUi(); syncSelectionToUi(); renderVersuche(); renderLiveTab(); }
 }
 
 function saveDraftDebounced() {
   clearTimeout(_saveT);
   _saveT = setTimeout(() => {
-    try {
-      localStorage.setItem(STORAGE_DRAFT, JSON.stringify(collectSnapshot()));
-    } catch {}
+    try { localStorage.setItem(STORAGE_DRAFT, JSON.stringify(collectSnapshot())); } catch {}
   }, 250);
 }
 
 function loadDraft() {
-  try {
-    const raw = localStorage.getItem(STORAGE_DRAFT);
-    if (raw) applySnapshot(JSON.parse(raw), true);
-  } catch {}
+  try { const raw=localStorage.getItem(STORAGE_DRAFT); if(raw) applySnapshot(JSON.parse(raw),true); } catch {}
 }
 
 function readHistory() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_HISTORY) || '[]');
-  } catch {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_HISTORY)||'[]'); } catch { return []; }
 }
 
 function writeHistory(list) {
-  try {
-    localStorage.setItem(STORAGE_HISTORY, JSON.stringify(list.slice(0, HISTORY_MAX)));
-  } catch {}
+  try { localStorage.setItem(STORAGE_HISTORY, JSON.stringify(list.slice(0,HISTORY_MAX))); } catch {}
 }
 
 function saveCurrentToHistory() {
-  const snap = collectSnapshot();
-  const entry = {
-    id: uid(),
-    savedAt: Date.now(),
-    title: `${snap.meta.objekt || '—'} · ${snap.meta.ort || '—'}`,
-    snapshot: snap
-  };
-
-  const list = readHistory();
+  const snap  = collectSnapshot();
+  const entry = { id:uid(), savedAt:Date.now(), title:`${snap.meta.objekt||'—'} · ${snap.meta.ort||'—'}`, snapshot:snap };
+  const list  = readHistory();
   list.unshift(entry);
   writeHistory(list);
   renderHistoryList();
@@ -647,15 +473,14 @@ function saveCurrentToHistory() {
 function initTabs() {
   document.querySelectorAll('.tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(b => b.classList.toggle('is-active', b === btn));
+      document.querySelectorAll('.tab').forEach(b => b.classList.toggle('is-active', b===btn));
       document.querySelectorAll('.pane').forEach(p => {
-        const on = p.id === `tab-${btn.dataset.tab}`;
-        p.classList.toggle('is-active', on);
-        p.hidden = !on;
+        const on = p.id===`tab-${btn.dataset.tab}`;
+        p.classList.toggle('is-active',on);
+        p.hidden=!on;
       });
-
-      if (btn.dataset.tab === 'verlauf') renderHistoryList();
-      if (btn.dataset.tab === 'live') renderLiveTab();
+      if (btn.dataset.tab==='verlauf') renderHistoryList();
+      if (btn.dataset.tab==='live')    renderLiveTab();
     });
   });
 }
@@ -666,8 +491,7 @@ function buildTableHeadHtml() {
   let html = '<tr><th>Min</th>';
   if (sel.foerder) html += '<th class="th-foerder">Förderbrunnen m ab OK</th>';
   if (sel.schluck) html += '<th class="th-schluck">Schluckbrunnen m ab OK</th>';
-  html += '<th class="th-menge">Fördermenge [m³/h]</th>';
-  html += '</tr>';
+  html += '<th class="th-menge">Fördermenge [m³/h]</th></tr>';
   return html;
 }
 
@@ -722,64 +546,64 @@ function buildVersuchHtml(v, idx) {
   const rowsHtml = v.messungen.map((row, rowIdx) => buildTableRowHtml(v, row, rowIdx)).join('');
 
   return `
-<details class="card card--collapsible versuch-card" data-vid="${h(v.id)}" open>
-  <summary class="card__title">
-    <span>${getStageTitle(idx)}</span>
-  </summary>
+    <details class="card card--collapsible versuch-card" data-vid="${h(v.id)}" open>
+      <summary class="card__title">
+        <span>${getStageTitle(idx)}</span>
+      </summary>
 
-  <div class="card__body versuch-body">
-    <div class="versuch-row">
-      <span class="rate-label">Förderrate [m³/h]</span>
-      <input class="rate-input" data-role="manual-rate-m3h" type="number"
-        step="0.001" inputmode="decimal" value="${h(v.manualRateM3h)}" />
+      <div class="card__body versuch-body">
+        <div class="versuch-row">
+          <span class="rate-label">Förderrate [m³/h]</span>
+          <input class="rate-input" data-role="manual-rate-m3h" type="number"
+            step="0.001" inputmode="decimal" value="${h(v.manualRateM3h)}" />
 
-      <span class="rate-unit">=</span>
-      <span class="rate-conv" data-role="head-rate-ls">${effLs ? `${h(effLs)} l/s` : '—'}</span>
+          <span class="rate-unit">=</span>
+          <span class="rate-conv" data-role="head-rate-ls">${effLs ? `${h(effLs)} l/s` : '—'}</span>
 
-      <span class="rate-label">Ø Fördermenge [m³/h]</span>
-      <input
-        class="rate-input rate-input--readonly"
-        data-role="avg-foerder-menge"
-        type="text"
-        value="${h(avgFoerderMenge || '—')}"
-        readonly
-      />
-    </div>
+          <span class="rate-label">Ø Fördermenge [m³/h]</span>
+          <input
+            class="rate-input rate-input--readonly"
+            data-role="avg-foerder-menge"
+            type="text"
+            value="${h(avgFoerderMenge || '—')}"
+            readonly
+          />
+        </div>
 
-    <div class="versuch-row">
-      <span class="interval-label">Intervallzeile [min]</span>
-      <input class="interval-input" data-role="intervalle" type="text" value="${h(v.intervalleStr)}" />
-    </div>
+        <div class="versuch-row">
+          <span class="interval-label">Intervallzeile [min]</span>
+          <input class="interval-input" data-role="intervalle" type="text" value="${h(v.intervalleStr)}" />
+        </div>
 
-    <div class="timer-box">
-      <div class="timer-row">
-        <div class="timer-display" data-role="elapsed">${formatElapsed(v.elapsedMs || 0)}</div>
-        <div class="timer-buttons">
-          <button class="timer-btn timer-btn--start" data-role="timer-start" type="button">Start</button>
-          <button class="timer-btn timer-btn--stop"  data-role="timer-stop"  type="button">Stop</button>
-          <button class="timer-btn timer-btn--ghost" data-role="timer-reset" type="button">Reset</button>
+        <div class="timer-box">
+          <div class="timer-row">
+            <div class="timer-display" data-role="elapsed">${formatElapsed(v.elapsedMs || 0)}</div>
+            <div class="timer-buttons">
+              <button class="timer-btn timer-btn--start" data-role="timer-start" type="button">Start</button>
+              <button class="timer-btn timer-btn--stop" data-role="timer-stop" type="button">Stop</button>
+              <button class="timer-btn timer-btn--ghost" data-role="timer-reset" type="button">Reset</button>
+            </div>
+          </div>
+
+          <div class="timer-info" data-role="startzeit">
+            ${v.startzeit ? `Startzeit: ${h(v.startzeit)}` : 'Noch nicht gestartet'}
+          </div>
+          <div class="timer-info timer-next" data-role="naechstes"></div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="mess-table">
+            <thead>${buildTableHeadHtml()}</thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+
+        <div class="versuch-tools">
+          <button class="del-btn" data-role="del" type="button">Stufe löschen</button>
         </div>
       </div>
-
-      <div class="timer-info" data-role="startzeit">
-        ${v.startzeit ? `Startzeit: ${h(v.startzeit)}` : 'Noch nicht gestartet'}
-      </div>
-      <div class="timer-info timer-next" data-role="naechstes"></div>
-    </div>
-
-    <div class="table-wrap">
-      <table class="mess-table">
-        <thead>${buildTableHeadHtml()}</thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-    </div>
-
-    <div class="versuch-tools">
-      <button class="del-btn" data-role="del" type="button">Stufe löschen</button>
-    </div>
-  </div>
-</details>
-`;
+    </details>
+  `;
 }
 
 function renderVersuche() {
@@ -788,10 +612,11 @@ function renderVersuche() {
 
   if (!state.versuche.length) {
     host.innerHTML = `
-<div class="empty-state">
-  Noch keine Pumpstufe angelegt.<br />
-  Bitte über den Plus-Button eine neue Stufe hinzufügen.
-</div>`;
+      <div class="empty-state">
+        Noch keine Pumpstufe angelegt.<br />
+        Bitte über den Plus-Button eine neue Stufe hinzufügen.
+      </div>
+    `;
     return;
   }
 
@@ -848,7 +673,11 @@ function updateTimerUi(card, versuch) {
   const nextEl = card.querySelector('[data-role="naechstes"]');
 
   if (elapsedEl) elapsedEl.textContent = formatElapsed(elapsedMs);
-  if (startZeitEl) startZeitEl.textContent = versuch.startzeit ? `Startzeit: ${versuch.startzeit}` : 'Noch nicht gestartet';
+  if (startZeitEl) {
+    startZeitEl.textContent = versuch.startzeit
+      ? `Startzeit: ${versuch.startzeit}`
+      : 'Noch nicht gestartet';
+  }
 
   if (startBtn) {
     startBtn.textContent = t.running ? 'Läuft' : (versuch.elapsedMs > 0 ? 'Weiter' : 'Start');
@@ -882,6 +711,48 @@ function updateTimerUi(card, versuch) {
   }
 }
 
+function triggerIntervalAlarm(vid) {
+  const card = document.querySelector(`.versuch-card[data-vid="${vid}"]`);
+  const timerBox = card?.querySelector('.timer-box');
+  const display = card?.querySelector('[data-role="elapsed"]');
+
+  document.body.classList.remove('screen-flash');
+  void document.body.offsetWidth;
+  document.body.classList.add('screen-flash');
+
+  if (card) {
+    card.classList.remove('versuch-card--alarm');
+    void card.offsetWidth;
+    card.classList.add('versuch-card--alarm');
+  }
+
+  if (timerBox) {
+    timerBox.classList.remove('timer-box--alarm');
+    void timerBox.offsetWidth;
+    timerBox.classList.add('timer-box--alarm');
+  }
+
+  if (display) {
+    display.classList.remove('timer-display--alarm');
+    void display.offsetWidth;
+    display.classList.add('timer-display--alarm');
+  }
+
+  if ('vibrate' in navigator) {
+    navigator.vibrate([220, 120, 220, 120, 420]);
+  }
+
+  setTimeout(() => {
+    document.body.classList.remove('screen-flash');
+  }, 900);
+
+  setTimeout(() => {
+    card?.classList.remove('versuch-card--alarm');
+    timerBox?.classList.remove('timer-box--alarm');
+    display?.classList.remove('timer-display--alarm');
+  }, 1800);
+}
+
 function tickTimer(vid) {
   const versuch = getVersuchById(vid);
   const t = timerMap[vid];
@@ -901,7 +772,7 @@ function tickTimer(vid) {
   const passedCount = mins.filter(iv => versuch.elapsedMs / 60000 >= iv).length;
   if (passedCount > t.alarmCount) {
     t.alarmCount = passedCount;
-    if ('vibrate' in navigator) navigator.vibrate([120, 80, 120]);
+    triggerIntervalAlarm(vid);
   }
 
   t.raf = requestAnimationFrame(() => tickTimer(vid));
@@ -1030,19 +901,20 @@ function buildLiveChartSvg(points, key) {
   `).join('');
 
   return `
-<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="Diagramm">
-  <rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="#0b1725" />
-  ${gridY}
-  ${gridX}
-  <rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.2" />
-  <line x1="${ml}" y1="${mt + ph}" x2="${W - mr}" y2="${mt + ph}" stroke="rgba(255,255,255,.35)" stroke-width="1.2" />
-  <line x1="${ml}" y1="${mt}" x2="${ml}" y2="${mt + ph}" stroke="rgba(255,255,255,.35)" stroke-width="1.2" />
-  ${points.length ? `<polyline points="${polyPoints}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />` : ''}
-  ${circles}
-  <text x="${ml + pw / 2}" y="${H - 4}" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700">Zeit [min]</text>
-  <text x="16" y="${mt + ph / 2}" transform="rotate(-90 16 ${mt + ph / 2})" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700">Absenkung [cm]</text>
-  ${!points.length ? `<text x="${ml + pw / 2}" y="${mt + ph / 2}" text-anchor="middle" fill="rgba(220,240,255,.72)" font-size="13">Noch keine Messwerte</text>` : ''}
-</svg>`;
+    <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="Diagramm">
+      <rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="#0b1725" />
+      ${gridY}
+      ${gridX}
+      <rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.2" />
+      <line x1="${ml}" y1="${mt + ph}" x2="${W - mr}" y2="${mt + ph}" stroke="rgba(255,255,255,.35)" stroke-width="1.2" />
+      <line x1="${ml}" y1="${mt}" x2="${ml}" y2="${mt + ph}" stroke="rgba(255,255,255,.35)" stroke-width="1.2" />
+      ${points.length ? `<polyline points="${polyPoints}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />` : ''}
+      ${circles}
+      <text x="${ml + pw / 2}" y="${H - 4}" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700">Zeit [min]</text>
+      <text x="16" y="${mt + ph / 2}" transform="rotate(-90 16 ${mt + ph / 2})" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700">Absenkung [cm]</text>
+      ${!points.length ? `<text x="${ml + pw / 2}" y="${mt + ph / 2}" text-anchor="middle" fill="rgba(220,240,255,.72)" font-size="13">Noch keine Messwerte</text>` : ''}
+    </svg>
+  `;
 }
 
 function buildLiveWellPanelHtml(versuch, idx, key, brunnen) {
@@ -1141,10 +1013,12 @@ function hookStaticInputs() {
   META_FIELDS.forEach(([id]) => {
     const el = $(id);
     if (!el) return;
+
     el.addEventListener('input', () => {
       collectMetaFromUi();
       saveDraftDebounced();
     });
+
     el.addEventListener('change', () => {
       collectMetaFromUi();
       saveDraftDebounced();
@@ -1154,11 +1028,13 @@ function hookStaticInputs() {
   BRUNNEN_FIELDS.forEach(([id]) => {
     const el = $(id);
     if (!el) return;
+
     el.addEventListener('input', () => {
       collectBrunnenFromUi();
       saveDraftDebounced();
       scheduleLiveRender();
     });
+
     el.addEventListener('change', () => {
       collectBrunnenFromUi();
       saveDraftDebounced();
@@ -1333,14 +1209,17 @@ function buildHistoryKfHtml(snapshot) {
   const lines = versuche.map((raw, idx) => {
     const v = hydrateVersuch(raw);
     const parts = [];
+
     if (snapshot.selection?.foerder) {
       const estF = getStageKfEstimate(v, 'foerder', snapshot.foerder || {});
       parts.push(`Förder: ${Number.isFinite(estF.kf) ? fmtKf(estF.kf) : '—'}`);
     }
+
     if (snapshot.selection?.schluck) {
       const estS = getStageKfEstimate(v, 'schluck', snapshot.schluck || {});
       parts.push(`Schluck: ${Number.isFinite(estS.kf) ? fmtKf(estS.kf) : '—'}`);
     }
+
     return `<div class="historyKf__line">${h(`${getStageTitle(idx)} · ${parts.join(' · ')}`)}</div>`;
   });
 
@@ -1410,23 +1289,23 @@ function renderHistoryList() {
     if (snap.selection?.schluck) wells.push('Schluckbrunnen');
 
     return `
-<div class="historyItem">
-  <div class="historyTop">
-    <span>${h(entry.title)}</span>
-    <span style="color:var(--muted);font-size:.82em">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
-  </div>
-  <div class="historySub">
-    Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> ·
-    Brunnen: <b>${h(wells.join(' / ') || '—')}</b> · Stufen: <b>${h(count)}</b>
-  </div>
-  ${buildHistoryKfHtml(snap)}
-  <div class="historyBtns">
-    <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
-    <button type="button" data-hact="pdf"  data-id="${h(entry.id)}">PDF</button>
-    <button type="button" data-hact="del"  data-id="${h(entry.id)}">Löschen</button>
-  </div>
-</div>
-`;
+      <div class="historyItem">
+        <div class="historyTop">
+          <span>${h(entry.title)}</span>
+          <span style="color:var(--muted);font-size:.82em">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
+        </div>
+        <div class="historySub">
+          Objekt: <b>${h(snap.meta?.objekt || '—')}</b> · Ort: <b>${h(snap.meta?.ort || '—')}</b> ·
+          Brunnen: <b>${h(wells.join(' / ') || '—')}</b> · Stufen: <b>${h(count)}</b>
+        </div>
+        ${buildHistoryKfHtml(snap)}
+        <div class="historyBtns">
+          <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
+          <button type="button" data-hact="pdf" data-id="${h(entry.id)}">PDF</button>
+          <button type="button" data-hact="del" data-id="${h(entry.id)}">Löschen</button>
+        </div>
+      </div>
+    `;
   }).join('');
 }
 
@@ -1465,7 +1344,10 @@ function getWellRowsForPdf(versuch, key, ruhe) {
     const hasValue = String(raw ?? '').trim() !== '' && Number.isFinite(Number(raw));
     const valueNum = hasValue ? Number(raw) : null;
 
-    const deltaM = (hasValue && Number.isFinite(ruheNum)) ? Math.abs(valueNum - ruheNum) : null;
+    const deltaM = (hasValue && Number.isFinite(ruheNum))
+      ? Math.abs(valueNum - ruheNum)
+      : null;
+
     const deltaCm = deltaM !== null ? deltaM * 100 : null;
 
     return {
@@ -1489,7 +1371,6 @@ function drawMetaGrid(page, x, yTop, w, rowH, meta, fontR, fontB, K) {
     page.drawRectangle({ x, y, width: w, height: rowH, borderColor: K, borderWidth: 0.7 });
 
     const cw = w / 4;
-
     for (let i = 1; i < 4; i++) {
       page.drawLine({
         start: { x: x + i * cw, y },
@@ -1525,8 +1406,9 @@ function drawWellTable(page, opt) {
   });
 
   drawTextSafe(page, `${title}`, {
-  x: x + 4, y: yTop - titleH + 3.8, size: 7.8, font: fontB, color: K
-});
+    x: x + 4, y: yTop - titleH + 3.8, size: 7.8, font: fontB, color: K
+  });
+
   const yHead = yTop - titleH - headH;
 
   page.drawRectangle({
@@ -1550,9 +1432,11 @@ function drawWellTable(page, opt) {
   drawTextSafe(page, 'Min', {
     x: xs[0] + 3, y: yHead + 5, size: 6.8, font: fontB, color: K
   });
+
   drawTextSafe(page, 'm ab OK Brunnen', {
     x: xs[1] + 3, y: yHead + 5, size: 6.8, font: fontB, color: K
   });
+
   drawTextSafe(page, 'Δ Ruhewasser [m]', {
     x: xs[2] + 3, y: yHead + 5, size: 6.8, font: fontB, color: K
   });
@@ -1583,10 +1467,12 @@ function drawWellTable(page, opt) {
 
     y = nextY;
   });
+
   page.drawRectangle({
     x, y: yTop - totalH, width: w, height: totalH,
     borderColor: K, borderWidth: 0.7
   });
+
   return totalH;
 }
 
@@ -1644,6 +1530,7 @@ function drawWellChart(page, opt) {
       thickness: 0.5,
       color: gridColor
     });
+
     drawTextSafe(page, fmtAxisTick(v, 0), {
       x: px - 22,
       y: yy - 2,
@@ -1745,6 +1632,7 @@ function drawStageSplitLayout(page, opt) {
   drawTextSafe(page, `Pumpversuch   ${versuch._stageTitle || 'Stufe'}   ${rateLs} [l/s]`, {
     x: x + 4, y: yTop - stageH + 11, size: 8.5, font: fontB, color: K
   });
+
   drawTextSafe(page, `${rateM3h} [m³/h]`, {
     x: x + 4, y: yTop - stageH + 4, size: 7.5, font: fontR, color: K
   });
@@ -1837,7 +1725,7 @@ async function exportPdf(snapshot = null) {
 
   let logo = null;
   try {
-    const bytes = await fetch(`${BASE}logo.png?v=28`).then(r => {
+    const bytes = await fetch(`${BASE}logo.png?v=29`).then(r => {
       if (!r.ok) throw new Error(r.status);
       return r.arrayBuffer();
     });
@@ -1861,7 +1749,8 @@ async function exportPdf(snapshot = null) {
     v._stageTitle = getStageTitle(i);
 
     const margin = mm(8);
-    const x0 = margin, y0 = margin;
+    const x0 = margin;
+    const y0 = margin;
     const W = PAGE_W - 2 * margin;
     const H = PAGE_H - 2 * margin;
 
@@ -1900,76 +1789,78 @@ async function exportPdf(snapshot = null) {
     let cy = y0 + H - hdrH - mm(2);
     const metaRowH = mm(9);
 
-  drawMetaGrid(page, x0, cy, W, metaRowH, meta, fontR, fontB, K);
-cy -= metaRowH * 3;
+    drawMetaGrid(page, x0, cy, W, metaRowH, meta, fontR, fontB, K);
+    cy -= metaRowH * 3;
 
-// ─── Ruhewasserspiegel Block ───────────────────────────────────
-const ruheHdrH = 10;
-const ruheRowH = 13;
+    const ruheHdrH = 10;
+    const ruheRowH = 13;
 
-// Überschrift – volle Breite
-page.drawRectangle({
-  x: x0, y: cy - ruheHdrH, width: W, height: ruheHdrH,
-  color: GREY, borderColor: K, borderWidth: 0.7
-});
-drawTextSafe(page, 'Ruhewasserspiegel [m]', {
-  x: x0 + 4, y: cy - ruheHdrH + 2.5,
-  size: 7.5, font: fontB, color: K
-});
-cy -= ruheHdrH;
+    page.drawRectangle({
+      x: x0, y: cy - ruheHdrH, width: W, height: ruheHdrH,
+      color: GREY, borderColor: K, borderWidth: 0.7
+    });
 
-// 4 Zellen: Label | Wert | Label | Wert
-const rwLabelW = W * 0.37;
-const rwValueW = W * 0.13;
-const rwXs = [
-  x0,
-  x0 + rwLabelW,
-  x0 + rwLabelW + rwValueW,
-  x0 + rwLabelW + rwValueW + rwLabelW,
-  x0 + W
-];
+    drawTextSafe(page, 'Ruhewasserspiegel [m]', {
+      x: x0 + 4, y: cy - ruheHdrH + 2.5,
+      size: 7.5, font: fontB, color: K
+    });
 
-page.drawRectangle({
-  x: x0, y: cy - ruheRowH, width: W, height: ruheRowH,
-  borderColor: K, borderWidth: 0.7
-});
+    cy -= ruheHdrH;
 
-for (let i = 1; i < 4; i++) {
-  page.drawLine({
-    start: { x: rwXs[i], y: cy - ruheRowH },
-    end:   { x: rwXs[i], y: cy },
-    thickness: 0.7, color: K
-  });
-}
+    const rwLabelW = W * 0.37;
+    const rwValueW = W * 0.13;
+    const rwXs = [
+      x0,
+      x0 + rwLabelW,
+      x0 + rwLabelW + rwValueW,
+      x0 + rwLabelW + rwValueW + rwLabelW,
+      x0 + W
+    ];
 
-drawTextSafe(page, 'Förderbrunnen ab OK Brunnenausbau', {
-  x: rwXs[0] + 3, y: cy - ruheRowH + 4,
-  size: 6.2, font: fontR, color: K
-});
-drawTextSafe(page, foerder.ruhe ? fmtComma(foerder.ruhe, 3) : '—', {
-  x: rwXs[1] + 3, y: cy - ruheRowH + 4,
-  size: 7.2, font: fontR, color: K
-});
-drawTextSafe(page, 'Schluckbrunnen ab OK Brunnenausbau', {
-  x: rwXs[2] + 3, y: cy - ruheRowH + 4,
-  size: 6.2, font: fontR, color: K
-});
-drawTextSafe(page, schluck.ruhe ? fmtComma(schluck.ruhe, 3) : '—', {
-  x: rwXs[3] + 3, y: cy - ruheRowH + 4,
-  size: 7.2, font: fontR, color: K
-});
-cy -= ruheRowH;
-// ─────────────────────────────────────────────────────────────
+    page.drawRectangle({
+      x: x0, y: cy - ruheRowH, width: W, height: ruheRowH,
+      borderColor: K, borderWidth: 0.7
+    });
 
-page.drawRectangle({
-  x: x0, y: cy - metaRowH, width: W, height: metaRowH,
-  color: GREY, borderColor: K, borderWidth: 0.7
-});
+    for (let i = 1; i < 4; i++) {
+      page.drawLine({
+        start: { x: rwXs[i], y: cy - ruheRowH },
+        end: { x: rwXs[i], y: cy },
+        thickness: 0.7, color: K
+      });
+    }
 
-  const wellTexts = [
-  `Förderbrunnen: Ø ${foerder.dm || '—'} mm · ET ${foerder.endteufe || '—'} m`,
-  `Schluckbrunnen: Ø ${schluck.dm || '—'} mm · ET ${schluck.endteufe || '—'} m`
-];
+    drawTextSafe(page, 'Förderbrunnen ab OK Brunnenausbau', {
+      x: rwXs[0] + 3, y: cy - ruheRowH + 4,
+      size: 6.2, font: fontR, color: K
+    });
+
+    drawTextSafe(page, foerder.ruhe ? fmtComma(foerder.ruhe, 3) : '—', {
+      x: rwXs[1] + 3, y: cy - ruheRowH + 4,
+      size: 7.2, font: fontR, color: K
+    });
+
+    drawTextSafe(page, 'Schluckbrunnen ab OK Brunnenausbau', {
+      x: rwXs[2] + 3, y: cy - ruheRowH + 4,
+      size: 6.2, font: fontR, color: K
+    });
+
+    drawTextSafe(page, schluck.ruhe ? fmtComma(schluck.ruhe, 3) : '—', {
+      x: rwXs[3] + 3, y: cy - ruheRowH + 4,
+      size: 7.2, font: fontR, color: K
+    });
+
+    cy -= ruheRowH;
+
+    page.drawRectangle({
+      x: x0, y: cy - metaRowH, width: W, height: metaRowH,
+      color: GREY, borderColor: K, borderWidth: 0.7
+    });
+
+    const wellTexts = [
+      `Förderbrunnen: Ø ${foerder.dm || '—'} mm · ET ${foerder.endteufe || '—'} m`,
+      `Schluckbrunnen: Ø ${schluck.dm || '—'} mm · ET ${schluck.endteufe || '—'} m`
+    ];
 
     drawTextSafe(page, wellTexts.join('   |   '), {
       x: x0 + 4,
@@ -2003,7 +1894,6 @@ page.drawRectangle({
       thickness: 0.8,
       color: K
     });
-
 
     drawTextSafe(page, `Seite ${i + 1}/${versuche.length}`, {
       x: x0 + W - 40,
@@ -2144,6 +2034,6 @@ window.addEventListener('DOMContentLoaded', () => {
   $('btnReset')?.addEventListener('click', resetAll);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`${BASE}sw.js?v=28`).catch(err => console.error('SW:', err));
+    navigator.serviceWorker.register(`${BASE}sw.js?v=29`).catch(err => console.error('SW:', err));
   }
 });
