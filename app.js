@@ -110,6 +110,11 @@ function m3hToLs(v) {
   return Number.isFinite(n) ? (n/3.6).toFixed(3) : '';
 }
 
+function lsToM3h(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? (n*3.6).toFixed(3) : '';
+}
+
 function calcDelta(messwert, ruhe) {
   const m = Number(messwert), r = Number(ruhe);
   if (!Number.isFinite(m)||!Number.isFinite(r)||String(messwert).trim()==='') return '';
@@ -144,18 +149,6 @@ function sortMessungen(v) {
 function getManualRateM3hNumber(v) {
   const n = Number(v?.manualRateM3h);
   return Number.isFinite(n) ? n : NaN;
-}
-
-// ── NEU: liefert den im Input anzuzeigenden l/s-Wert (Kehrwert der bisherigen Anzeige) ──
-function getManualRateLsDisplay(v) {
-  const m3h = getManualRateM3hNumber(v);
-  return Number.isFinite(m3h) ? (m3h / 3.6).toFixed(3) : '';
-}
-
-// ── NEU: liefert den m³/h-Wert zur Anzeige als Konversion ──
-function getEffectiveRateM3hDisplay(v) {
-  const n = getManualRateM3hNumber(v);
-  return Number.isFinite(n) ? n.toFixed(3) : '';
 }
 
 function getEffectiveRateM3h(v) {
@@ -600,9 +593,8 @@ function buildTableRowHtml(v, row, rowIdx) {
 }
 
 function buildVersuchHtml(v, idx) {
-  // ── GEÄNDERT: Input zeigt l/s, Konversion zeigt m³/h ──
-  const displayLs = getManualRateLsDisplay(v);           // l/s-Wert für das Input-Feld
-  const displayM3h = getEffectiveRateM3hDisplay(v);      // m³/h-Wert für die Konversionsanzeige
+  const effLs = getEffectiveRateLs(v);
+  const effM3h = getEffectiveRateM3h(v);
   const avgFoerderMenge = getAverageFoerderMenge(v);
   const rowsHtml = v.messungen.map((row, rowIdx) => buildTableRowHtml(v, row, rowIdx)).join('');
 
@@ -616,10 +608,10 @@ function buildVersuchHtml(v, idx) {
         <div class="versuch-row">
           <span class="rate-label">Förderrate [l/s]</span>
           <input class="rate-input" data-role="manual-rate-ls" type="number"
-            step="0.001" inputmode="decimal" value="${h(displayLs)}" />
+            step="0.001" inputmode="decimal" value="${h(effLs)}" />
 
           <span class="rate-unit">=</span>
-          <span class="rate-conv" data-role="head-rate-m3h">${displayM3h ? `${h(displayM3h)} m³/h` : '—'}</span>
+          <span class="rate-conv" data-role="head-rate-m3h">${effM3h ? `${h(effM3h)} m³/h` : '—'}</span>
 
           <span class="rate-label">Ø Fördermenge [m³/h]</span>
           <input
@@ -912,14 +904,13 @@ function hardStopTimer(vid) {
 
 /* ───────────────── stage header computed ───────────────── */
 function updateStageRateDisplay(card, versuch) {
-  // ── GEÄNDERT: Konversionsanzeige zeigt jetzt m³/h, nicht mehr l/s ──
-  const displayM3h = getEffectiveRateM3hDisplay(versuch);
+  const effM3h = getEffectiveRateM3h(versuch);
   const avgFoerderMenge = getAverageFoerderMenge(versuch);
 
   const m3hEl = card.querySelector('[data-role="head-rate-m3h"]');
   const avgEl = card.querySelector('[data-role="avg-foerder-menge"]');
 
-  if (m3hEl) m3hEl.textContent = displayM3h ? `${displayM3h} m³/h` : '—';
+  if (m3hEl) m3hEl.textContent = effM3h ? `${effM3h} m³/h` : '—';
   if (avgEl) avgEl.value = avgFoerderMenge || '—';
 }
 
@@ -1137,12 +1128,8 @@ function hookVersuchDelegation() {
     const role = el.dataset.role;
     const idx = Number(el.dataset.row);
 
-    // ── GEÄNDERT: Eingabe in l/s → umrechnen in m³/h → in manualRateM3h speichern ──
     if (role === 'manual-rate-ls') {
-      const lsVal = Number(el.value);
-      versuch.manualRateM3h = Number.isFinite(lsVal) && el.value.trim() !== ''
-        ? String(lsVal * 3.6)
-        : '';
+      versuch.manualRateM3h = String(el.value).trim()==='' ? '' : lsToM3h(el.value);
       updateStageRateDisplay(card, versuch);
       saveDraftDebounced();
       scheduleLiveRender();
@@ -1585,4 +1572,522 @@ function drawWellChart(page, opt) {
   const xTicks = buildTicks(xAxis);
   const yTicks = buildTicks(yAxis);
 
-  const tx = (v) => px + ((v - xAxis.min) / (
+  const tx = (v) => px + ((v - xAxis.min) / (xAxis.max - xAxis.min || 1)) * pw;
+  const ty = (v) => py + ((v - yAxis.min) / (yAxis.max - yAxis.min || 1)) * ph;
+
+  yTicks.forEach(v => {
+    const yy = ty(v);
+    page.drawLine({
+      start: { x: px, y: yy },
+      end: { x: px + pw, y: yy },
+      thickness: 0.5,
+      color: gridColor
+    });
+
+    drawTextSafe(page, fmtAxisTick(v, 0), {
+      x: px - 22,
+      y: yy - 2,
+      size: 6.2,
+      font: fontR,
+      color: K
+    });
+  });
+
+  xTicks.forEach(v => {
+    const xx = tx(v);
+    page.drawLine({
+      start: { x: xx, y: py },
+      end: { x: xx, y: py + ph },
+      thickness: 0.5,
+      color: gridColor
+    });
+
+    drawTextSafe(page, fmtAxisTick(v, 0), {
+      x: xx - 6,
+      y: plotTop + 4,
+      size: 6.2,
+      font: fontR,
+      color: K
+    });
+  });
+
+  page.drawRectangle({
+    x: px, y: py, width: pw, height: ph,
+    borderColor: K, borderWidth: 0.7
+  });
+
+  drawTextSafe(page, 'Zeit [min]', {
+    x: px + pw / 2 - 18,
+    y: plotTop + 16,
+    size: 6.8,
+    font: fontB,
+    color: K
+  });
+
+  drawTextSafe(page, 'Absenkung [cm]', {
+    x: x + 10,
+    y: py + ph / 2 - 22,
+    size: 6.8,
+    font: fontB,
+    color: K,
+    rotate: degrees(90)
+  });
+
+  if (!valid.length) {
+    drawTextSafe(page, 'Noch keine Messwerte', {
+      x: px + pw / 2 - 28,
+      y: py + ph / 2,
+      size: 7,
+      font: fontR,
+      color: K
+    });
+    return;
+  }
+
+  for (let i = 0; i < valid.length - 1; i++) {
+    const a = valid[i];
+    const b = valid[i + 1];
+    page.drawLine({
+      start: { x: tx(a.min), y: ty(a.deltaCm) },
+      end: { x: tx(b.min), y: ty(b.deltaCm) },
+      thickness: 1.3,
+      color: lineColor
+    });
+  }
+
+  valid.forEach(p => {
+    page.drawCircle({
+      x: tx(p.min),
+      y: ty(p.deltaCm),
+      size: 2.1,
+      color: lineColor,
+      borderColor: K,
+      borderWidth: 0.3
+    });
+  });
+}
+
+function drawStageSplitLayout(page, opt) {
+  const {
+    x, yTop, yBottom, w, versuch,
+    foerder, schluck, fontR, fontB, K, grey, degrees, rgb
+  } = opt;
+
+  const stageH = 22;
+  page.drawRectangle({
+    x, y: yTop - stageH, width: w, height: stageH,
+    color: grey, borderColor: K, borderWidth: 0.8
+  });
+
+  const rateLs = getPdfRateLs(versuch);
+  const rateM3h = getPdfRateM3h(versuch);
+
+  drawTextSafe(page, `Pumpversuch   ${versuch._stageTitle || 'Stufe'}   ${rateLs} [l/s]`, {
+    x: x + 4, y: yTop - stageH + 11, size: 8.5, font: fontB, color: K
+  });
+
+  drawTextSafe(page, `${rateM3h} [m³/h]`, {
+    x: x + 4, y: yTop - stageH + 4, size: 7.5, font: fontR, color: K
+  });
+
+  const keys = ['foerder', 'schluck'];
+  const gap = 10;
+  const colW = (w - gap) / 2;
+  const contentTop = yTop - stageH - 6;
+
+  keys.forEach((key, i) => {
+    const well = key === 'foerder' ? foerder : schluck;
+    const rows = getWellRowsForPdf(versuch, key, well?.ruhe);
+    const colX = x + i * (colW + gap);
+    const tableTop = contentTop;
+
+    const tableH = drawWellTable(page, {
+      x: colX,
+      yTop: tableTop,
+      w: colW,
+      key,
+      rows,
+      ruhe: well?.ruhe,
+      fontR,
+      fontB,
+      K,
+      grey
+    });
+
+    const chartTop = tableTop - tableH - 6;
+    const chartY = yBottom;
+    const chartH = Math.max(95, chartTop - chartY);
+
+    drawWellChart(page, {
+      x: colX,
+      y: chartY,
+      w: colW,
+      h: chartH,
+      key,
+      rows,
+      fontR,
+      fontB,
+      K,
+      grey,
+      degrees,
+      gridColor: rgb(0.82, 0.82, 0.82),
+      lineColor: key === 'foerder' ? rgb(0.16, 0.46, 0.84) : rgb(0.90, 0.56, 0.16)
+    });
+  });
+}
+
+async function exportPdf(snapshot = null) {
+  const snap = snapshot || collectSnapshot();
+
+  if (!window.PDFLib) {
+    alert('PDF-Library noch nicht geladen.');
+    return;
+  }
+
+  const fontkit = window.fontkit || window.PDFLibFontkit;
+  if (!fontkit) {
+    alert('fontkit nicht geladen.');
+    return;
+  }
+
+  const versuche = Array.isArray(snap.versuche) ? snap.versuche : [];
+  if (!versuche.length) {
+    alert('Es ist noch keine Pumpstufe vorhanden.');
+    return;
+  }
+
+  const { PDFDocument, rgb, degrees } = window.PDFLib;
+  const pdf = await PDFDocument.create();
+  pdf.registerFontkit(fontkit);
+
+  const fontBytesR = await fetch(`${BASE}fonts/arial.ttf?v=60`).then(r => {
+    if (!r.ok) throw new Error('arial.ttf nicht gefunden');
+    return r.arrayBuffer();
+  });
+
+  let fontBytesB = null;
+  try {
+    fontBytesB = await fetch(`${BASE}fonts/arialbd.ttf?v=60`).then(r => {
+      if (!r.ok) throw new Error('arialbd.ttf nicht gefunden');
+      return r.arrayBuffer();
+    });
+  } catch {}
+
+  const fontR = await pdf.embedFont(fontBytesR, { subset: true });
+  const fontB = fontBytesB ? await pdf.embedFont(fontBytesB, { subset: true }) : fontR;
+
+  let logo = null;
+  try {
+    const bytes = await fetch(`${BASE}logo.png?v=30`).then(r => {
+      if (!r.ok) throw new Error(r.status);
+      return r.arrayBuffer();
+    });
+    logo = await pdf.embedPng(bytes);
+  } catch {}
+
+  const PAGE_W = 595.28;
+  const PAGE_H = 841.89;
+  const mm = v => v * 72 / 25.4;
+
+  const K = rgb(0, 0, 0);
+  const GREY = rgb(0.90, 0.90, 0.90);
+
+  const meta = snap.meta || {};
+  const foerder = snap.foerder || {};
+  const schluck = snap.schluck || {};
+
+  for (let i = 0; i < versuche.length; i++) {
+    const page = pdf.addPage([PAGE_W, PAGE_H]);
+    const v = hydrateVersuch(versuche[i]);
+    v._stageTitle = getStageTitle(i);
+
+    const margin = mm(8);
+    const x0 = margin;
+    const y0 = margin;
+    const W = PAGE_W - 2 * margin;
+    const H = PAGE_H - 2 * margin;
+
+    page.drawRectangle({ x: x0, y: y0, width: W, height: H, borderColor: K, borderWidth: 1.2 });
+
+    const hdrH = mm(13);
+    page.drawRectangle({ x: x0, y: y0 + H - hdrH, width: W, height: hdrH, color: GREY, borderColor: K, borderWidth: 0.8 });
+
+    if (logo) {
+      const lh = hdrH * 0.75;
+      const scale = lh / logo.height;
+      page.drawImage(logo, {
+        x: x0 + mm(2),
+        y: y0 + H - hdrH + (hdrH - lh) / 2,
+        width: logo.width * scale,
+        height: lh
+      });
+    }
+
+    drawTextSafe(page, 'Pumpversuch', {
+      x: x0 + mm(32),
+      y: y0 + H - hdrH + mm(4.2),
+      size: 13,
+      font: fontB,
+      color: K
+    });
+
+    drawTextSafe(page, 'HTB Baugesellschaft m.b.H.', {
+      x: x0 + mm(32),
+      y: y0 + H - hdrH + mm(1.5),
+      size: 8,
+      font: fontR,
+      color: K
+    });
+
+    let cy = y0 + H - hdrH - mm(2);
+    const metaRowH = mm(9);
+
+    drawMetaGrid(page, x0, cy, W, metaRowH, meta, fontR, fontB, K);
+    cy -= metaRowH * 3;
+
+    const ruheHdrH = 10;
+    const ruheRowH = 13;
+
+    page.drawRectangle({
+      x: x0, y: cy - ruheHdrH, width: W, height: ruheHdrH,
+      color: GREY, borderColor: K, borderWidth: 0.7
+    });
+
+    drawTextSafe(page, 'Ruhewasserspiegel [m]', {
+      x: x0 + 4, y: cy - ruheHdrH + 2.5,
+      size: 7.5, font: fontB, color: K
+    });
+
+    cy -= ruheHdrH;
+
+    const rwLabelW = W * 0.37;
+    const rwValueW = W * 0.13;
+    const rwXs = [
+      x0,
+      x0 + rwLabelW,
+      x0 + rwLabelW + rwValueW,
+      x0 + rwLabelW + rwValueW + rwLabelW,
+      x0 + W
+    ];
+
+    page.drawRectangle({
+      x: x0, y: cy - ruheRowH, width: W, height: ruheRowH,
+      borderColor: K, borderWidth: 0.7
+    });
+
+    for (let i = 1; i < 4; i++) {
+      page.drawLine({
+        start: { x: rwXs[i], y: cy - ruheRowH },
+        end: { x: rwXs[i], y: cy },
+        thickness: 0.7, color: K
+      });
+    }
+
+    drawTextSafe(page, 'Förderbrunnen ab OK Brunnenausbau', {
+      x: rwXs[0] + 3, y: cy - ruheRowH + 4,
+      size: 6.2, font: fontR, color: K
+    });
+
+    drawTextSafe(page, foerder.ruhe ? fmtComma(foerder.ruhe, 3) : '—', {
+      x: rwXs[1] + 3, y: cy - ruheRowH + 4,
+      size: 7.2, font: fontR, color: K
+    });
+
+    drawTextSafe(page, 'Schluckbrunnen ab OK Brunnenausbau', {
+      x: rwXs[2] + 3, y: cy - ruheRowH + 4,
+      size: 6.2, font: fontR, color: K
+    });
+
+    drawTextSafe(page, schluck.ruhe ? fmtComma(schluck.ruhe, 3) : '—', {
+      x: rwXs[3] + 3, y: cy - ruheRowH + 4,
+      size: 7.2, font: fontR, color: K
+    });
+
+    cy -= ruheRowH;
+
+    page.drawRectangle({
+      x: x0, y: cy - metaRowH, width: W, height: metaRowH,
+      color: GREY, borderColor: K, borderWidth: 0.7
+    });
+
+    const wellTexts = [
+      `Förderbrunnen: Ø ${foerder.dm || '—'} mm · ET ${foerder.endteufe || '—'} m`,
+      `Schluckbrunnen: Ø ${schluck.dm || '—'} mm · ET ${schluck.endteufe || '—'} m`
+    ];
+
+    drawTextSafe(page, wellTexts.join('   |   '), {
+      x: x0 + 4,
+      y: cy - metaRowH + 6,
+      size: 7.1,
+      font: fontR,
+      color: K
+    });
+
+    cy -= metaRowH + mm(3);
+
+    drawStageSplitLayout(page, {
+      x: x0,
+      yTop: cy,
+      yBottom: y0 + mm(9),
+      w: W,
+      versuch: v,
+      foerder,
+      schluck,
+      fontR,
+      fontB,
+      K,
+      grey: GREY,
+      degrees,
+      rgb
+    });
+
+    page.drawLine({
+      start: { x: x0, y: y0 + mm(5.5) },
+      end: { x: x0 + W, y: y0 + mm(5.5) },
+      thickness: 0.8,
+      color: K
+    });
+
+    drawTextSafe(page, `Seite ${i + 1}/${versuche.length}`, {
+      x: x0 + W - 40,
+      y: y0 + 4,
+      size: 7,
+      font: fontR,
+      color: K
+    });
+  }
+
+  const bytes = await pdf.save();
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+
+  const obj = (snap.meta?.objekt || 'Pumpversuch')
+    .replace(/[^\wäöüÄÖÜß\- ]+/g, '')
+    .trim()
+    .replace(/\s+/g, '_');
+
+  const fileName = `${dateTag()}_HTB_Pumpversuch_${obj || 'Protokoll'}.pdf`;
+
+  const w = window.open(url, '_blank');
+  if (!w) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.click();
+  }
+
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/* ───────────────── reset / install ───────────────── */
+function resetAll() {
+  if (!confirm('Alle Eingaben wirklich zurücksetzen?')) return;
+
+  Object.keys(timerMap).forEach(hardStopTimer);
+
+  state.meta = {
+    objekt: '',
+    grundstueck: '',
+    ort: '',
+    geologie: '',
+    auftragsnummer: '',
+    bauleitung: '',
+    bohrmeister: '',
+    koordination: '',
+    geprueftDurch: '',
+    geprueftAm: ''
+  };
+
+  state.selection = { foerder: true, schluck: true };
+  state.foerder = { dm: '', endteufe: '', ruhe: '' };
+  state.schluck = { dm: '', endteufe: '', ruhe: '' };
+  state.versuche = [];
+
+  syncMetaToUi();
+  syncBrunnenToUi();
+  syncSelectionToUi();
+  renderVersuche();
+  renderLiveTab();
+  saveDraftDebounced();
+}
+
+function initInstallButton() {
+  let installPrompt = null;
+  const btn = $('btnInstall');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installPrompt = e;
+    if (btn) btn.hidden = false;
+  });
+
+  btn?.addEventListener('click', async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    btn.hidden = true;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    if (btn) btn.hidden = true;
+  });
+}
+
+/* ───────────────── init ───────────────── */
+window.addEventListener('DOMContentLoaded', () => {
+  state.versuche = [];
+  state.selection = { foerder: true, schluck: true };
+
+  installAudioUnlock();
+  initTabs();
+  hookStaticInputs();
+  hookVersuchDelegation();
+  hookHistoryDelegation();
+
+  loadDraft();
+  syncMetaToUi();
+  syncBrunnenToUi();
+  syncSelectionToUi();
+  renderVersuche();
+  renderLiveTab();
+  renderHistoryList();
+  initInstallButton();
+
+  $('btnAddVersuch')?.addEventListener('click', () => {
+    const v = defaultVersuch();
+    state.versuche.push(v);
+    renderVersuche();
+    renderLiveTab();
+    saveDraftDebounced();
+
+    setTimeout(() => {
+      document.querySelector(`.versuch-card[data-vid="${v.id}"]`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }, 40);
+  });
+
+  $('btnSave')?.addEventListener('click', () => {
+    saveCurrentToHistory();
+    saveDraftDebounced();
+    alert('Pumpversuch im Verlauf gespeichert.');
+  });
+
+  $('btnPdf')?.addEventListener('click', async () => {
+    try {
+      await exportPdf();
+    } catch (err) {
+      console.error(err);
+      alert('PDF-Fehler: ' + (err?.message || String(err)));
+    }
+  });
+
+  $('btnReset')?.addEventListener('click', resetAll);
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register(`${BASE}sw.js?v=30`).catch(err => console.error('SW:', err));
+  }
+});
