@@ -848,173 +848,277 @@ function hookGlobalPhotoDelegation(){
 }
 
 /* ══════════════════════════════════════════════════════
-   OCR – verbessert für Werte mit 2 Nachkommastellen
+   OCR – speziell für FLYPPER WS-F4 LCD-Display
+   Zahl steht mittig im Display, Format: X,XXX m³
+   Aufrunden auf 2 Nachkommastellen (z.B. 2,144 → 2,15)
 ══════════════════════════════════════════════════════ */
-function openOcrModal(vid,rowIdx){
-  _ocrTargetVid=vid;
-  _ocrTargetRowIdx=rowIdx;
-  $('ocrPreviewImg').src='';
-  $('ocrResultInput').value='';
-  $('ocrStatus').textContent='Bitte Foto aufnehmen…';
-  $('ocrModal').hidden=false;
-  setTimeout(()=>$('ocrFileInput').click(),100);
+function openOcrModal(vid, rowIdx){
+  _ocrTargetVid = vid;
+  _ocrTargetRowIdx = rowIdx;
+  $('ocrPreviewImg').src = '';
+  $('ocrResultInput').value = '';
+  $('ocrStatus').textContent = 'Bitte Foto des Durchflussmessers aufnehmen…';
+  $('ocrModal').hidden = false;
+  setTimeout(() => $('ocrFileInput').click(), 100);
 }
 function closeOcrModal(){
-  $('ocrModal').hidden=true;
-  _ocrTargetVid=null;
-  _ocrTargetRowIdx=null;
+  $('ocrModal').hidden = true;
+  _ocrTargetVid = null;
+  _ocrTargetRowIdx = null;
 }
-
 function canvasToDataUrl(canvas){
-  return canvas.toDataURL('image/jpeg',0.92);
+  return canvas.toDataURL('image/jpeg', 0.95);
 }
 
-/* Bildvorverarbeitung:
-   - Mittelpunkt croppen (Display-Bereich)
-   - Graustufen
-   - Kontrast anheben
-   - Schwarz/Weiß
-   - 2x Upscale
+/* Rundet IMMER auf 2 Nachkommastellen AUF (ceiling) */
+function ceilTo2(n){
+  return Math.ceil(n * 100) / 100;
+}
+
+/* Vorverarbeitung speziell für FLYPPER WS-F4:
+   - LCD-Display ist in der oberen Mitte des runden Gehäuses
+   - Crop: horizontal 12-88%, vertikal 28-56%
+   - 4x Upscale
+   - Graustufen → Invertieren (dunkle Segmente → hell für Tesseract)
+   - Kontrastverstärkung + Schwellenwert
 */
 async function preprocessForOcr(dataUrl){
-  return new Promise((resolve,reject)=>{
-    const img=new Image();
-    img.onload=()=>{
-      const srcW=img.width;
-      const srcH=img.height;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const srcW = img.width;
+      const srcH = img.height;
 
-      // typischer Bereich: mittig
-      const cropW=Math.round(srcW*0.78);
-      const cropH=Math.round(srcH*0.38);
-      const cropX=Math.round((srcW-cropW)/2);
-      const cropY=Math.round(srcH*0.30);
+      // Crop direkt auf das LCD-Display-Rechteck
+      const cropX = Math.round(srcW * 0.12);
+      const cropY = Math.round(srcH * 0.28);
+      const cropW = Math.round(srcW * 0.76);
+      const cropH = Math.round(srcH * 0.28);
 
-      const tmp=document.createElement('canvas');
-      tmp.width=cropW*2;
-      tmp.height=cropH*2;
-      const ctx=tmp.getContext('2d');
-      ctx.imageSmoothingEnabled=false;
-      ctx.drawImage(img,cropX,cropY,cropW,cropH,0,0,tmp.width,tmp.height);
+      // 4x Upscale für bessere Texterkennung
+      const scale = 4;
+      const tmp = document.createElement('canvas');
+      tmp.width  = cropW * scale;
+      tmp.height = cropH * scale;
+      const ctx = tmp.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, tmp.width, tmp.height);
 
-      const imageData=ctx.getImageData(0,0,tmp.width,tmp.height);
-      const d=imageData.data;
+      const imageData = ctx.getImageData(0, 0, tmp.width, tmp.height);
+      const d = imageData.data;
 
-      for(let i=0;i<d.length;i+=4){
-        const gray=Math.round(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
+      for(let i = 0; i < d.length; i += 4){
+        // Graustufen
+        const gray = Math.round(d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114);
         // Kontrast strecken
-        let v=(gray-128)*1.8+128;
-        v=clamp(Math.round(v),0,255);
-        // binarisieren
-        v=v>145?255:0;
-        d[i]=d[i+1]=d[i+2]=v;
-        d[i+3]=255;
+        let v = clamp(Math.round((gray - 100) * 2.2 + 100), 0, 255);
+        // LCD-Segmente sind DUNKEL auf hellem Grund → INVERTIEREN für Tesseract
+        // (helle Zeichen auf dunklem Grund = besser erkennbar)
+        v = v > 130 ? 0 : 255;
+        d[i] = d[i+1] = d[i+2] = v;
+        d[i+3] = 255;
       }
-      ctx.putImageData(imageData,0,0);
+      ctx.putImageData(imageData, 0, 0);
       resolve(canvasToDataUrl(tmp));
     };
-    img.onerror=reject;
-    img.src=dataUrl;
+    img.onerror = reject;
+    img.src = dataUrl;
   });
 }
 
-function extractBestDecimalValue(text){
-  const cleaned=String(text||'')
-    .replace(/[Oo]/g,'0')
-    .replace(/[lI]/g,'1')
-    .replace(/[^0-9,.\n ]+/g,' ');
+/* Variante ohne Inversion — als Fallback */
+async function preprocessForOcrNoInvert(dataUrl){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const srcW = img.width;
+      const srcH = img.height;
 
-  // zuerst genau 2 Nachkommastellen bevorzugen
-  const strict = cleaned.match(/\d{1,4}[.,]\d{2}/g) || [];
-  const strictVals = strict
-    .map(s=>Number(s.replace(',','.')))
-    .filter(n=>Number.isFinite(n) && n>0 && n<9999);
+      // etwas größerer Bereich als Fallback
+      const cropX = Math.round(srcW * 0.08);
+      const cropY = Math.round(srcH * 0.25);
+      const cropW = Math.round(srcW * 0.84);
+      const cropH = Math.round(srcH * 0.32);
 
-  if(strictVals.length){
-    // bei mehreren Treffern die "realistischste" Zahl für m³/h bevorzugen
-    const preferred=strictVals
-      .filter(n=>n>=0.01 && n<=250)
-      .sort((a,b)=>a-b);
-    return preferred[0] ?? strictVals[0];
-  }
+      const scale = 3;
+      const tmp = document.createElement('canvas');
+      tmp.width  = cropW * scale;
+      tmp.height = cropH * scale;
+      const ctx = tmp.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, tmp.width, tmp.height);
 
-  const relaxed = cleaned.match(/\d{1,4}[.,]\d{1,3}|\d{1,4}/g) || [];
-  const relaxedVals = relaxed
-    .map(s=>Number(s.replace(',','.')))
-    .filter(n=>Number.isFinite(n) && n>0 && n<9999);
+      const imageData = ctx.getImageData(0, 0, tmp.width, tmp.height);
+      const d = imageData.data;
 
-  const preferred=relaxedVals
-    .filter(n=>n>=0.01 && n<=250)
-    .sort((a,b)=>a-b);
-
-  return preferred[0] ?? relaxedVals[0] ?? undefined;
+      for(let i = 0; i < d.length; i += 4){
+        const gray = Math.round(d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114);
+        let v = clamp(Math.round((gray - 110) * 2.0 + 110), 0, 255);
+        // Keine Inversion
+        v = v > 128 ? 255 : 0;
+        d[i] = d[i+1] = d[i+2] = v;
+        d[i+3] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      resolve(canvasToDataUrl(tmp));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
 }
 
-async function runOcrWithFallbacks(originalDataUrl, processedDataUrl){
-  if(!window.Tesseract) throw new Error('Tesseract nicht geladen');
+/* Bestes Ergebnis aus OCR-Text extrahieren.
+   FLYPPER zeigt: [kleines Zeichen] [Zahl] m³
+   Format: X,XXX oder X.XXX (immer 3 Nachkommastellen am Display)
+   Wir runden AUF auf 2 Nachkommastellen.
+*/
+function extractBestDecimalValue(text){
+  const raw = String(text || '')
+    // Häufige OCR-Fehler bei LCD-Segmenten
+    .replace(/[Oo]/g, '0')
+    .replace(/[lIi|]/g, '1')
+    .replace(/[Ss]/g, '5')
+    .replace(/[Bb]/g, '8')
+    .replace(/[Gg]/g, '9')
+    .replace(/[Zz]/g, '2')
+    // Sonstige Bereinigung
+    .replace(/[^0-9,.\n ]+/g, ' ');
 
-  const configs=[
-    { label:'verarbeitet', img:processedDataUrl, psm:7 },
-    { label:'verarbeitet', img:processedDataUrl, psm:6 },
-    { label:'original', img:originalDataUrl, psm:7 }
-  ];
+  // Primär: Format X,XXX oder X.XXX (3 Nachkommastellen wie am Display)
+  const pattern3 = raw.match(/\d{1,3}[.,]\d{3}/g) || [];
+  const vals3 = pattern3
+    .map(s => Number(s.replace(',', '.')))
+    .filter(n => Number.isFinite(n) && n > 0 && n < 9999);
 
-  let texts=[];
-
-  for(const cfg of configs){
-    const { data:{ text } } = await Tesseract.recognize(cfg.img,'eng',{
-      tessedit_pageseg_mode: cfg.psm,
-      tessedit_char_whitelist: '0123456789.,',
-      preserve_interword_spaces: '1',
-      logger:m=>{
-        if(m.status==='recognizing text'){
-          $('ocrStatus').textContent=`Erkenne ${cfg.label}… ${Math.round(m.progress*100)}%`;
-        }
-      }
-    });
-    texts.push(text||'');
-    const best=extractBestDecimalValue(text||'');
-    if(best!==undefined) return { best, text };
+  if(vals3.length){
+    // Bevorzuge Werte im realistischen m³-Bereich (Fördermenge 0.01–250)
+    const preferred = vals3.filter(n => n >= 0.01 && n <= 250).sort((a, b) => a - b);
+    const best = preferred[0] ?? vals3[0];
+    return ceilTo2(best);
   }
 
-  const merged=texts.join('\n');
-  return { best:extractBestDecimalValue(merged), text:merged };
+  // Fallback: X,XX oder X.XX (2 Nachkommastellen)
+  const pattern2 = raw.match(/\d{1,3}[.,]\d{2}/g) || [];
+  const vals2 = pattern2
+    .map(s => Number(s.replace(',', '.')))
+    .filter(n => Number.isFinite(n) && n > 0 && n < 9999);
+
+  if(vals2.length){
+    const preferred = vals2.filter(n => n >= 0.01 && n <= 250).sort((a, b) => a - b);
+    const best = preferred[0] ?? vals2[0];
+    return ceilTo2(best);
+  }
+
+  // Letzter Fallback: irgendeine Zahl
+  const allNums = raw.match(/\d{1,4}[.,]\d{1,4}|\d{2,4}/g) || [];
+  const allVals = allNums
+    .map(s => Number(s.replace(',', '.')))
+    .filter(n => Number.isFinite(n) && n >= 0.01 && n <= 250)
+    .sort((a, b) => a - b);
+
+  return allVals.length ? ceilTo2(allVals[0]) : undefined;
+}
+
+/* Mehrere OCR-Versuche mit verschiedenen Konfigurationen */
+async function runOcrWithFallbacks(originalDataUrl, processedUrl, processedUrlNoInvert){
+  if(!window.Tesseract) throw new Error('Tesseract nicht geladen');
+
+  // Alle Versuche der Reihe nach — erster Treffer mit plausiblem Wert gewinnt
+  const configs = [
+    // Invertiert (hell auf dunkel) — PSM 7 = einzelne Zeile
+    { label:'Display invertiert (Zeile)', img: processedUrl,          psm: 7 },
+    // Invertiert — PSM 8 = einzelnes Wort
+    { label:'Display invertiert (Wort)',  img: processedUrl,          psm: 8 },
+    // Nicht invertiert — PSM 7
+    { label:'Display normal (Zeile)',     img: processedUrlNoInvert,  psm: 7 },
+    // Nicht invertiert — PSM 6 = Block
+    { label:'Display normal (Block)',     img: processedUrlNoInvert,  psm: 6 },
+    // Original, keine Verarbeitung — PSM 7
+    { label:'Original (Zeile)',           img: originalDataUrl,       psm: 7 },
+  ];
+
+  const allTexts = [];
+
+  for(const cfg of configs){
+    try{
+      const { data: { text } } = await Tesseract.recognize(cfg.img, 'eng', {
+        tessedit_pageseg_mode:     String(cfg.psm),
+        tessedit_char_whitelist:   '0123456789,.',
+        preserve_interword_spaces: '1',
+        logger: m => {
+          if(m.status === 'recognizing text'){
+            $('ocrStatus').textContent =
+              `${cfg.label}… ${Math.round(m.progress * 100)}%`;
+          }
+        }
+      });
+
+      allTexts.push(text || '');
+      const best = extractBestDecimalValue(text || '');
+      if(best !== undefined){
+        $('ocrStatus').textContent =
+          `Erkannt via ${cfg.label}: ${best.toFixed(2).replace('.', ',')} m³`;
+        return { best, text };
+      }
+    }catch(err){
+      console.warn(`OCR-Versuch "${cfg.label}" fehlgeschlagen:`, err);
+    }
+  }
+
+  // Alle Texte zusammenführen und noch einmal probieren
+  const merged = allTexts.join('\n');
+  const best = extractBestDecimalValue(merged);
+  return { best, text: merged };
 }
 
 function initOcrHandlers(){
-  $('ocrFileInput')?.addEventListener('change',async(e)=>{
-    const file=e.target.files?.[0];
+  $('ocrFileInput')?.addEventListener('change', async(e) => {
+    const file = e.target.files?.[0];
     if(!file) return;
 
     try{
-      const originalDataUrl=await downscaleImageFile(file,1800,0.88);
-      $('ocrPreviewImg').src=originalDataUrl;
-      $('ocrStatus').textContent='Bild wird vorbereitet…';
+      $('ocrStatus').textContent = 'Bild wird geladen…';
+      const originalDataUrl = await downscaleImageFile(file, 2400, 0.92);
+      $('ocrPreviewImg').src = originalDataUrl;
 
-      const processedDataUrl=await preprocessForOcr(originalDataUrl);
+      $('ocrStatus').textContent = 'Display wird zugeschnitten und aufbereitet…';
+      const processedUrl        = await preprocessForOcr(originalDataUrl);
+      const processedUrlNoInvert = await preprocessForOcrNoInvert(originalDataUrl);
 
-      $('ocrStatus').textContent='Texterkennung läuft…';
-      const { best } = await runOcrWithFallbacks(originalDataUrl, processedDataUrl);
+      $('ocrStatus').textContent = 'Texterkennung läuft…';
+      const { best } = await runOcrWithFallbacks(
+        originalDataUrl, processedUrl, processedUrlNoInvert
+      );
 
-      if(best!==undefined){
-        $('ocrResultInput').value = Number(best).toFixed(2);
-        $('ocrStatus').textContent = `Erkannt: ${Number(best).toFixed(2)} – bitte prüfen und übernehmen.`;
+      if(best !== undefined){
+        $('ocrResultInput').value = best.toFixed(2).replace('.', ',');
+        $('ocrStatus').textContent =
+          `Erkannt: ${best.toFixed(2).replace('.', ',')} m³ (aufgerundet auf 2 Stellen) – bitte prüfen.`;
       }else{
-        $('ocrStatus').textContent = 'Keine plausible Zahl erkannt – bitte manuell eingeben.';
+        $('ocrResultInput').value = '';
+        $('ocrStatus').textContent =
+          'Keine Zahl erkannt – bitte manuell eingeben. ' +
+          'Tipp: Foto gerade und nah am Display aufnehmen.';
       }
     }catch(err){
       console.error(err);
-      $('ocrStatus').textContent='Fehler bei der Texterkennung.';
+      $('ocrStatus').textContent = 'Fehler bei der Texterkennung.';
     }finally{
-      e.target.value='';
+      e.target.value = '';
     }
   });
 
-  $('ocrAccept')?.addEventListener('click',()=>{
-    const v=getVersuchById(_ocrTargetVid);
-    if(v && Number.isFinite(Number(String($('ocrResultInput').value).replace(',','.')))){
-      const idx=_ocrTargetRowIdx;
+  $('ocrAccept')?.addEventListener('click', () => {
+    const v = getVersuchById(_ocrTargetVid);
+    const rawInput = String($('ocrResultInput').value).replace(',', '.');
+    const num = Number(rawInput);
+
+    if(v && Number.isFinite(num) && num > 0){
+      const idx = _ocrTargetRowIdx;
       if(v.messungen[idx]){
-        v.messungen[idx].foerder_menge = Number(String($('ocrResultInput').value).replace(',','.')).toFixed(2);
+        // Nochmal ceiling anwenden, falls Nutzer manuell geändert hat
+        v.messungen[idx].foerder_menge = ceilTo2(num).toFixed(2);
         renderVersuche();
         saveDraftDebounced();
         scheduleLiveRender();
@@ -1023,12 +1127,11 @@ function initOcrHandlers(){
     closeOcrModal();
   });
 
-  $('ocrCancel')?.addEventListener('click',closeOcrModal);
-  $('ocrModal')?.addEventListener('click',e=>{
-    if(e.target.id==='ocrModal') closeOcrModal();
+  $('ocrCancel')?.addEventListener('click', closeOcrModal);
+  $('ocrModal')?.addEventListener('click', e => {
+    if(e.target.id === 'ocrModal') closeOcrModal();
   });
 }
-
 /* ══════════════════════════════════════════════════════
    TIMER
 ══════════════════════════════════════════════════════ */
