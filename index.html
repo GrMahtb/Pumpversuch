@@ -8,147 +8,401 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Pumpversuch" />
   <title>Pumpversuch-Protokoll</title>
-  <link rel="manifest" href="/Pumpversuch/manifest.json?v=31" />
-  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=31" />
-  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=31" />
+  <link rel="manifest" href="/Pumpversuch/manifest.json?v=40" />
+  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=40" />
+  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=40" />
   <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
 </head>
 <body>
-  <header class="brand">
-    <div class="brand__bar">
-      <div class="brand__logo">
-        <img src="/Pumpversuch/logo.svg?v=31" alt="HTB Logo"
-          onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=31';" />
+
+<!-- Floating Timer Widget -->
+<div id="floatingTimer" class="floating-timer" hidden>
+  <div class="floating-timer__label" id="floatingTimerLabel">Stufe 1</div>
+  <div class="floating-timer__display" id="floatingTimerDisplay">00:00</div>
+</div>
+
+<!-- Time Adjust Modal -->
+<div id="timeAdjustModal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <div class="modal-title">⏱ Zeit anpassen</div>
+    <div class="modal-sub">Offset eingeben (positiv = Zeit vorspulen, negativ = zurücksetzen)</div>
+    <div class="modal-field-row">
+      <label class="modal-field-label">Offset [mm:ss]</label>
+      <div class="modal-input-row">
+        <button class="modal-adj-btn" data-adj="-60">-1 min</button>
+        <button class="modal-adj-btn" data-adj="-10">-10 s</button>
+        <input id="timeAdjustInput" class="modal-input" type="number" step="1" value="0" placeholder="Sekunden" />
+        <button class="modal-adj-btn" data-adj="+10">+10 s</button>
+        <button class="modal-adj-btn" data-adj="+60">+1 min</button>
       </div>
-      <div class="brand__info">
-        <div class="brand__company">Pumpversuch-Protokoll</div>
-        <div class="brand__subtitle">HTB Baugesellschaft m.b.H. · Entnahmebrunnen und Rückgabebrunnen</div>
+      <div class="modal-preview" id="timeAdjustPreview">Neue Zeit: 00:00</div>
+    </div>
+    <div class="modal-buttons">
+      <button id="timeAdjustApply" class="btn btn--save btn--small" type="button">Übernehmen</button>
+      <button id="timeAdjustCancel" class="btn btn--ghost btn--small" type="button">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<header class="brand">
+  <div class="brand__bar">
+    <div class="brand__logo">
+      <img src="/Pumpversuch/logo.svg?v=40" alt="HTB Logo"
+        onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=40';" />
+    </div>
+    <div class="brand__info">
+      <div class="brand__company">Pumpversuch-Protokoll</div>
+      <div class="brand__subtitle">HTB Baugesellschaft m.b.H. · Entnahmebrunnen und Rückgabebrunnen</div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Menü">
+  <button class="tab is-active" data-tab="protokoll"   type="button">Protokoll</button>
+  <button class="tab"           data-tab="restsand"    type="button">Restsand</button>
+  <button class="tab"           data-tab="ph"          type="button">pH/Sulfat</button>
+  <button class="tab"           data-tab="verlauf"     type="button">Verlauf</button>
+  <button class="tab"           data-tab="live"        type="button">Live</button>
+  <button class="tab"           data-tab="settings"    type="button">Einstellungen</button>
+</nav>
+
+<!-- ══════════════════════════════════════ PROTOKOLL ══════════════════════════════════════ -->
+<main id="tab-protokoll" class="pane is-active" role="tabpanel">
+  <details class="card card--collapsible" open>
+    <summary class="card__title">Stammdaten</summary>
+    <div class="card__body">
+      <div class="form-grid">
+        <label class="field field--full"><span class="field__label">Objekt / Bauvorhaben</span>
+          <input id="meta-objekt" class="field__input" type="text" placeholder="z.B. WA-Gemeindegutstraße" /></label>
+        <label class="field"><span class="field__label">Grundstück / Straße</span>
+          <input id="meta-grundstueck" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Ort</span>
+          <input id="meta-ort" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Geologie</span>
+          <input id="meta-geologie" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Auftragsnummer</span>
+          <input id="meta-auftragsnummer" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Auftraggeber / Bauherr</span>
+          <input id="meta-auftraggeber" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Bauleitung</span>
+          <input id="meta-bauleitung" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Bohrmeister</span>
+          <input id="meta-bohrmeister" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Koordination</span>
+          <input id="meta-koordination" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Geprüft durch</span>
+          <input id="meta-geprueftDurch" class="field__input" type="text" /></label>
+        <label class="field"><span class="field__label">Geprüft am</span>
+          <input id="meta-geprueftAm" class="field__input" type="date" /></label>
+        <label class="field field--full"><span class="field__label">Übersichtsfoto (Baustelle)</span>
+          <div class="overview-photo-wrap" id="overviewPhotoWrap">
+            <button class="overview-photo-btn" id="overviewPhotoBtnTrigger" type="button">
+              <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="18">
+                <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
+                <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
+                <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+                <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
+              </svg>
+              Übersichtsfoto aufnehmen
+            </button>
+            <input id="overviewPhotoInput" type="file" accept="image/*" capture="environment" style="display:none" />
+            <div id="overviewPhotoThumb" class="overview-thumb-wrap" hidden></div>
+          </div>
+        </label>
       </div>
     </div>
-  </header>
+  </details>
 
-  <nav class="tabs" role="tablist" aria-label="Menü">
-    <button class="tab is-active" data-tab="protokoll" type="button">Protokoll</button>
-    <button class="tab" data-tab="verlauf" type="button">Verlauf</button>
-    <button class="tab" data-tab="live" type="button">Live</button>
-  </nav>
+  <details class="card card--collapsible" open>
+    <summary class="card__title">Brunnendaten</summary>
+    <div class="card__body">
+      <div class="select-grid">
+        <label class="select-card">
+          <input type="checkbox" id="sel-foerder" checked />
+          <span>Entnahmebrunnen verwenden</span>
+        </label>
+        <label class="select-card">
+          <input type="checkbox" id="sel-schluck" checked />
+          <span>Rückgabebrunnen verwenden</span>
+        </label>
+      </div>
+      <div class="brunnen-grid">
+        <section id="box-foerder" class="brunnen-box">
+          <div class="brunnen-title brunnen-title--foerder">Entnahmebrunnen</div>
+          <div class="form-grid">
+            <label class="field"><span class="field__label">Brunnendurchmesser [mm]</span>
+              <input id="foerder-dm" class="field__input" type="number" step="1" /></label>
+            <label class="field"><span class="field__label">Endteufe [m]</span>
+              <input id="foerder-endteufe" class="field__input" type="number" step="0.01" /></label>
+            <label class="field field--full"><span class="field__label">Ruhewasserstand [m ab OK Brunnenausbau]</span>
+              <input id="foerder-ruhe" class="field__input" type="number" step="0.001" /></label>
+          </div>
+        </section>
+        <section id="box-schluck" class="brunnen-box">
+          <div class="brunnen-title brunnen-title--schluck">Rückgabebrunnen</div>
+          <div class="form-grid">
+            <label class="field"><span class="field__label">Brunnendurchmesser [mm]</span>
+              <input id="schluck-dm" class="field__input" type="number" step="1" /></label>
+            <label class="field"><span class="field__label">Endteufe [m]</span>
+              <input id="schluck-endteufe" class="field__input" type="number" step="0.01" /></label>
+            <label class="field field--full"><span class="field__label">Ruhewasserstand [m ab OK Brunnenausbau]</span>
+              <input id="schluck-ruhe" class="field__input" type="number" step="0.001" /></label>
+          </div>
+        </section>
+      </div>
+    </div>
+  </details>
 
-  <main id="tab-protokoll" class="pane is-active" role="tabpanel">
-    <details class="card card--collapsible" open>
-      <summary class="card__title">Stammdaten</summary>
-      <div class="card__body">
-        <div class="form-grid">
-          <label class="field field--full"><span class="field__label">Objekt</span>
-            <input id="meta-objekt" class="field__input" type="text" placeholder="Objekt / Baustelle" /></label>
-          <label class="field"><span class="field__label">Grundstück / Straße</span>
-            <input id="meta-grundstueck" class="field__input" type="text" /></label>
-          <label class="field"><span class="field__label">Ort</span>
-            <input id="meta-ort" class="field__input" type="text" /></label>
-          <label class="field"><span class="field__label">Geologie</span>
-            <input id="meta-geologie" class="field__input" type="text" /></label>
-          <label class="field"><span class="field__label">Auftragsnummer</span>
-            <input id="meta-auftragsnummer" class="field__input" type="text" /></label>
-          <label class="field"><span class="field__label">Bauleitung</span>
-            <input id="meta-bauleitung" class="field__input" type="text" /></label>
-          <label class="field"><span class="field__label">Bohrmeister</span>
-            <input id="meta-bohrmeister" class="field__input" type="text" /></label>
-          <label class="field"><span class="field__label">Koordination</span>
-            <input id="meta-koordination" class="field__input" type="text" /></label>
-          <label class="field"><span class="field__label">Geprüft durch</span>
-            <input id="meta-geprueftDurch" class="field__input" type="text" /></label>
-          <label class="field"><span class="field__label">Geprüft am</span>
-            <input id="meta-geprueftAm" class="field__input" type="date" /></label>
+  <section class="card">
+    <div class="card__title">Pumpstufen</div>
+    <div id="versucheContainer"></div>
+    <div class="plus-wrap">
+      <button id="btnAddVersuch" class="btn-plus" type="button">+</button>
+      <div class="plus-label">Pumpstufe hinzufügen</div>
+    </div>
+  </section>
+
+  <section class="card card--actions card--actions-bottom">
+    <div class="action-row">
+      <button id="btnSave"  class="btn btn--save btn--small"  type="button">Speichern</button>
+      <button id="btnPdf"   class="btn btn--ghost btn--small" type="button">PDF Protokoll</button>
+      <button id="btnReset" class="btn btn--ghost btn--small" type="button">Reset</button>
+    </div>
+    <div class="hint">Speichern im Verlauf · PDF pro Pumpstufe als A4-Hochformat</div>
+  </section>
+</main>
+
+<!-- ══════════════════════════════════════ RESTSAND ══════════════════════════════════════ -->
+<main id="tab-restsand" class="pane" role="tabpanel" hidden>
+  <section class="card">
+    <div class="card__title">Restsandmessung</div>
+    <div class="text" style="margin-bottom:12px">
+      <p>Messung mit <b>Imhoff-Trichter</b> (Volumen ml/l) und <b>Sieb</b> (Gewicht g). Je ein Beweisfoto.</p>
+    </div>
+
+    <div class="restsand-grid">
+      <!-- Imhoff -->
+      <div class="restsand-card">
+        <div class="restsand-card__title">🧪 Imhoff-Trichter</div>
+        <div class="restsand-photo-area" id="imhoffPhotoArea">
+          <button class="restsand-photo-btn" data-rs-photo="imhoff" type="button">
+            <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="26" height="22">
+              <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
+              <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
+              <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+              <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
+            </svg>
+            Foto aufnehmen
+          </button>
+          <input type="file" accept="image/*" capture="environment" id="imhoffPhotoInput" style="display:none" />
         </div>
+        <label class="field" style="margin-top:10px">
+          <span class="field__label">Gemessene Menge [ml/l]</span>
+          <input id="restsand-imhoff-menge" class="field__input" type="number" step="0.1" placeholder="z.B. 0.5" />
+        </label>
       </div>
-    </details>
-
-    <details class="card card--collapsible" open>
-      <summary class="card__title">Brunnendaten</summary>
-      <div class="card__body">
-        <div class="select-grid">
-          <label class="select-card">
-            <input type="checkbox" id="sel-foerder" checked />
-            <span>Entnahmebrunnen verwenden</span>
-          </label>
-          <label class="select-card">
-            <input type="checkbox" id="sel-schluck" checked />
-            <span>Rückgabebrunnen verwenden</span>
-          </label>
+      <!-- Sieb -->
+      <div class="restsand-card">
+        <div class="restsand-card__title">⚖️ Sieb / Gewicht</div>
+        <div class="restsand-photo-area" id="siebPhotoArea">
+          <button class="restsand-photo-btn" data-rs-photo="sieb" type="button">
+            <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="26" height="22">
+              <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
+              <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
+              <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+              <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
+            </svg>
+            Foto aufnehmen
+          </button>
+          <input type="file" accept="image/*" capture="environment" id="siebPhotoInput" style="display:none" />
         </div>
-        <div class="brunnen-grid">
-          <section id="box-foerder" class="brunnen-box">
-            <div class="brunnen-title brunnen-title--foerder">Entnahmebrunnen</div>
-            <div class="form-grid">
-              <label class="field"><span class="field__label">Brunnendurchmesser [mm]</span>
-                <input id="foerder-dm" class="field__input" type="number" step="1" /></label>
-              <label class="field"><span class="field__label">Endteufe [m]</span>
-                <input id="foerder-endteufe" class="field__input" type="number" step="0.01" /></label>
-              <label class="field field--full"><span class="field__label">Ruhewasserstand [m ab OK Brunnenausbau]</span>
-                <input id="foerder-ruhe" class="field__input" type="number" step="0.001" /></label>
-            </div>
-          </section>
-          <section id="box-schluck" class="brunnen-box">
-            <div class="brunnen-title brunnen-title--schluck">Rückgabebrunnen</div>
-            <div class="form-grid">
-              <label class="field"><span class="field__label">Brunnendurchmesser [mm]</span>
-                <input id="schluck-dm" class="field__input" type="number" step="1" /></label>
-              <label class="field"><span class="field__label">Endteufe [m]</span>
-                <input id="schluck-endteufe" class="field__input" type="number" step="0.01" /></label>
-              <label class="field field--full"><span class="field__label">Ruhewasserstand [m ab OK Brunnenausbau]</span>
-                <input id="schluck-ruhe" class="field__input" type="number" step="0.001" /></label>
-            </div>
-          </section>
-        </div>
+        <label class="field" style="margin-top:10px">
+          <span class="field__label">Gemessene Menge [g]</span>
+          <input id="restsand-sieb-menge" class="field__input" type="number" step="0.01" placeholder="z.B. 1.2" />
+        </label>
       </div>
-    </details>
+    </div>
 
-    <section class="card">
-      <div class="card__title">Pumpstufen</div>
-      <div id="versucheContainer"></div>
-      <div class="plus-wrap">
-        <button id="btnAddVersuch" class="btn-plus" type="button">+</button>
-        <div class="plus-label">Pumpstufe hinzufügen</div>
+    <label class="field" style="margin-top:14px">
+      <span class="field__label">Bemerkung</span>
+      <textarea id="restsand-bemerkung" class="field__input field__textarea" rows="3" placeholder="Optionale Bemerkung zur Restsandmessung"></textarea>
+    </label>
+  </section>
+</main>
+
+<!-- ══════════════════════════════════════ pH/SULFAT ══════════════════════════════════════ -->
+<main id="tab-ph" class="pane" role="tabpanel" hidden>
+  <section class="card">
+    <div class="card__title">Prüfprotokoll Sulfatmessung Wasser</div>
+    <div class="form-grid">
+      <label class="field"><span class="field__label">Datum</span>
+        <input id="ph-datum" class="field__input" type="date" /></label>
+      <label class="field"><span class="field__label">Bauherr</span>
+        <input id="ph-bauherr" class="field__input" type="text" placeholder="z.B. Günter Gfall" /></label>
+      <label class="field field--full"><span class="field__label">Baustelle</span>
+        <input id="ph-baustelle" class="field__input" type="text" placeholder="z.B. Grundwassernutzung" /></label>
+      <label class="field field--full"><span class="field__label">Gewässername / Entnahmestelle</span>
+        <input id="ph-gewaessername" class="field__input" type="text" placeholder="z.B. grundwasser" /></label>
+    </div>
+    <div class="ph-info-box">
+      <b>Messung mittels Teststäbchen „Quantofix"</b><br/>
+      Ergebnis Messung nach 120 sec
+    </div>
+  </section>
+
+  <div class="ph-grid">
+    <!-- Sulfat -->
+    <section class="card ph-card">
+      <div class="card__title">Sulfatmessung SO₄²⁻</div>
+      <div class="ph-photo-area" id="sulfatPhotoArea">
+        <button class="restsand-photo-btn" data-ph-photo="sulfat" type="button">
+          <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="18">
+            <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
+            <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
+            <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+            <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
+          </svg>
+          Foto Teststäbchen
+        </button>
+        <input type="file" accept="image/*" capture="environment" id="sulfatPhotoInput" style="display:none" />
+      </div>
+      <label class="field" style="margin-top:10px">
+        <span class="field__label">Messwert [mg/l SO₄²⁻]</span>
+        <input id="ph-sulfat-wert" class="field__input" type="text" placeholder="z.B. &lt;200" />
+      </label>
+      <div class="ph-norm-box">
+        <div class="ph-norm-title">Grenzwerte Expositionsklassen (chemischer Angriff):</div>
+        <table class="ph-norm-table">
+          <tr><th>Merkmal</th><th>XA1</th><th>XA2</th><th>XA3</th></tr>
+          <tr><td>SO₄²⁻ [mg/l]</td><td>≥200 ≤600</td><td>>600 ≤3000</td><td>>3000 ≤6000</td></tr>
+        </table>
+        <div class="ph-norm-note">Anmachwasser (ÖNORM EN 1008): SO₄²⁻ max. 2000 mg/l</div>
       </div>
     </section>
 
-    <!-- Aktionsleiste jetzt ganz unten -->
-    <section class="card card--actions card--actions-bottom">
-      <div class="action-row">
-        <button id="btnSave" class="btn btn--save btn--small" type="button">Speichern</button>
-        <button id="btnPdf" class="btn btn--ghost btn--small" type="button">PDF</button>
-        <button id="btnReset" class="btn btn--ghost btn--small" type="button">Reset</button>
+    <!-- Temperatur -->
+    <section class="card ph-card">
+      <div class="card__title">Temperatur Messung</div>
+      <div class="ph-photo-area" id="tempPhotoArea">
+        <button class="restsand-photo-btn" data-ph-photo="temperatur" type="button">
+          <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="18">
+            <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
+            <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
+            <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+            <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
+          </svg>
+          Foto Thermometer
+        </button>
+        <input type="file" accept="image/*" capture="environment" id="tempPhotoInput" style="display:none" />
       </div>
-      <div class="hint">Speichern im Verlauf · PDF pro Pumpstufe als A4-Hochformat (Beweisfoto vorab, falls aufgenommen)</div>
+      <label class="field" style="margin-top:10px">
+        <span class="field__label">Temperatur [°C]</span>
+        <input id="ph-temp-wert" class="field__input" type="number" step="0.1" placeholder="z.B. 13.8" />
+      </label>
     </section>
-  </main>
 
-  <main id="tab-verlauf" class="pane" role="tabpanel" hidden>
-    <section class="card">
-      <div class="card__title">Gespeicherte Protokolle</div>
-      <div id="historyList" class="historyList"></div>
-      <div class="hint">Neueste oben · lokal gespeichert · max. 30 Einträge</div>
-    </section>
-  </main>
-
-  <main id="tab-live" class="pane" role="tabpanel" hidden>
-    <section class="card">
-      <div class="card__title">Live-Auswertung</div>
-      <div class="text">
-        <p><b>Diagramm:</b> Entnahmebrunnen links, Rückgabebrunnen rechts (sofern beide ausgewählt) – Achsen passen sich automatisch an.</p>
-        <p><b>Kf-Abschätzung:</b> wird nur in der App und im Verlauf angezeigt, nicht im PDF.</p>
-        <p><b>Hinweis:</b> Die Berechnung ist eine erste ingenieurmäßige Näherung aus Rate, Brunnengeometrie und Wasserstandsänderung.</p>
+    <!-- pH -->
+    <section class="card ph-card">
+      <div class="card__title">pH Messung</div>
+      <div class="ph-photo-area" id="phPhotoArea">
+        <button class="restsand-photo-btn" data-ph-photo="ph" type="button">
+          <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="18">
+            <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
+            <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
+            <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
+            <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
+          </svg>
+          Foto pH-Meter
+        </button>
+        <input type="file" accept="image/*" capture="environment" id="phPhotoInput" style="display:none" />
       </div>
+      <label class="field" style="margin-top:10px">
+        <span class="field__label">pH-Wert</span>
+        <input id="ph-ph-wert" class="field__input" type="number" step="0.1" placeholder="z.B. 7.3" />
+      </label>
     </section>
-    <div id="liveContainer"></div>
-  </main>
+  </div>
+</main>
 
-  <footer class="footer">
-    &copy; <b>HTB Baugesellschaft m.b.H.</b> – Pumpversuch PWA
-    <br />
-    <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
-  </footer>
+<!-- ══════════════════════════════════════ VERLAUF ══════════════════════════════════════ -->
+<main id="tab-verlauf" class="pane" role="tabpanel" hidden>
+  <section class="card">
+    <div class="card__title">Gespeicherte Protokolle</div>
+    <div id="historyList" class="historyList"></div>
+    <div class="hint">Neueste oben · lokal gespeichert · max. 30 Einträge</div>
+  </section>
+</main>
 
-  <script src="/Pumpversuch/app.js?v=31"></script>
+<!-- ══════════════════════════════════════ LIVE ══════════════════════════════════════ -->
+<main id="tab-live" class="pane" role="tabpanel" hidden>
+  <section class="card">
+    <div class="card__title">Live-Auswertung</div>
+    <div class="text">
+      <p><b>Diagramm:</b> Entnahmebrunnen links, Rückgabebrunnen rechts – Achsen passen sich automatisch an.</p>
+      <p><b>Kf-Abschätzung:</b> erste ingenieurmäßige Näherung; nicht im PDF.</p>
+    </div>
+  </section>
+  <div id="liveContainer"></div>
+</main>
+
+<!-- ══════════════════════════════════════ EINSTELLUNGEN ══════════════════════════════════════ -->
+<main id="tab-settings" class="pane" role="tabpanel" hidden>
+  <section class="card">
+    <div class="card__title">⚙️ Einstellungen</div>
+
+    <div class="settings-group">
+      <div class="settings-group__title">4.1 Alarm</div>
+      <label class="field">
+        <span class="field__label">Alarmdauer [Sekunden]</span>
+        <input id="settings-alarmDuration" class="field__input" type="number" min="1" max="30" step="1" value="4" />
+      </label>
+      <div class="hint" style="text-align:left;margin-top:4px">Digitalwecker-Muster (beep-beep-beep) – Dauer in Sekunden</div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group__title">4.2 PDF Export (Verlauf)</div>
+      <label class="select-card" style="margin-bottom:8px">
+        <input type="radio" name="pdfType" id="pdfType-protokoll" value="protokoll" checked />
+        <span><b>Protokoll</b> – nur Messdaten und Diagramme</span>
+      </label>
+      <label class="select-card">
+        <input type="radio" name="pdfType" id="pdfType-vollstaendig" value="vollstaendig" />
+        <span><b>Vollständige Auswertung</b> – Deckblatt, Inhaltsverzeichnis, Protokoll, Fotos, Restsand</span>
+      </label>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group__title">4.3 Vorlagen Export / Import</div>
+      <div class="action-row" style="justify-content:flex-start;gap:10px;flex-wrap:wrap">
+        <button id="btnExportTemplate" class="btn btn--ghost btn--small" type="button">📤 Vorlage exportieren (.htbpump.json)</button>
+        <button id="btnImportTemplate" class="btn btn--ghost btn--small" type="button">📥 Vorlage importieren</button>
+        <input id="importFileInput" type="file" accept=".json,.htbpump.json" style="display:none" />
+      </div>
+      <div class="hint" style="text-align:left;margin-top:8px">
+        Export: Stammdaten + Brunnendaten + leere Pumpstufen – ohne Messwerte und Fotos.<br/>
+        Import: Vorlage vom PC laden und hier anwenden.
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-group__title">4.4 App-Daten</div>
+      <div class="action-row" style="justify-content:flex-start;gap:10px;flex-wrap:wrap">
+        <button id="btnExportFull" class="btn btn--ghost btn--small" type="button">📦 Vollständiger Export</button>
+        <button id="btnImportFull" class="btn btn--ghost btn--small" type="button">📦 Vollständiger Import</button>
+        <input id="importFullInput" type="file" accept=".json" style="display:none" />
+      </div>
+      <div class="hint" style="text-align:left;margin-top:8px">Inkl. aller Messwerte, Fotos und Restsanddaten</div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  &copy; <b>HTB Baugesellschaft m.b.H.</b> – Pumpversuch PWA v40
+  <br/>
+  <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
+</footer>
+
+<script src="/Pumpversuch/app.js?v=40"></script>
 </body>
 </html>
