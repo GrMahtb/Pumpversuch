@@ -8,31 +8,32 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Pumpversuch" />
   <title>Pumpversuch-Protokoll</title>
-  <link rel="manifest" href="/Pumpversuch/manifest.json?v=40" />
-  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=40" />
-  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=40" />
+  <link rel="manifest" href="/Pumpversuch/manifest.json?v=50" />
+  <link rel="icon" type="image/svg+xml" href="/Pumpversuch/icon.svg?v=50" />
+  <link rel="stylesheet" href="/Pumpversuch/styles.css?v=50" />
   <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
 
-<!-- Floating Timer Widget -->
+<!-- ══ Floating Timer ══ -->
 <div id="floatingTimer" class="floating-timer" hidden>
   <div class="floating-timer__label" id="floatingTimerLabel">Stufe 1</div>
   <div class="floating-timer__display" id="floatingTimerDisplay">00:00</div>
 </div>
 
-<!-- Time Adjust Modal -->
+<!-- ══ Time Adjust Modal ══ -->
 <div id="timeAdjustModal" class="modal-overlay" hidden>
   <div class="modal-box">
     <div class="modal-title">⏱ Zeit anpassen</div>
-    <div class="modal-sub">Offset eingeben (positiv = Zeit vorspulen, negativ = zurücksetzen)</div>
+    <div class="modal-sub">Offset eingeben (positiv = vorspulen, negativ = zurück)</div>
     <div class="modal-field-row">
-      <label class="modal-field-label">Offset [mm:ss]</label>
+      <label class="modal-field-label">Offset [Sekunden]</label>
       <div class="modal-input-row">
         <button class="modal-adj-btn" data-adj="-60">-1 min</button>
         <button class="modal-adj-btn" data-adj="-10">-10 s</button>
-        <input id="timeAdjustInput" class="modal-input" type="number" step="1" value="0" placeholder="Sekunden" />
+        <input id="timeAdjustInput" class="modal-input" type="number" step="1" value="0" />
         <button class="modal-adj-btn" data-adj="+10">+10 s</button>
         <button class="modal-adj-btn" data-adj="+60">+1 min</button>
       </div>
@@ -45,29 +46,54 @@
   </div>
 </div>
 
+<!-- ══ OCR Modal ══ -->
+<div id="ocrModal" class="modal-overlay" hidden>
+  <div class="modal-box">
+    <div class="modal-title">📷 Wert scannen</div>
+    <div class="modal-sub">Foto vom Durchflussmesser wird ausgewertet</div>
+    <img id="ocrPreviewImg" class="ocr-preview-img" src="" alt="Scan-Vorschau" />
+    <div class="modal-field-row">
+      <label class="modal-field-label">Erkannter Wert [m³/h]</label>
+      <input id="ocrResultInput" class="modal-input" type="text" placeholder="wird erkannt …" />
+    </div>
+    <div id="ocrStatus" class="ocr-status"></div>
+    <div class="modal-buttons">
+      <button id="ocrAccept" class="btn btn--save btn--small" type="button">Übernehmen</button>
+      <button id="ocrCancel" class="btn btn--ghost btn--small" type="button">Abbrechen</button>
+    </div>
+  </div>
+</div>
+<!-- hidden OCR file input -->
+<input id="ocrFileInput" type="file" accept="image/*" capture="environment" style="display:none" />
+
 <header class="brand">
   <div class="brand__bar">
     <div class="brand__logo">
-      <img src="/Pumpversuch/logo.svg?v=40" alt="HTB Logo"
-        onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=40';" />
+      <img src="/Pumpversuch/logo.svg?v=50" alt="HTB Logo"
+        onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=50';" />
     </div>
     <div class="brand__info">
       <div class="brand__company">Pumpversuch-Protokoll</div>
-      <div class="brand__subtitle">HTB Baugesellschaft m.b.H. · Entnahmebrunnen und Rückgabebrunnen</div>
+      <div class="brand__subtitle">HTB Baugesellschaft m.b.H.</div>
     </div>
   </div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Menü">
-  <button class="tab is-active" data-tab="protokoll"   type="button">Protokoll</button>
-  <button class="tab"           data-tab="restsand"    type="button">Restsand</button>
-  <button class="tab"           data-tab="ph"          type="button">pH/Sulfat</button>
-  <button class="tab"           data-tab="verlauf"     type="button">Verlauf</button>
-  <button class="tab"           data-tab="live"        type="button">Live</button>
-  <button class="tab"           data-tab="settings"    type="button">Einstellungen</button>
+  <button class="tab is-active" data-tab="protokoll" type="button">Protokoll</button>
+  <button class="tab"           data-tab="restsand"  type="button">Restsand</button>
+  <button class="tab"           data-tab="ph"        type="button">pH/Sulfat</button>
+  <button class="tab"           data-tab="verlauf"   type="button">Verlauf</button>
+  <button class="tab"           data-tab="live"      type="button">Live</button>
+  <button class="tab tab--icon" data-tab="settings"  type="button" aria-label="Einstellungen">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="2"/>
+    </svg>
+  </button>
 </nav>
 
-<!-- ══════════════════════════════════════ PROTOKOLL ══════════════════════════════════════ -->
+<!-- ══════════ PROTOKOLL ══════════ -->
 <main id="tab-protokoll" class="pane is-active" role="tabpanel">
   <details class="card card--collapsible" open>
     <summary class="card__title">Stammdaten</summary>
@@ -95,16 +121,16 @@
           <input id="meta-geprueftDurch" class="field__input" type="text" /></label>
         <label class="field"><span class="field__label">Geprüft am</span>
           <input id="meta-geprueftAm" class="field__input" type="date" /></label>
-        <label class="field field--full"><span class="field__label">Übersichtsfoto (Baustelle)</span>
-          <div class="overview-photo-wrap" id="overviewPhotoWrap">
+        <label class="field field--full"><span class="field__label">Übersichtsfoto Baustelle</span>
+          <div class="overview-photo-wrap">
             <button class="overview-photo-btn" id="overviewPhotoBtnTrigger" type="button">
-              <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="18">
+              <svg viewBox="0 0 24 20" width="22" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
                 <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
                 <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
                 <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
               </svg>
-              Übersichtsfoto aufnehmen
+              Foto aufnehmen
             </button>
             <input id="overviewPhotoInput" type="file" accept="image/*" capture="environment" style="display:none" />
             <div id="overviewPhotoThumb" class="overview-thumb-wrap" hidden></div>
@@ -131,22 +157,22 @@
         <section id="box-foerder" class="brunnen-box">
           <div class="brunnen-title brunnen-title--foerder">Entnahmebrunnen</div>
           <div class="form-grid">
-            <label class="field"><span class="field__label">Brunnendurchmesser [mm]</span>
+            <label class="field"><span class="field__label">Ø [mm]</span>
               <input id="foerder-dm" class="field__input" type="number" step="1" /></label>
             <label class="field"><span class="field__label">Endteufe [m]</span>
               <input id="foerder-endteufe" class="field__input" type="number" step="0.01" /></label>
-            <label class="field field--full"><span class="field__label">Ruhewasserstand [m ab OK Brunnenausbau]</span>
+            <label class="field field--full"><span class="field__label">Ruhewasserstand [m ab OK]</span>
               <input id="foerder-ruhe" class="field__input" type="number" step="0.001" /></label>
           </div>
         </section>
         <section id="box-schluck" class="brunnen-box">
           <div class="brunnen-title brunnen-title--schluck">Rückgabebrunnen</div>
           <div class="form-grid">
-            <label class="field"><span class="field__label">Brunnendurchmesser [mm]</span>
+            <label class="field"><span class="field__label">Ø [mm]</span>
               <input id="schluck-dm" class="field__input" type="number" step="1" /></label>
             <label class="field"><span class="field__label">Endteufe [m]</span>
               <input id="schluck-endteufe" class="field__input" type="number" step="0.01" /></label>
-            <label class="field field--full"><span class="field__label">Ruhewasserstand [m ab OK Brunnenausbau]</span>
+            <label class="field field--full"><span class="field__label">Ruhewasserstand [m ab OK]</span>
               <input id="schluck-ruhe" class="field__input" type="number" step="0.001" /></label>
           </div>
         </section>
@@ -169,69 +195,43 @@
       <button id="btnPdf"   class="btn btn--ghost btn--small" type="button">PDF Protokoll</button>
       <button id="btnReset" class="btn btn--ghost btn--small" type="button">Reset</button>
     </div>
-    <div class="hint">Speichern im Verlauf · PDF pro Pumpstufe als A4-Hochformat</div>
+    <div class="hint">Speichern im Verlauf · PDF als A4-Hochformat</div>
   </section>
 </main>
 
-<!-- ══════════════════════════════════════ RESTSAND ══════════════════════════════════════ -->
+<!-- ══════════ RESTSAND ══════════ -->
 <main id="tab-restsand" class="pane" role="tabpanel" hidden>
   <section class="card">
     <div class="card__title">Restsandmessung</div>
     <div class="text" style="margin-bottom:12px">
-      <p>Messung mit <b>Imhoff-Trichter</b> (Volumen ml/l) und <b>Sieb</b> (Gewicht g). Je ein Beweisfoto.</p>
+      <p>Messung mit <b>Imhoff-Trichter</b> [ml/l] und <b>Sieb / Gewicht</b> [g].</p>
     </div>
-
     <div class="restsand-grid">
-      <!-- Imhoff -->
       <div class="restsand-card">
         <div class="restsand-card__title">🧪 Imhoff-Trichter</div>
-        <div class="restsand-photo-area" id="imhoffPhotoArea">
-          <button class="restsand-photo-btn" data-rs-photo="imhoff" type="button">
-            <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="26" height="22">
-              <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
-              <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
-              <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
-              <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
-            </svg>
-            Foto aufnehmen
-          </button>
-          <input type="file" accept="image/*" capture="environment" id="imhoffPhotoInput" style="display:none" />
-        </div>
+        <div class="restsand-photo-area" id="imhoffPhotoArea"></div>
         <label class="field" style="margin-top:10px">
-          <span class="field__label">Gemessene Menge [ml/l]</span>
+          <span class="field__label">Menge [ml/l]</span>
           <input id="restsand-imhoff-menge" class="field__input" type="number" step="0.1" placeholder="z.B. 0.5" />
         </label>
       </div>
-      <!-- Sieb -->
       <div class="restsand-card">
         <div class="restsand-card__title">⚖️ Sieb / Gewicht</div>
-        <div class="restsand-photo-area" id="siebPhotoArea">
-          <button class="restsand-photo-btn" data-rs-photo="sieb" type="button">
-            <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="26" height="22">
-              <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
-              <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
-              <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
-              <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
-            </svg>
-            Foto aufnehmen
-          </button>
-          <input type="file" accept="image/*" capture="environment" id="siebPhotoInput" style="display:none" />
-        </div>
+        <div class="restsand-photo-area" id="siebPhotoArea"></div>
         <label class="field" style="margin-top:10px">
-          <span class="field__label">Gemessene Menge [g]</span>
+          <span class="field__label">Menge [g]</span>
           <input id="restsand-sieb-menge" class="field__input" type="number" step="0.01" placeholder="z.B. 1.2" />
         </label>
       </div>
     </div>
-
     <label class="field" style="margin-top:14px">
       <span class="field__label">Bemerkung</span>
-      <textarea id="restsand-bemerkung" class="field__input field__textarea" rows="3" placeholder="Optionale Bemerkung zur Restsandmessung"></textarea>
+      <textarea id="restsand-bemerkung" class="field__input field__textarea" rows="3"></textarea>
     </label>
   </section>
 </main>
 
-<!-- ══════════════════════════════════════ pH/SULFAT ══════════════════════════════════════ -->
+<!-- ══════════ pH/SULFAT ══════════ -->
 <main id="tab-ph" class="pane" role="tabpanel" hidden>
   <section class="card">
     <div class="card__title">Prüfprotokoll Sulfatmessung Wasser</div>
@@ -239,84 +239,43 @@
       <label class="field"><span class="field__label">Datum</span>
         <input id="ph-datum" class="field__input" type="date" /></label>
       <label class="field"><span class="field__label">Bauherr</span>
-        <input id="ph-bauherr" class="field__input" type="text" placeholder="z.B. Günter Gfall" /></label>
+        <input id="ph-bauherr" class="field__input" type="text" /></label>
       <label class="field field--full"><span class="field__label">Baustelle</span>
-        <input id="ph-baustelle" class="field__input" type="text" placeholder="z.B. Grundwassernutzung" /></label>
+        <input id="ph-baustelle" class="field__input" type="text" /></label>
       <label class="field field--full"><span class="field__label">Gewässername / Entnahmestelle</span>
-        <input id="ph-gewaessername" class="field__input" type="text" placeholder="z.B. grundwasser" /></label>
+        <input id="ph-gewaessername" class="field__input" type="text" /></label>
     </div>
-    <div class="ph-info-box">
-      <b>Messung mittels Teststäbchen „Quantofix"</b><br/>
-      Ergebnis Messung nach 120 sec
-    </div>
+    <div class="ph-info-box"><b>Messung mittels Teststäbchen „Quantofix"</b><br/>Ergebnis nach 120 sec</div>
   </section>
 
   <div class="ph-grid">
-    <!-- Sulfat -->
     <section class="card ph-card">
       <div class="card__title">Sulfatmessung SO₄²⁻</div>
-      <div class="ph-photo-area" id="sulfatPhotoArea">
-        <button class="restsand-photo-btn" data-ph-photo="sulfat" type="button">
-          <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="18">
-            <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
-            <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
-            <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
-            <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
-          </svg>
-          Foto Teststäbchen
-        </button>
-        <input type="file" accept="image/*" capture="environment" id="sulfatPhotoInput" style="display:none" />
-      </div>
+      <div class="ph-photo-area" id="sulfatPhotoArea"></div>
       <label class="field" style="margin-top:10px">
         <span class="field__label">Messwert [mg/l SO₄²⁻]</span>
         <input id="ph-sulfat-wert" class="field__input" type="text" placeholder="z.B. &lt;200" />
       </label>
       <div class="ph-norm-box">
-        <div class="ph-norm-title">Grenzwerte Expositionsklassen (chemischer Angriff):</div>
+        <div class="ph-norm-title">Grenzwerte Expositionsklassen:</div>
         <table class="ph-norm-table">
           <tr><th>Merkmal</th><th>XA1</th><th>XA2</th><th>XA3</th></tr>
           <tr><td>SO₄²⁻ [mg/l]</td><td>≥200 ≤600</td><td>>600 ≤3000</td><td>>3000 ≤6000</td></tr>
         </table>
-        <div class="ph-norm-note">Anmachwasser (ÖNORM EN 1008): SO₄²⁻ max. 2000 mg/l</div>
+        <div class="ph-norm-note">Anmachwasser ÖNORM EN 1008: max. 2000 mg/l</div>
       </div>
     </section>
-
-    <!-- Temperatur -->
     <section class="card ph-card">
       <div class="card__title">Temperatur Messung</div>
-      <div class="ph-photo-area" id="tempPhotoArea">
-        <button class="restsand-photo-btn" data-ph-photo="temperatur" type="button">
-          <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="18">
-            <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
-            <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
-            <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
-            <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
-          </svg>
-          Foto Thermometer
-        </button>
-        <input type="file" accept="image/*" capture="environment" id="tempPhotoInput" style="display:none" />
-      </div>
+      <div class="ph-photo-area" id="tempPhotoArea"></div>
       <label class="field" style="margin-top:10px">
         <span class="field__label">Temperatur [°C]</span>
         <input id="ph-temp-wert" class="field__input" type="number" step="0.1" placeholder="z.B. 13.8" />
       </label>
     </section>
-
-    <!-- pH -->
     <section class="card ph-card">
       <div class="card__title">pH Messung</div>
-      <div class="ph-photo-area" id="phPhotoArea">
-        <button class="restsand-photo-btn" data-ph-photo="ph" type="button">
-          <svg viewBox="0 0 24 20" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="18">
-            <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
-            <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
-            <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
-            <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/>
-          </svg>
-          Foto pH-Meter
-        </button>
-        <input type="file" accept="image/*" capture="environment" id="phPhotoInput" style="display:none" />
-      </div>
+      <div class="ph-photo-area" id="phPhotoArea"></div>
       <label class="field" style="margin-top:10px">
         <span class="field__label">pH-Wert</span>
         <input id="ph-ph-wert" class="field__input" type="number" step="0.1" placeholder="z.B. 7.3" />
@@ -325,7 +284,7 @@
   </div>
 </main>
 
-<!-- ══════════════════════════════════════ VERLAUF ══════════════════════════════════════ -->
+<!-- ══════════ VERLAUF ══════════ -->
 <main id="tab-verlauf" class="pane" role="tabpanel" hidden>
   <section class="card">
     <div class="card__title">Gespeicherte Protokolle</div>
@@ -334,22 +293,28 @@
   </section>
 </main>
 
-<!-- ══════════════════════════════════════ LIVE ══════════════════════════════════════ -->
+<!-- ══════════ LIVE ══════════ -->
 <main id="tab-live" class="pane" role="tabpanel" hidden>
   <section class="card">
     <div class="card__title">Live-Auswertung</div>
     <div class="text">
-      <p><b>Diagramm:</b> Entnahmebrunnen links, Rückgabebrunnen rechts – Achsen passen sich automatisch an.</p>
-      <p><b>Kf-Abschätzung:</b> erste ingenieurmäßige Näherung; nicht im PDF.</p>
+      <p><b>Diagramm:</b> Entnahme links, Rückgabe rechts – Achsen automatisch.</p>
+      <p><b>Kf-Abschätzung:</b> erste ingenieurmäßige Näherung (nicht im PDF).</p>
     </div>
   </section>
   <div id="liveContainer"></div>
 </main>
 
-<!-- ══════════════════════════════════════ EINSTELLUNGEN ══════════════════════════════════════ -->
+<!-- ══════════ EINSTELLUNGEN ══════════ -->
 <main id="tab-settings" class="pane" role="tabpanel" hidden>
   <section class="card">
-    <div class="card__title">⚙️ Einstellungen</div>
+    <div class="card__title">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      Einstellungen
+    </div>
 
     <div class="settings-group">
       <div class="settings-group__title">4.1 Alarm</div>
@@ -357,52 +322,51 @@
         <span class="field__label">Alarmdauer [Sekunden]</span>
         <input id="settings-alarmDuration" class="field__input" type="number" min="1" max="30" step="1" value="4" />
       </label>
-      <div class="hint" style="text-align:left;margin-top:4px">Digitalwecker-Muster (beep-beep-beep) – Dauer in Sekunden</div>
+      <div class="hint" style="text-align:left;margin-top:4px">Digitalwecker-Muster (beep-beep-beep) für diese Dauer</div>
     </div>
 
     <div class="settings-group">
-      <div class="settings-group__title">4.2 PDF Export (Verlauf)</div>
+      <div class="settings-group__title">4.2 PDF Export (Standard)</div>
       <label class="select-card" style="margin-bottom:8px">
         <input type="radio" name="pdfType" id="pdfType-protokoll" value="protokoll" checked />
         <span><b>Protokoll</b> – nur Messdaten und Diagramme</span>
       </label>
       <label class="select-card">
         <input type="radio" name="pdfType" id="pdfType-vollstaendig" value="vollstaendig" />
-        <span><b>Vollständige Auswertung</b> – Deckblatt, Inhaltsverzeichnis, Protokoll, Fotos, Restsand</span>
+        <span><b>Vollständige Auswertung</b> – Deckblatt, Inhaltsverzeichnis, Protokoll, Fotos, Restsand, pH</span>
       </label>
     </div>
 
     <div class="settings-group">
       <div class="settings-group__title">4.3 Vorlagen Export / Import</div>
       <div class="action-row" style="justify-content:flex-start;gap:10px;flex-wrap:wrap">
-        <button id="btnExportTemplate" class="btn btn--ghost btn--small" type="button">📤 Vorlage exportieren (.htbpump.json)</button>
+        <button id="btnExportTemplate" class="btn btn--ghost btn--small" type="button">📤 Vorlage exportieren</button>
         <button id="btnImportTemplate" class="btn btn--ghost btn--small" type="button">📥 Vorlage importieren</button>
         <input id="importFileInput" type="file" accept=".json,.htbpump.json" style="display:none" />
       </div>
       <div class="hint" style="text-align:left;margin-top:8px">
-        Export: Stammdaten + Brunnendaten + leere Pumpstufen – ohne Messwerte und Fotos.<br/>
-        Import: Vorlage vom PC laden und hier anwenden.
+        Export: Stammdaten + Brunnendaten + leere Pumpstufen<br/>
+        Import: Vorlage vom PC laden und hier anwenden
       </div>
     </div>
 
     <div class="settings-group">
-      <div class="settings-group__title">4.4 App-Daten</div>
+      <div class="settings-group__title">4.4 Vollständiger Export / Import</div>
       <div class="action-row" style="justify-content:flex-start;gap:10px;flex-wrap:wrap">
-        <button id="btnExportFull" class="btn btn--ghost btn--small" type="button">📦 Vollständiger Export</button>
-        <button id="btnImportFull" class="btn btn--ghost btn--small" type="button">📦 Vollständiger Import</button>
+        <button id="btnExportFull" class="btn btn--ghost btn--small" type="button">📦 Export (inkl. Fotos)</button>
+        <button id="btnImportFull" class="btn btn--ghost btn--small" type="button">📦 Import</button>
         <input id="importFullInput" type="file" accept=".json" style="display:none" />
       </div>
-      <div class="hint" style="text-align:left;margin-top:8px">Inkl. aller Messwerte, Fotos und Restsanddaten</div>
     </div>
   </section>
 </main>
 
 <footer class="footer">
-  &copy; <b>HTB Baugesellschaft m.b.H.</b> – Pumpversuch PWA v40
+  &copy; <b>HTB Baugesellschaft m.b.H.</b> – Pumpversuch PWA v50
   <br/>
   <button id="btnInstall" class="btn btn--install" type="button" hidden>App installieren</button>
 </footer>
 
-<script src="/Pumpversuch/app.js?v=40"></script>
+<script src="/Pumpversuch/app.js?v=50"></script>
 </body>
 </html>
