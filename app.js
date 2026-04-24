@@ -1,13 +1,13 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v55 loaded');
+console.log('HTB Pumpversuch app.js v56 loaded');
 
 const BASE = '/Pumpversuch/';
-const STORAGE_DRAFT   = 'htb-pumpversuch-draft-v17';
-const STORAGE_HISTORY = 'htb-pumpversuch-history-v17';
+const STORAGE_DRAFT   = 'htb-pumpversuch-draft-v18';
+const STORAGE_HISTORY = 'htb-pumpversuch-history-v18';
 const HISTORY_MAX = 30;
 const DEFAULT_INTERVALLE = [0,1,2,3,4,5,15,30,45,60,75,90,105,120,135,150,165,180];
 
-/* ── Firmendaten aus Referenz-PDF ── */
+/* ── Firmendaten aus Referenz-PDF / DOCX ── */
 const FIRMA = {
   name:    'HTB Baugesellschaft m.b.H.',
   slogan:  'BAUEN MIT SPEZIALISTEN ALS PARTNER',
@@ -59,6 +59,17 @@ let _timeAdjustVid = null;
 let _floatingRaf = null;
 let _ocrTargetVid = null;
 let _ocrTargetRowIdx = null;
+
+/* OCR runtime */
+let _ocrOriginalDataUrl = null;
+let _ocrOriginalImage = null;
+let _ocrDisplayCanvasW = 0;
+let _ocrDisplayCanvasH = 0;
+let _ocrCropRect = null;
+let _ocrDragging = false;
+let _ocrDragStart = null;
+let _ocrDragEnd = null;
+let _ocrCanvasEventsBound = false;
 
 /* ══════════════════════════════════════════════════════
    HELPERS
@@ -459,6 +470,7 @@ function syncSettingsToUi(){
   if(b) b.checked=state.settings.pdfExportType==='vollstaendig';
   updateMainPdfButtonLabel();
 }
+
 function collectSettingsFromUi(){
   state.settings.alarmDurationSec=clamp(Number($('settings-alarmDuration')?.value||4),1,30);
   state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked ? 'vollstaendig' : 'protokoll';
@@ -474,7 +486,7 @@ function renderOverviewPhotoThumb(){
     return;
   }
   box.hidden=false;
-  box.innerHTML=`<img src="${h(state.overviewPhotoDataUrl)}" alt="Übersichtsfoto"/><button class="overview-del-btn" data-photo-del="overview" type="button">Foto entfernen</button>`;
+  box.innerHTML=`<img src="${h(state.overviewPhotoDataUrl)}" alt="Übersichtsfoto"><button class="overview-del-btn" data-photo-del="overview" type="button">Foto entfernen</button>`;
 }
 function renderRestsandPhotoAreas(){
   const defs=[
@@ -486,8 +498,8 @@ function renderRestsandPhotoAreas(){
     const has=!!state.restsand[def.key].photoDataUrl;
     area.innerHTML=`
       <button class="restsand-photo-btn" data-rs-photo="${def.key}" type="button">${camSvg(26,22)} ${has?'Foto ändern':def.label}</button>
-      <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-rs-input="${def.key}" style="display:none"/>
-      ${has?`<img class="restsand-thumb" src="${h(state.restsand[def.key].photoDataUrl)}" alt="${def.key}"/><button class="restsand-del-btn" data-photo-del="restsand-${def.key}" type="button">Entfernen</button>`:''}
+      <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-rs-input="${def.key}" style="display:none">
+      ${has?`<img class="restsand-thumb" src="${h(state.restsand[def.key].photoDataUrl)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="restsand-${def.key}" type="button">Entfernen</button>`:''}
     `;
   });
 }
@@ -503,8 +515,8 @@ function renderPhPhotoAreas(){
     const has=!!data;
     area.innerHTML=`
       <button class="restsand-photo-btn" data-ph-photo="${def.key}" type="button">${camSvg(22,18)} ${has?'Foto ändern':def.label}</button>
-      <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-ph-input="${def.key}" style="display:none"/>
-      ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"/><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}
+      <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-ph-input="${def.key}" style="display:none">
+      ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}
     `;
   });
 }
@@ -551,7 +563,7 @@ function collectSnapshot(){
   collectSettingsFromUi();
 
   return {
-    v:17,
+    v:18,
     meta:clone(state.meta),
     selection:clone(state.selection),
     foerder:clone(state.foerder),
@@ -848,277 +860,478 @@ function hookGlobalPhotoDelegation(){
 }
 
 /* ══════════════════════════════════════════════════════
-   OCR – speziell für FLYPPER WS-F4 LCD-Display
-   Zahl steht mittig im Display, Format: X,XXX m³
-   Aufrunden auf 2 Nachkommastellen (z.B. 2,144 → 2,15)
+   OCR – CROP ONLY, OHNE API
+   Foto → Displaybereich einrahmen → Tesseract nur auf Crop
 ══════════════════════════════════════════════════════ */
-function openOcrModal(vid, rowIdx){
-  _ocrTargetVid = vid;
-  _ocrTargetRowIdx = rowIdx;
-  $('ocrPreviewImg').src = '';
-  $('ocrResultInput').value = '';
-  $('ocrStatus').textContent = 'Bitte Foto des Durchflussmessers aufnehmen…';
-  $('ocrModal').hidden = false;
-  setTimeout(() => $('ocrFileInput').click(), 100);
-}
-function closeOcrModal(){
-  $('ocrModal').hidden = true;
-  _ocrTargetVid = null;
-  _ocrTargetRowIdx = null;
-}
-function canvasToDataUrl(canvas){
-  return canvas.toDataURL('image/jpeg', 0.95);
-}
-
-/* Rundet IMMER auf 2 Nachkommastellen AUF (ceiling) */
 function ceilTo2(n){
   return Math.ceil(n * 100) / 100;
 }
+function ensureEnhancedOcrUi(){
+  let modal=$('ocrModal');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='ocrModal';
+    modal.className='modal-overlay';
+    modal.hidden=true;
+    document.body.appendChild(modal);
+  }
 
-/* Vorverarbeitung speziell für FLYPPER WS-F4:
-   - LCD-Display ist in der oberen Mitte des runden Gehäuses
-   - Crop: horizontal 12-88%, vertikal 28-56%
-   - 4x Upscale
-   - Graustufen → Invertieren (dunkle Segmente → hell für Tesseract)
-   - Kontrastverstärkung + Schwellenwert
-*/
-async function preprocessForOcr(dataUrl){
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const srcW = img.width;
-      const srcH = img.height;
+  if(modal.dataset.enhanced==='1') return;
 
-      // Crop direkt auf das LCD-Display-Rechteck
-      const cropX = Math.round(srcW * 0.12);
-      const cropY = Math.round(srcH * 0.28);
-      const cropW = Math.round(srcW * 0.76);
-      const cropH = Math.round(srcH * 0.28);
+  modal.dataset.enhanced='1';
+  modal.innerHTML=`
+    <div class="modal-box" style="max-width:540px">
+      <div class="modal-title">📷 Wert scannen – FLYPPER Display</div>
+      <div class="modal-sub" id="ocrSub">Foto aufnehmen → dann Display-Bereich einrahmen</div>
 
-      // 4x Upscale für bessere Texterkennung
-      const scale = 4;
-      const tmp = document.createElement('canvas');
-      tmp.width  = cropW * scale;
-      tmp.height = cropH * scale;
-      const ctx = tmp.getContext('2d');
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, tmp.width, tmp.height);
+      <div id="ocrStep1">
+        <button id="ocrTakePhoto" class="btn btn--save" type="button" style="width:100%;margin-bottom:8px">📷 Foto aufnehmen</button>
+        <button id="ocrTakePhotoLib" class="btn btn--ghost btn--small" type="button" style="width:100%">Aus Bibliothek wählen</button>
+      </div>
 
-      const imageData = ctx.getImageData(0, 0, tmp.width, tmp.height);
-      const d = imageData.data;
+      <div id="ocrStep2" hidden>
+        <div style="font-size:.78em;color:var(--accent);font-weight:900;margin-bottom:6px;text-align:center">
+          ☝️ Display-Bereich mit Finger/Maus einrahmen
+        </div>
+        <div style="position:relative;width:100%;touch-action:none">
+          <canvas id="ocrCropCanvas"
+            style="width:100%;border-radius:8px;border:2px solid var(--accent);display:block;cursor:crosshair;background:#0b1725"></canvas>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="ocrDoCrop" class="btn btn--save btn--small" type="button" style="flex:1">✓ Bereich bestätigen &amp; erkennen</button>
+          <button id="ocrResetCrop" class="btn btn--ghost btn--small" type="button">Neu zeichnen</button>
+        </div>
+      </div>
 
-      for(let i = 0; i < d.length; i += 4){
-        // Graustufen
-        const gray = Math.round(d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114);
-        // Kontrast strecken
-        let v = clamp(Math.round((gray - 100) * 2.2 + 100), 0, 255);
-        // LCD-Segmente sind DUNKEL auf hellem Grund → INVERTIEREN für Tesseract
-        // (helle Zeichen auf dunklem Grund = besser erkennbar)
-        v = v > 130 ? 0 : 255;
-        d[i] = d[i+1] = d[i+2] = v;
-        d[i+3] = 255;
+      <div id="ocrStep3" hidden>
+        <div id="ocrCroppedPreview" style="margin-bottom:10px;background:#0b1725;border-radius:8px;padding:6px;text-align:center"></div>
+        <div id="ocrStatus" class="ocr-status" style="margin-bottom:10px;min-height:2em"></div>
+        <label class="field" style="margin-bottom:12px">
+          <span class="field__label">Erkannter Wert [m³/h] – bitte prüfen</span>
+          <input id="ocrResultInput" class="field__input" type="text"
+            style="font-size:1.35em;font-weight:900;text-align:center;letter-spacing:.08em"
+            placeholder="z.B. 2,15">
+        </label>
+        <div class="modal-buttons" style="justify-content:stretch">
+          <button id="ocrAccept" class="btn btn--save" type="button" style="flex:1">✓ Übernehmen</button>
+          <button id="ocrRetry" class="btn btn--ghost btn--small" type="button">Nochmal</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;text-align:right">
+        <button id="ocrCancel" class="btn btn--ghost btn--small" type="button">Abbrechen</button>
+      </div>
+    </div>
+  `;
+
+  if(!$('ocrFileInput')){
+    const inp=document.createElement('input');
+    inp.id='ocrFileInput';
+    inp.type='file';
+    inp.accept='image/*';
+    inp.capture='environment';
+    inp.style.display='none';
+    document.body.appendChild(inp);
+  }
+  if(!$('ocrFileInputLib')){
+    const inp=document.createElement('input');
+    inp.id='ocrFileInputLib';
+    inp.type='file';
+    inp.accept='image/*';
+    inp.style.display='none';
+    document.body.appendChild(inp);
+  }
+}
+function ocrShowStep(step){
+  $('ocrStep1').hidden = step!==1;
+  $('ocrStep2').hidden = step!==2;
+  $('ocrStep3').hidden = step!==3;
+}
+function openOcrModal(vid,rowIdx){
+  ensureEnhancedOcrUi();
+  _ocrTargetVid=vid;
+  _ocrTargetRowIdx=rowIdx;
+  _ocrOriginalDataUrl=null;
+  _ocrOriginalImage=null;
+  _ocrCropRect=null;
+  _ocrDragging=false;
+  _ocrDragStart=null;
+  _ocrDragEnd=null;
+  $('ocrStatus') && ($('ocrStatus').textContent='');
+  $('ocrResultInput') && ($('ocrResultInput').value='');
+  $('ocrModal').hidden=false;
+  ocrShowStep(1);
+}
+function closeOcrModal(){
+  $('ocrModal').hidden=true;
+  _ocrTargetVid=null;
+  _ocrTargetRowIdx=null;
+  _ocrOriginalDataUrl=null;
+  _ocrOriginalImage=null;
+  _ocrCropRect=null;
+  _ocrDragging=false;
+  _ocrDragStart=null;
+  _ocrDragEnd=null;
+}
+
+function getOcrCanvas(){
+  return $('ocrCropCanvas');
+}
+function getCanvasEventPos(e,canvas){
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/rect.width;
+  const scaleY=canvas.height/rect.height;
+  const clientX=e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY=e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x:(clientX-rect.left)*scaleX,
+    y:(clientY-rect.top)*scaleY
+  };
+}
+function drawOcrCanvas(){
+  const canvas=getOcrCanvas();
+  if(!canvas || !_ocrOriginalImage) return;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(_ocrOriginalImage,0,0,canvas.width,canvas.height);
+
+  const rect = _ocrDragging && _ocrDragStart && _ocrDragEnd
+    ? {
+        x:Math.min(_ocrDragStart.x,_ocrDragEnd.x),
+        y:Math.min(_ocrDragStart.y,_ocrDragEnd.y),
+        w:Math.abs(_ocrDragEnd.x-_ocrDragStart.x),
+        h:Math.abs(_ocrDragEnd.y-_ocrDragStart.y)
       }
-      ctx.putImageData(imageData, 0, 0);
-      resolve(canvasToDataUrl(tmp));
+    : _ocrCropRect;
+
+  if(!rect) return;
+
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.55)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(rect.x,rect.y,rect.w,rect.h);
+
+  ctx.strokeStyle='#ffed00';
+  ctx.lineWidth=3;
+  ctx.strokeRect(rect.x,rect.y,rect.w,rect.h);
+
+  const cs=18;
+  ctx.lineWidth=5;
+  [[rect.x,rect.y],[rect.x+rect.w,rect.y],[rect.x,rect.y+rect.h],[rect.x+rect.w,rect.y+rect.h]].forEach(([cx,cy])=>{
+    const sx=cx===rect.x?1:-1;
+    const sy=cy===rect.y?1:-1;
+    ctx.beginPath();
+    ctx.moveTo(cx+sx*cs,cy);
+    ctx.lineTo(cx,cy);
+    ctx.lineTo(cx,cy+sy*cs);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+function bindOcrCanvasEvents(){
+  if(_ocrCanvasEventsBound) return;
+  _ocrCanvasEventsBound=true;
+  const canvas=getOcrCanvas();
+  if(!canvas) return;
+
+  const onStart=e=>{
+    e.preventDefault();
+    const p=getCanvasEventPos(e,canvas);
+    _ocrDragging=true;
+    _ocrDragStart=p;
+    _ocrDragEnd={...p};
+    drawOcrCanvas();
+  };
+  const onMove=e=>{
+    if(!_ocrDragging) return;
+    e.preventDefault();
+    _ocrDragEnd=getCanvasEventPos(e,canvas);
+    drawOcrCanvas();
+  };
+  const onEnd=e=>{
+    if(!_ocrDragging) return;
+    e.preventDefault();
+    _ocrDragging=false;
+    const r={
+      x:Math.min(_ocrDragStart.x,_ocrDragEnd.x),
+      y:Math.min(_ocrDragStart.y,_ocrDragEnd.y),
+      w:Math.abs(_ocrDragEnd.x-_ocrDragStart.x),
+      h:Math.abs(_ocrDragEnd.y-_ocrDragStart.y)
     };
-    img.onerror = reject;
-    img.src = dataUrl;
+    if(r.w>20 && r.h>10) _ocrCropRect=r;
+    drawOcrCanvas();
+  };
+
+  canvas.addEventListener('mousedown',onStart,{passive:false});
+  canvas.addEventListener('mousemove',onMove,{passive:false});
+  canvas.addEventListener('mouseup',onEnd,{passive:false});
+  canvas.addEventListener('mouseleave',onEnd,{passive:false});
+  canvas.addEventListener('touchstart',onStart,{passive:false});
+  canvas.addEventListener('touchmove',onMove,{passive:false});
+  canvas.addEventListener('touchend',onEnd,{passive:false});
+}
+
+async function loadOcrImage(file){
+  const dataUrl=await downscaleImageFile(file,2400,0.92);
+  _ocrOriginalDataUrl=dataUrl;
+
+  const img=new Image();
+  await new Promise((resolve,reject)=>{
+    img.onload=resolve;
+    img.onerror=reject;
+    img.src=dataUrl;
+  });
+  _ocrOriginalImage=img;
+
+  const maxCssW=Math.min(460,window.innerWidth-80);
+  let displayW=img.width;
+  let displayH=img.height;
+  if(displayW>maxCssW){
+    const r=maxCssW/displayW;
+    displayW=Math.round(displayW*r);
+    displayH=Math.round(displayH*r);
+  }
+
+  _ocrDisplayCanvasW=displayW;
+  _ocrDisplayCanvasH=displayH;
+
+  const canvas=getOcrCanvas();
+  canvas.width=displayW;
+  canvas.height=displayH;
+  canvas.style.width='100%';
+
+  // Default-Vorschlag auf Displaybereich
+  _ocrCropRect={
+    x:Math.round(displayW*0.20),
+    y:Math.round(displayH*0.30),
+    w:Math.round(displayW*0.60),
+    h:Math.round(displayH*0.20)
+  };
+
+  drawOcrCanvas();
+}
+
+function cropImageFromCanvasRect(){
+  return new Promise((resolve,reject)=>{
+    if(!_ocrOriginalImage || !_ocrCropRect) return reject(new Error('Kein Crop definiert'));
+    const sx=_ocrOriginalImage.width/_ocrDisplayCanvasW;
+    const sy=_ocrOriginalImage.height/_ocrDisplayCanvasH;
+
+    const x=Math.round(_ocrCropRect.x*sx);
+    const y=Math.round(_ocrCropRect.y*sy);
+    const w=Math.round(_ocrCropRect.w*sx);
+    const h=Math.round(_ocrCropRect.h*sy);
+
+    const tmp=document.createElement('canvas');
+    tmp.width=w;
+    tmp.height=h;
+    const ctx=tmp.getContext('2d');
+    ctx.drawImage(_ocrOriginalImage,x,y,w,h,0,0,w,h);
+    resolve(tmp.toDataURL('image/jpeg',0.95));
   });
 }
 
-/* Variante ohne Inversion — als Fallback */
-async function preprocessForOcrNoInvert(dataUrl){
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const srcW = img.width;
-      const srcH = img.height;
+function preprocessDisplayCrop(dataUrl,invert=true){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const scale=4;
+      const tmp=document.createElement('canvas');
+      tmp.width=img.width*scale;
+      tmp.height=img.height*scale;
+      const ctx=tmp.getContext('2d');
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      ctx.drawImage(img,0,0,tmp.width,tmp.height);
 
-      // etwas größerer Bereich als Fallback
-      const cropX = Math.round(srcW * 0.08);
-      const cropY = Math.round(srcH * 0.25);
-      const cropW = Math.round(srcW * 0.84);
-      const cropH = Math.round(srcH * 0.32);
-
-      const scale = 3;
-      const tmp = document.createElement('canvas');
-      tmp.width  = cropW * scale;
-      tmp.height = cropH * scale;
-      const ctx = tmp.getContext('2d');
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, tmp.width, tmp.height);
-
-      const imageData = ctx.getImageData(0, 0, tmp.width, tmp.height);
-      const d = imageData.data;
-
-      for(let i = 0; i < d.length; i += 4){
-        const gray = Math.round(d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114);
-        let v = clamp(Math.round((gray - 110) * 2.0 + 110), 0, 255);
-        // Keine Inversion
-        v = v > 128 ? 255 : 0;
-        d[i] = d[i+1] = d[i+2] = v;
-        d[i+3] = 255;
+      const id=ctx.getImageData(0,0,tmp.width,tmp.height);
+      const d=id.data;
+      for(let i=0;i<d.length;i+=4){
+        const gray=Math.round(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
+        let v=clamp(Math.round((gray-110)*2.4+110),0,255);
+        v=v>128 ? 255 : 0;
+        if(invert) v=255-v;
+        d[i]=d[i+1]=d[i+2]=v;
+        d[i+3]=255;
       }
-      ctx.putImageData(imageData, 0, 0);
-      resolve(canvasToDataUrl(tmp));
+      ctx.putImageData(id,0,0);
+      resolve(tmp.toDataURL('image/jpeg',0.95));
     };
-    img.onerror = reject;
-    img.src = dataUrl;
+    img.onerror=reject;
+    img.src=dataUrl;
   });
 }
 
-/* Bestes Ergebnis aus OCR-Text extrahieren.
-   FLYPPER zeigt: [kleines Zeichen] [Zahl] m³
-   Format: X,XXX oder X.XXX (immer 3 Nachkommastellen am Display)
-   Wir runden AUF auf 2 Nachkommastellen.
-*/
 function extractBestDecimalValue(text){
-  const raw = String(text || '')
-    // Häufige OCR-Fehler bei LCD-Segmenten
-    .replace(/[Oo]/g, '0')
-    .replace(/[lIi|]/g, '1')
-    .replace(/[Ss]/g, '5')
-    .replace(/[Bb]/g, '8')
-    .replace(/[Gg]/g, '9')
-    .replace(/[Zz]/g, '2')
-    // Sonstige Bereinigung
-    .replace(/[^0-9,.\n ]+/g, ' ');
+  const raw=String(text||'')
+    .replace(/[Oo]/g,'0')
+    .replace(/[lIi|]/g,'1')
+    .replace(/[Ss]/g,'5')
+    .replace(/[Bb]/g,'8')
+    .replace(/[Gg]/g,'9')
+    .replace(/[Zz]/g,'2')
+    .replace(/[^0-9,.\n ]+/g,' ');
 
-  // Primär: Format X,XXX oder X.XXX (3 Nachkommastellen wie am Display)
-  const pattern3 = raw.match(/\d{1,3}[.,]\d{3}/g) || [];
-  const vals3 = pattern3
-    .map(s => Number(s.replace(',', '.')))
-    .filter(n => Number.isFinite(n) && n > 0 && n < 9999);
-
+  const pattern3=raw.match(/\d{1,3}[.,]\d{3}/g) || [];
+  const vals3=pattern3
+    .map(s=>Number(s.replace(',','.')))
+    .filter(n=>Number.isFinite(n)&&n>0&&n<9999);
   if(vals3.length){
-    // Bevorzuge Werte im realistischen m³-Bereich (Fördermenge 0.01–250)
-    const preferred = vals3.filter(n => n >= 0.01 && n <= 250).sort((a, b) => a - b);
-    const best = preferred[0] ?? vals3[0];
+    const preferred=vals3.filter(n=>n>=0.01&&n<=250).sort((a,b)=>a-b);
+    const best=preferred[0] ?? vals3[0];
     return ceilTo2(best);
   }
 
-  // Fallback: X,XX oder X.XX (2 Nachkommastellen)
-  const pattern2 = raw.match(/\d{1,3}[.,]\d{2}/g) || [];
-  const vals2 = pattern2
-    .map(s => Number(s.replace(',', '.')))
-    .filter(n => Number.isFinite(n) && n > 0 && n < 9999);
-
+  const pattern2=raw.match(/\d{1,3}[.,]\d{2}/g) || [];
+  const vals2=pattern2
+    .map(s=>Number(s.replace(',','.')))
+    .filter(n=>Number.isFinite(n)&&n>0&&n<9999);
   if(vals2.length){
-    const preferred = vals2.filter(n => n >= 0.01 && n <= 250).sort((a, b) => a - b);
-    const best = preferred[0] ?? vals2[0];
+    const preferred=vals2.filter(n=>n>=0.01&&n<=250).sort((a,b)=>a-b);
+    const best=preferred[0] ?? vals2[0];
     return ceilTo2(best);
   }
 
-  // Letzter Fallback: irgendeine Zahl
-  const allNums = raw.match(/\d{1,4}[.,]\d{1,4}|\d{2,4}/g) || [];
-  const allVals = allNums
-    .map(s => Number(s.replace(',', '.')))
-    .filter(n => Number.isFinite(n) && n >= 0.01 && n <= 250)
-    .sort((a, b) => a - b);
+  const allNums=raw.match(/\d{1,4}[.,]\d{1,4}|\d{2,4}/g) || [];
+  const allVals=allNums
+    .map(s=>Number(s.replace(',','.')))
+    .filter(n=>Number.isFinite(n)&&n>=0.01&&n<=250)
+    .sort((a,b)=>a-b);
 
   return allVals.length ? ceilTo2(allVals[0]) : undefined;
 }
 
-/* Mehrere OCR-Versuche mit verschiedenen Konfigurationen */
-async function runOcrWithFallbacks(originalDataUrl, processedUrl, processedUrlNoInvert){
+async function runOcrOnCrop(croppedDataUrl){
   if(!window.Tesseract) throw new Error('Tesseract nicht geladen');
 
-  // Alle Versuche der Reihe nach — erster Treffer mit plausiblem Wert gewinnt
-  const configs = [
-    // Invertiert (hell auf dunkel) — PSM 7 = einzelne Zeile
-    { label:'Display invertiert (Zeile)', img: processedUrl,          psm: 7 },
-    // Invertiert — PSM 8 = einzelnes Wort
-    { label:'Display invertiert (Wort)',  img: processedUrl,          psm: 8 },
-    // Nicht invertiert — PSM 7
-    { label:'Display normal (Zeile)',     img: processedUrlNoInvert,  psm: 7 },
-    // Nicht invertiert — PSM 6 = Block
-    { label:'Display normal (Block)',     img: processedUrlNoInvert,  psm: 6 },
-    // Original, keine Verarbeitung — PSM 7
-    { label:'Original (Zeile)',           img: originalDataUrl,       psm: 7 },
+  const processedInvert = await preprocessDisplayCrop(croppedDataUrl,true);
+  const processedNormal = await preprocessDisplayCrop(croppedDataUrl,false);
+
+  const configs=[
+    { label:'Crop invertiert (Zeile)', img:processedInvert, psm:7 },
+    { label:'Crop invertiert (Wort)',  img:processedInvert, psm:8 },
+    { label:'Crop normal (Zeile)',     img:processedNormal, psm:7 },
+    { label:'Crop normal (Block)',     img:processedNormal, psm:6 },
+    { label:'Crop original (Zeile)',   img:croppedDataUrl,  psm:7 }
   ];
 
-  const allTexts = [];
+  const allTexts=[];
 
   for(const cfg of configs){
     try{
-      const { data: { text } } = await Tesseract.recognize(cfg.img, 'eng', {
-        tessedit_pageseg_mode:     String(cfg.psm),
-        tessedit_char_whitelist:   '0123456789,.',
+      const { data:{ text } } = await Tesseract.recognize(cfg.img,'eng',{
+        tessedit_pageseg_mode: String(cfg.psm),
+        tessedit_char_whitelist: '0123456789,.',
         preserve_interword_spaces: '1',
         logger: m => {
-          if(m.status === 'recognizing text'){
-            $('ocrStatus').textContent =
-              `${cfg.label}… ${Math.round(m.progress * 100)}%`;
+          if(m.status==='recognizing text'){
+            $('ocrStatus').textContent = `${cfg.label}… ${Math.round(m.progress*100)}%`;
           }
         }
       });
-
-      allTexts.push(text || '');
-      const best = extractBestDecimalValue(text || '');
-      if(best !== undefined){
-        $('ocrStatus').textContent =
-          `Erkannt via ${cfg.label}: ${best.toFixed(2).replace('.', ',')} m³`;
+      allTexts.push(text||'');
+      const best=extractBestDecimalValue(text||'');
+      if(best!==undefined){
+        $('ocrStatus').textContent=`Erkannt via ${cfg.label}: ${best.toFixed(2).replace('.',',')} m³/h`;
         return { best, text };
       }
     }catch(err){
-      console.warn(`OCR-Versuch "${cfg.label}" fehlgeschlagen:`, err);
+      console.warn(`OCR-Versuch "${cfg.label}" fehlgeschlagen:`,err);
     }
   }
 
-  // Alle Texte zusammenführen und noch einmal probieren
-  const merged = allTexts.join('\n');
-  const best = extractBestDecimalValue(merged);
-  return { best, text: merged };
+  const merged=allTexts.join('\n');
+  return { best:extractBestDecimalValue(merged), text:merged };
+}
+
+function showOcrCropPreview(dataUrl){
+  const box=$('ocrCroppedPreview');
+  if(!box) return;
+  box.innerHTML=`
+    <div style="font-size:.72em;color:var(--muted);margin-bottom:4px;font-weight:900;text-transform:uppercase">
+      Display-Crop
+    </div>
+    <img src="${dataUrl}" style="max-width:100%;max-height:120px;border-radius:6px;border:2px solid var(--accent)">
+  `;
 }
 
 function initOcrHandlers(){
-  $('ocrFileInput')?.addEventListener('change', async(e) => {
-    const file = e.target.files?.[0];
+  ensureEnhancedOcrUi();
+  bindOcrCanvasEvents();
+
+  $('ocrTakePhoto')?.addEventListener('click',()=> $('ocrFileInput')?.click());
+  $('ocrTakePhotoLib')?.addEventListener('click',()=> $('ocrFileInputLib')?.click());
+
+  const onFileSelected = async file => {
     if(!file) return;
-
     try{
-      $('ocrStatus').textContent = 'Bild wird geladen…';
-      const originalDataUrl = await downscaleImageFile(file, 2400, 0.92);
-      $('ocrPreviewImg').src = originalDataUrl;
+      ocrShowStep(2);
+      await loadOcrImage(file);
+      $('ocrSub').textContent='Display-Bereich einrahmen → bestätigen';
+      $('ocrStatus').textContent='';
+    }catch(err){
+      console.error(err);
+      alert('Foto konnte nicht geladen werden.');
+      closeOcrModal();
+    }
+  };
 
-      $('ocrStatus').textContent = 'Display wird zugeschnitten und aufbereitet…';
-      const processedUrl        = await preprocessForOcr(originalDataUrl);
-      const processedUrlNoInvert = await preprocessForOcrNoInvert(originalDataUrl);
+  $('ocrFileInput')?.addEventListener('change',e=>{
+    const file=e.target.files?.[0];
+    onFileSelected(file);
+    e.target.value='';
+  });
+  $('ocrFileInputLib')?.addEventListener('change',e=>{
+    const file=e.target.files?.[0];
+    onFileSelected(file);
+    e.target.value='';
+  });
 
-      $('ocrStatus').textContent = 'Texterkennung läuft…';
-      const { best } = await runOcrWithFallbacks(
-        originalDataUrl, processedUrl, processedUrlNoInvert
-      );
+  $('ocrResetCrop')?.addEventListener('click',()=>{
+    _ocrCropRect=null;
+    _ocrDragStart=null;
+    _ocrDragEnd=null;
+    drawOcrCanvas();
+  });
 
-      if(best !== undefined){
-        $('ocrResultInput').value = best.toFixed(2).replace('.', ',');
-        $('ocrStatus').textContent =
-          `Erkannt: ${best.toFixed(2).replace('.', ',')} m³ (aufgerundet auf 2 Stellen) – bitte prüfen.`;
+  $('ocrDoCrop')?.addEventListener('click',async()=>{
+    if(!_ocrCropRect){
+      alert('Bitte zuerst den Display-Bereich einrahmen.');
+      return;
+    }
+    try{
+      ocrShowStep(3);
+      $('ocrStatus').textContent='Display wird zugeschnitten…';
+      const cropped=await cropImageFromCanvasRect();
+      showOcrCropPreview(cropped);
+      $('ocrResultInput').value='';
+      $('ocrStatus').textContent='Texterkennung läuft…';
+
+      const { best } = await runOcrOnCrop(cropped);
+      if(best!==undefined){
+        $('ocrResultInput').value=best.toFixed(2).replace('.',',');
+        $('ocrStatus').textContent=`Erkannt: ${best.toFixed(2).replace('.',',')} m³/h (auf 2 Stellen aufgerundet) – bitte prüfen.`;
       }else{
-        $('ocrResultInput').value = '';
-        $('ocrStatus').textContent =
-          'Keine Zahl erkannt – bitte manuell eingeben. ' +
-          'Tipp: Foto gerade und nah am Display aufnehmen.';
+        $('ocrStatus').textContent='Keine plausible Zahl erkannt. Bitte Crop enger setzen oder Wert manuell eingeben.';
       }
     }catch(err){
       console.error(err);
-      $('ocrStatus').textContent = 'Fehler bei der Texterkennung.';
-    }finally{
-      e.target.value = '';
+      $('ocrStatus').textContent='Fehler bei der Texterkennung.';
     }
   });
 
-  $('ocrAccept')?.addEventListener('click', () => {
-    const v = getVersuchById(_ocrTargetVid);
-    const rawInput = String($('ocrResultInput').value).replace(',', '.');
-    const num = Number(rawInput);
+  $('ocrRetry')?.addEventListener('click',()=>{
+    if(_ocrOriginalDataUrl) ocrShowStep(2);
+    else ocrShowStep(1);
+  });
 
-    if(v && Number.isFinite(num) && num > 0){
-      const idx = _ocrTargetRowIdx;
+  $('ocrAccept')?.addEventListener('click',()=>{
+    const v=getVersuchById(_ocrTargetVid);
+    const num=Number(String($('ocrResultInput').value).replace(',','.'));
+    if(v && Number.isFinite(num) && num>0){
+      const idx=_ocrTargetRowIdx;
       if(v.messungen[idx]){
-        // Nochmal ceiling anwenden, falls Nutzer manuell geändert hat
-        v.messungen[idx].foerder_menge = ceilTo2(num).toFixed(2);
+        v.messungen[idx].foerder_menge=ceilTo2(num).toFixed(2);
         renderVersuche();
         saveDraftDebounced();
         scheduleLiveRender();
@@ -1127,11 +1340,12 @@ function initOcrHandlers(){
     closeOcrModal();
   });
 
-  $('ocrCancel')?.addEventListener('click', closeOcrModal);
-  $('ocrModal')?.addEventListener('click', e => {
-    if(e.target.id === 'ocrModal') closeOcrModal();
+  $('ocrCancel')?.addEventListener('click',closeOcrModal);
+  $('ocrModal')?.addEventListener('click',e=>{
+    if(e.target.id==='ocrModal') closeOcrModal();
   });
 }
+
 /* ══════════════════════════════════════════════════════
    TIMER
 ══════════════════════════════════════════════════════ */
@@ -2195,7 +2409,7 @@ function getWellRowsForPdf(versuch,key,ruhe){
 }
 
 function drawFooter(page,ctx,subtitle=''){
-  const { mm,fontR,K,PAGE_W }=ctx;
+  const { mm,fontR,K }=ctx;
   const y=mm(8);
   drawTextSafe(page,`${FIRMA.name} ${FIRMA.adresse} ${FIRMA.tel}`,{ x:mm(12), y, size:7.8, font:fontR, color:K });
   drawTextSafe(page,`${FIRMA.email} · ${FIRMA.web}${subtitle ? ' · '+subtitle : ''}`,{ x:mm(12), y:mm(4), size:7.8, font:fontR, color:K });
@@ -2465,7 +2679,6 @@ async function drawProtocolStagePage(pdf,ctx,snap,versuch,index){
   const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
 
   page.drawRectangle({ x:x0, y:y0, width:W, height:H, borderColor:K, borderWidth:1.2 });
-
   drawHeaderBar(page,ctx,'Pumpversuch',FIRMA.name);
 
   let cy=y0+H-mm(13)-mm(2);
@@ -2728,7 +2941,6 @@ async function exportPdf(snapshot=null,type='protokoll'){
   }
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
-
 async function exportRestsandPdf(snapshot=null){
   const snap=snapshot || collectSnapshot();
   if(!window.PDFLib){ alert('PDF-Library noch nicht geladen.'); return; }
@@ -2746,7 +2958,6 @@ async function exportRestsandPdf(snapshot=null){
   if(!w){ const a=document.createElement('a'); a.href=url; a.download=fileName; a.click(); }
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
-
 async function exportPhPdf(snapshot=null){
   const snap=snapshot || collectSnapshot();
   if(!window.PDFLib){ alert('PDF-Library noch nicht geladen.'); return; }
@@ -2822,6 +3033,8 @@ function initInstallButton(){
    INIT
 ══════════════════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded',()=>{
+  ensureEnhancedOcrUi();
+
   installAudioUnlock();
   initTabs();
   hookStaticInputs();
@@ -2847,6 +3060,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   initInstallButton();
 
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register(`${BASE}sw.js?v=55`).catch(err=>console.error('SW:',err));
+    navigator.serviceWorker.register(`${BASE}sw.js?v=56`).catch(err=>console.error('SW:',err));
   }
 });
