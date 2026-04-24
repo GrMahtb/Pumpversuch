@@ -1,13 +1,24 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v50 loaded');
+console.log('HTB Pumpversuch app.js v55 loaded');
 
 const BASE = '/Pumpversuch/';
-const STORAGE_DRAFT   = 'htb-pumpversuch-draft-v16';
-const STORAGE_HISTORY = 'htb-pumpversuch-history-v16';
+const STORAGE_DRAFT   = 'htb-pumpversuch-draft-v17';
+const STORAGE_HISTORY = 'htb-pumpversuch-history-v17';
 const HISTORY_MAX = 30;
 const DEFAULT_INTERVALLE = [0,1,2,3,4,5,15,30,45,60,75,90,105,120,135,150,165,180];
 
-const $ = (id) => document.getElementById(id);
+/* ── Firmendaten aus Referenz-PDF ── */
+const FIRMA = {
+  name:    'HTB Baugesellschaft m.b.H.',
+  slogan:  'BAUEN MIT SPEZIALISTEN ALS PARTNER',
+  adresse: 'A-6471 Arzl im Pitztal, Gewerbepark Pitztal 16',
+  tel:     'Tel. +43(0)5412/63975',
+  email:   'office.arzl@htb-bau.at',
+  web:     'www.htb-bau.at',
+  sparte:  'SPEZIALTIEF BAU'
+};
+
+const $ = id => document.getElementById(id);
 
 /* ══════════════════════════════════════════════════════
    STATE
@@ -18,7 +29,7 @@ function getInitialState(){
       objekt:'',grundstueck:'',ort:'',geologie:'',auftragsnummer:'',auftraggeber:'',
       bauleitung:'',bohrmeister:'',koordination:'',geprueftDurch:'',geprueftAm:''
     },
-    selection:{ foerder:true, schluck:true },
+    selection:{ foerder:true, schluck:false },
     foerder:{ dm:'', endteufe:'', ruhe:'' },
     schluck:{ dm:'', endteufe:'', ruhe:'' },
     overviewPhotoDataUrl:'',
@@ -40,67 +51,130 @@ function getInitialState(){
 const state = getInitialState();
 
 const timerMap = {};
-let _saveT=null, _liveT=null, _audioCtx=null, _alarmGain=null;
-let _timeAdjustVid=null;
-let _floatingRaf=null;
-let _ocrTargetVid=null, _ocrTargetRowIdx=null;
+let _saveT = null;
+let _liveT = null;
+let _audioCtx = null;
+let _alarmGain = null;
+let _timeAdjustVid = null;
+let _floatingRaf = null;
+let _ocrTargetVid = null;
+let _ocrTargetRowIdx = null;
 
 /* ══════════════════════════════════════════════════════
-   PURE HELPERS
+   HELPERS
 ══════════════════════════════════════════════════════ */
 const uid = () => crypto?.randomUUID?.() || ('id_'+Date.now()+'_'+Math.random().toString(16).slice(2));
 const clone = v => JSON.parse(JSON.stringify(v));
-function h(v){ return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-function pdfSafe(v){ return String(v??'').replace(/[–—]/g,'-').replace(/[•→]/g,'-').replace(/[\u0000-\u001F\u007F]/g,''); }
-function fmtComma(v,d=3){ const n=Number(v); return Number.isFinite(n)?n.toFixed(d).replace('.',','):'—'; }
-function fmtMaybe(v,d=3){ const n=Number(v); return Number.isFinite(n)?n.toFixed(d).replace('.',','):'—'; }
-function fmtSci(v,d=2){ const n=Number(v); if(!Number.isFinite(n)||n<=0) return '—'; const [m,e]=n.toExponential(d).split('e'); return `${m.replace('.',',')}e${Number(e)}`; }
-function fmtKf(v){ const n=Number(v); if(!Number.isFinite(n)||n<=0) return '—'; return n>=0.001?`${fmtComma(n,6)} m/s`:`${fmtSci(n,2)} m/s`; }
-function dateTag(d=new Date()){ return String(d.getDate()).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getFullYear()); }
-function dateDE(iso){ const s=String(iso||'').trim(); if(!s) return ''; const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}.${m[2]}.${m[1]}`:s; }
+
+function h(v){
+  return String(v ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+function pdfSafe(v){
+  return String(v ?? '')
+    .replace(/[–—]/g,'-')
+    .replace(/[•→]/g,'-')
+    .replace(/[\u0000-\u001F\u007F]/g,'');
+}
+function fmtComma(v,d=3){
+  const n=Number(v);
+  return Number.isFinite(n) ? n.toFixed(d).replace('.',',') : '—';
+}
+function fmtMaybe(v,d=3){
+  const n=Number(v);
+  return Number.isFinite(n) ? n.toFixed(d).replace('.',',') : '—';
+}
+function fmtSci(v,d=2){
+  const n=Number(v);
+  if(!Number.isFinite(n) || n<=0) return '—';
+  const [m,e]=n.toExponential(d).split('e');
+  return `${m.replace('.',',')}e${Number(e)}`;
+}
+function fmtKf(v){
+  const n=Number(v);
+  if(!Number.isFinite(n)||n<=0) return '—';
+  return n>=0.001 ? `${fmtComma(n,6)} m/s` : `${fmtSci(n,2)} m/s`;
+}
+function dateTag(d=new Date()){
+  return `${String(d.getDate()).padStart(2,'0')}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getFullYear())}`;
+}
+function dateDE(iso){
+  const s=String(iso||'').trim();
+  if(!s) return '';
+  const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : s;
+}
 function todayIso(){ return new Date().toISOString().slice(0,10); }
 function todayDE(){ return dateDE(todayIso()); }
-function formatTimeHHMMSS(d=new Date()){ return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`; }
+function formatTimeHHMMSS(d=new Date()){
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
 function formatElapsed(ms){
-  const total=Math.max(0,Math.floor(ms/1000));
-  const hh=Math.floor(total/3600),mm=Math.floor((total%3600)/60),ss=total%60;
-  return hh>0?`${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`:`${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  const t=Math.max(0,Math.floor(ms/1000));
+  const hh=Math.floor(t/3600);
+  const mm=Math.floor((t%3600)/60);
+  const ss=t%60;
+  return hh>0 ? `${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
 }
 function parseIntervalStr(str){
   return [...new Set(
-    String(str||'').split(',').map(s=>Number(String(s).trim())).filter(n=>Number.isFinite(n)&&n>=0)
+    String(str||'')
+      .split(',')
+      .map(s=>Number(String(s).trim()))
+      .filter(n=>Number.isFinite(n)&&n>=0)
   )].sort((a,b)=>a-b);
 }
-function lsToM3h(v){ const n=Number(v); return Number.isFinite(n)?(n*3.6).toFixed(3):''; }
+function lsToM3h(v){
+  const n=Number(v);
+  return Number.isFinite(n) ? (n*3.6).toFixed(3) : '';
+}
 function clamp(n,lo,hi){ return Math.max(lo,Math.min(hi,n)); }
 function getVersuchById(id){ return state.versuche.find(v=>v.id===id); }
 function getStageTitle(idx){ return `Stufe ${idx+1}`; }
 function getSelectedWells(){ return { foerder:!!state.selection.foerder, schluck:!!state.selection.schluck }; }
-function getWellLabel(key){ return key==='foerder'?'Entnahmebrunnen':'Rückgabebrunnen'; }
-function getWellShort(key){ return key==='foerder'?'Entnahme':'Rückgabe'; }
-function syncIntervalleStrFromRows(v){ v.intervalleStr=(v.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b).join(', '); }
+function getWellLabel(key){ return key==='foerder' ? 'Förderbrunnen' : 'Rückgabebrunnen'; }
+function syncIntervalleStrFromRows(v){
+  v.intervalleStr=(v.messungen||[])
+    .map(m=>Number(m.min))
+    .filter(n=>Number.isFinite(n)&&n>=0)
+    .sort((a,b)=>a-b)
+    .join(', ');
+}
 function sortMessungen(v){
   v.messungen.sort((a,b)=>{
-    const av=Number(a.min),bv=Number(b.min),af=Number.isFinite(av),bf=Number.isFinite(bv);
-    if(af&&bf) return av-bv; if(af) return -1; if(bf) return 1; return 0;
+    const av=Number(a.min), bv=Number(b.min);
+    const af=Number.isFinite(av), bf=Number.isFinite(bv);
+    if(af&&bf) return av-bv;
+    if(af) return -1;
+    if(bf) return 1;
+    return 0;
   });
   syncIntervalleStrFromRows(v);
 }
 function getContinueStep(v){
   const rows=(v.messungen||[]).slice().sort((a,b)=>Number(a.min)-Number(b.min));
-  if(rows.length>=2){ const s=Number(rows[rows.length-1].min)-Number(rows[rows.length-2].min); if(Number.isFinite(s)&&s>0) return s; }
+  if(rows.length>=2){
+    const step=Number(rows[rows.length-1].min)-Number(rows[rows.length-2].min);
+    if(Number.isFinite(step)&&step>0) return step;
+  }
   return 15;
 }
 function getRowsForExport(v){
   return clone(v.messungen||[]).sort((a,b)=>{
-    const av=Number(a.min),bv=Number(b.min);
+    const av=Number(a.min), bv=Number(b.min);
     if(Number.isFinite(av)&&Number.isFinite(bv)) return av-bv;
     return Number.isFinite(av)?-1:1;
   });
 }
-function scheduleLiveRender(){ clearTimeout(_liveT); _liveT=setTimeout(()=>renderLiveTab(),90); }
-
-const cameraSvgStr = (w=18,h=15) =>
+function scheduleLiveRender(){
+  clearTimeout(_liveT);
+  _liveT=setTimeout(()=>renderLiveTab(),90);
+}
+const camSvg = (w=18,h=15) =>
   `<svg viewBox="0 0 24 20" width="${w}" height="${h}" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/>
     <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/>
@@ -111,115 +185,235 @@ const cameraSvgStr = (w=18,h=15) =>
 /* ══════════════════════════════════════════════════════
    RATE / Kf
 ══════════════════════════════════════════════════════ */
-function getManualRateM3hNumber(v){ const n=Number(v?.manualRateM3h); return Number.isFinite(n)?n:NaN; }
-function getEffectiveRateM3h(v){ const n=getManualRateM3hNumber(v); return Number.isFinite(n)?n.toFixed(3):''; }
-function getEffectiveRateLs(v){ const n=getManualRateM3hNumber(v); return Number.isFinite(n)?(n/3.6).toFixed(3):''; }
+function getManualRateM3hNumber(v){
+  const n=Number(v?.manualRateM3h);
+  return Number.isFinite(n)?n:NaN;
+}
+function getEffectiveRateM3h(v){
+  const n=getManualRateM3hNumber(v);
+  return Number.isFinite(n)?n.toFixed(3):'';
+}
+function getEffectiveRateLs(v){
+  const n=getManualRateM3hNumber(v);
+  return Number.isFinite(n)?(n/3.6).toFixed(3):'';
+}
 function getAverageFoerderMengeNumber(v){
-  const vals=(v.messungen||[]).filter(m=>String(m.foerder_menge??'').trim()!==''&&Number.isFinite(Number(m.foerder_menge))).map(m=>Number(m.foerder_menge));
+  const vals=(v.messungen||[])
+    .filter(m=>String(m.foerder_menge??'').trim()!=='' && Number.isFinite(Number(m.foerder_menge)))
+    .map(m=>Number(m.foerder_menge));
   return vals.length ? vals.reduce((s,n)=>s+n,0)/vals.length : NaN;
 }
-function getAverageFoerderMenge(v){ const avg=getAverageFoerderMengeNumber(v); return Number.isFinite(avg)?avg.toFixed(3):''; }
+function getAverageFoerderMenge(v){
+  const a=getAverageFoerderMengeNumber(v);
+  return Number.isFinite(a)?a.toFixed(3):'';
+}
 function getCalcRateM3hNumber(v){
-  const m=getManualRateM3hNumber(v); if(Number.isFinite(m)&&m>0) return m;
-  const a=getAverageFoerderMengeNumber(v); if(Number.isFinite(a)&&a>0) return a;
+  const m=getManualRateM3hNumber(v);
+  if(Number.isFinite(m)&&m>0) return m;
+  const a=getAverageFoerderMengeNumber(v);
+  if(Number.isFinite(a)&&a>0) return a;
   return NaN;
 }
-function getCalcRateM3h(v){ const n=getCalcRateM3hNumber(v); return Number.isFinite(n)?n.toFixed(3):''; }
-function getCalcRateLs(v){ const n=getCalcRateM3hNumber(v); return Number.isFinite(n)?(n/3.6).toFixed(3):''; }
+function getCalcRateM3h(v){
+  const n=getCalcRateM3hNumber(v);
+  return Number.isFinite(n)?n.toFixed(3):'';
+}
+function getCalcRateLs(v){
+  const n=getCalcRateM3hNumber(v);
+  return Number.isFinite(n)?(n/3.6).toFixed(3):'';
+}
 function getCalcRateSource(v){
-  if(Number.isFinite(getManualRateM3hNumber(v))&&getManualRateM3hNumber(v)>0) return 'manuelle Förderrate';
-  if(Number.isFinite(getAverageFoerderMengeNumber(v))&&getAverageFoerderMengeNumber(v)>0) return 'Ø Fördermenge';
+  const m=getManualRateM3hNumber(v);
+  if(Number.isFinite(m)&&m>0) return 'manuelle Förderrate';
+  const a=getAverageFoerderMengeNumber(v);
+  if(Number.isFinite(a)&&a>0) return 'Ø Fördermenge';
   return '';
 }
 function getProcessHeadChangeM(raw,ruhe,key){
-  const m=Number(raw),r=Number(ruhe);
+  const m=Number(raw), r=Number(ruhe);
   if(!Number.isFinite(m)||!Number.isFinite(r)||String(raw??'').trim()==='') return NaN;
-  return key==='foerder'?(m-r):(r-m);
+  return key==='foerder' ? (m-r) : (r-m);
 }
-function getDisplacementCm(raw,ruhe){ const d=getProcessHeadChangeM(raw,ruhe,'foerder'); return Number.isFinite(d)?Math.abs(d*100):NaN; }
+function getDisplacementCm(raw,ruhe){
+  const d=getProcessHeadChangeM(raw,ruhe,'foerder');
+  return Number.isFinite(d) ? Math.abs(d*100) : NaN;
+}
 function estimateRowKfDupuit({ qM3h,dmMm,endteufe,ruhe,dyn,key }){
-  const Q=Number(qM3h)/3600,rw=Number(dmMm)/2000,ET=Number(endteufe),RWS=Number(ruhe),dynL=Number(dyn);
-  if(![Q,rw,ET,RWS,dynL].every(Number.isFinite)||Q<=0||rw<=0||ET<=0) return NaN;
-  const H0=ET-RWS,Hd=ET-dynL,s=key==='foerder'?(dynL-RWS):(RWS-dynL);
+  const Q=Number(qM3h)/3600;
+  const rw=Number(dmMm)/2000;
+  const ET=Number(endteufe);
+  const RWS=Number(ruhe);
+  const dynL=Number(dyn);
+
+  if(![Q,rw,ET,RWS,dynL].every(Number.isFinite) || Q<=0 || rw<=0 || ET<=0) return NaN;
+
+  const H0=ET-RWS;
+  const Hd=ET-dynL;
+  const s=key==='foerder' ? (dynL-RWS) : (RWS-dynL);
   if(!Number.isFinite(H0)||!Number.isFinite(Hd)||!Number.isFinite(s)||H0<=0||Hd<=0||s<=0) return NaN;
-  const denom=key==='foerder'?(H0*H0-Hd*Hd):(Hd*Hd-H0*H0);
+
+  const denom = key==='foerder' ? (H0*H0-Hd*Hd) : (Hd*Hd-H0*H0);
   if(!(denom>0)) return NaN;
+
   let k=1e-4;
   for(let i=0;i<30;i++){
     const R=Math.max(rw*20,3000*s*Math.sqrt(Math.max(k,1e-12)));
-    const ln=Math.log(R/rw); if(!(ln>0)) return NaN;
+    const ln=Math.log(R/rw);
+    if(!(ln>0)) return NaN;
     const kNew=(Q*ln)/(Math.PI*denom);
     if(!Number.isFinite(kNew)||kNew<=0) return NaN;
-    if(Math.abs(kNew-k)/k<1e-6){ k=kNew; break; } k=kNew;
+    if(Math.abs(kNew-k)/k<1e-6){ k=kNew; break; }
+    k=kNew;
   }
-  return Number.isFinite(k)&&k>0?k:NaN;
+  return Number.isFinite(k)&&k>0 ? k : NaN;
 }
 function getStageKfEstimate(versuch,key,brunnen){
   const rateM3h=getCalcRateM3hNumber(versuch);
   if(!Number.isFinite(rateM3h)||rateM3h<=0) return { kf:NaN, reason:'Keine Förderrate' };
+
   const field=key==='foerder'?'foerder_m':'schluck_m';
   const rows=getRowsForExport(versuch).map(row=>{
-    const min=Number(row.min),raw=row[field];
-    const kf=estimateRowKfDupuit({ qM3h:rateM3h, dmMm:brunnen?.dm, endteufe:brunnen?.endteufe, ruhe:brunnen?.ruhe, dyn:raw, key });
+    const min=Number(row.min);
+    const raw=row[field];
+    const kf=estimateRowKfDupuit({
+      qM3h:rateM3h, dmMm:brunnen?.dm, endteufe:brunnen?.endteufe, ruhe:brunnen?.ruhe, dyn:raw, key
+    });
     const s=getProcessHeadChangeM(raw,brunnen?.ruhe,key);
     if(!Number.isFinite(kf)||!Number.isFinite(min)||!Number.isFinite(s)||s<=0) return null;
     return { min,kf,s };
   }).filter(Boolean).sort((a,b)=>a.min-b.min);
+
   if(!rows.length) return { kf:NaN, reason:'Noch keine auswertbaren Messpunkte' };
-  const tail=rows.length>=4?rows.slice(Math.floor(rows.length/2)):rows;
+
+  const tail=rows.length>=4 ? rows.slice(Math.floor(rows.length/2)) : rows;
   const weights=tail.map(p=>Math.max(1,p.min||1));
   const sumW=weights.reduce((a,b)=>a+b,0);
   const logMean=Math.exp(tail.reduce((sum,it,i)=>sum+Math.log(it.kf)*weights[i],0)/sumW);
-  const minK=Math.min(...tail.map(x=>x.kf)),maxK=Math.max(...tail.map(x=>x.kf));
+  const minK=Math.min(...tail.map(x=>x.kf));
+  const maxK=Math.max(...tail.map(x=>x.kf));
   const spread=maxK/minK;
+
   let quality='gering';
   if(tail.length>=4&&spread<=3) quality='gut';
   else if(tail.length>=3&&spread<=10) quality='mittel';
-  return { kf:logMean,quality,used:tail.length,total:rows.length,rateM3h,rateSource:getCalcRateSource(versuch) };
+
+  return {
+    kf:logMean,
+    quality,
+    used:tail.length,
+    total:rows.length,
+    rateM3h,
+    rateSource:getCalcRateSource(versuch)
+  };
 }
 function getWellChartPoints(versuch,key,brunnen){
-  const field=key==='foerder'?'foerder_m':'schluck_m', ruhe=Number(brunnen?.ruhe);
-  return getRowsForExport(versuch).map(row=>({x:Number(row.min),y:getDisplacementCm(row[field],ruhe)}))
-    .filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).sort((a,b)=>a.x-b.x);
+  const field=key==='foerder'?'foerder_m':'schluck_m';
+  const ruhe=Number(brunnen?.ruhe);
+  return getRowsForExport(versuch)
+    .map(row=>({ x:Number(row.min), y:getDisplacementCm(row[field],ruhe) }))
+    .filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))
+    .sort((a,b)=>a.x-b.x);
 }
-function niceNum(r,round){ if(!Number.isFinite(r)||r<=0) return 1; const exp=Math.floor(Math.log10(r)),f=r/Math.pow(10,exp); let nf; if(round){if(f<1.5)nf=1;else if(f<3)nf=2;else if(f<7)nf=5;else nf=10;}else{if(f<=1)nf=1;else if(f<=2)nf=2;else if(f<=5)nf=5;else nf=10;} return nf*Math.pow(10,exp); }
-function getNiceAxis(lo,hi,ticks=6){ let min=Number.isFinite(lo)?lo:0,max=Number.isFinite(hi)?hi:1; if(min===max){if(min===0)max=1;else{min=Math.min(0,min);max=max*1.1;}} const r=niceNum(max-min,false),step=niceNum(r/Math.max(2,ticks-1),true); return { min:Math.floor(min/step)*step, max:Math.ceil(max/step)*step, step }; }
-function buildTicks(ax){ const t=[]; for(let v=ax.min;v<=ax.max+ax.step/2;v+=ax.step) t.push(Number(v.toFixed(10))); return t; }
-function fmtTick(v,d=0){ return Number.isFinite(v)?String(Number(v.toFixed(d))).replace('.',','):'—'; }
+function niceNum(r,round){
+  if(!Number.isFinite(r)||r<=0) return 1;
+  const exp=Math.floor(Math.log10(r));
+  const f=r/Math.pow(10,exp);
+  let nf;
+  if(round){
+    if(f<1.5) nf=1;
+    else if(f<3) nf=2;
+    else if(f<7) nf=5;
+    else nf=10;
+  }else{
+    if(f<=1) nf=1;
+    else if(f<=2) nf=2;
+    else if(f<=5) nf=5;
+    else nf=10;
+  }
+  return nf*Math.pow(10,exp);
+}
+function getNiceAxis(lo,hi,ticks=6){
+  let min=Number.isFinite(lo)?lo:0;
+  let max=Number.isFinite(hi)?hi:1;
+  if(min===max){
+    if(min===0) max=1;
+    else { min=Math.min(0,min); max=max*1.1; }
+  }
+  const r=niceNum(max-min,false);
+  const step=niceNum(r/Math.max(2,ticks-1),true);
+  return { min:Math.floor(min/step)*step, max:Math.ceil(max/step)*step, step };
+}
+function buildTicks(ax){
+  const t=[];
+  for(let v=ax.min;v<=ax.max+ax.step/2;v+=ax.step) t.push(Number(v.toFixed(10)));
+  return t;
+}
+function fmtTick(v,d=0){
+  return Number.isFinite(v) ? String(Number(v.toFixed(d))).replace('.',',') : '—';
+}
 
 /* ══════════════════════════════════════════════════════
    DEFAULTS
 ══════════════════════════════════════════════════════ */
-function defaultMessung(min){ return { min, foerder_m:'', schluck_m:'', foerder_menge:'' }; }
+function defaultMessung(min){
+  return { min, foerder_m:'', schluck_m:'', foerder_menge:'' };
+}
 function defaultVersuch(){
   const ints=[...DEFAULT_INTERVALLE];
-  return { id:uid(), manualRateM3h:'', startzeit:'', elapsedMs:0, intervalleStr:ints.join(', '), messungen:ints.map(defaultMessung), photoDataUrl:'' };
+  return {
+    id:uid(),
+    manualRateM3h:'',
+    startzeit:'',
+    elapsedMs:0,
+    intervalleStr:ints.join(', '),
+    messungen:ints.map(defaultMessung),
+    photoDataUrl:''
+  };
 }
 function hydrateVersuch(v){
   const base=defaultVersuch();
-  const ints=v?.intervalleStr?parseIntervalStr(v.intervalleStr):[...DEFAULT_INTERVALLE];
-  const existing=Array.isArray(v?.messungen)?v.messungen:[];
+  const ints=v?.intervalleStr ? parseIntervalStr(v.intervalleStr) : [...DEFAULT_INTERVALLE];
+  const existing=Array.isArray(v?.messungen) ? v.messungen : [];
   return {
     ...base,...v,
     elapsedMs:Number(v?.elapsedMs||0),
     intervalleStr:ints.join(', '),
-    photoDataUrl:typeof v?.photoDataUrl==='string'?v.photoDataUrl:'',
-    messungen:ints.map(min=>{ const hit=existing.find(m=>Number(m.min)===Number(min)); return hit?{min,foerder_m:hit.foerder_m??'',schluck_m:hit.schluck_m??'',foerder_menge:hit.foerder_menge??''}:defaultMessung(min); })
+    photoDataUrl:typeof v?.photoDataUrl==='string' ? v.photoDataUrl : '',
+    messungen:ints.map(min=>{
+      const hit=existing.find(m=>Number(m.min)===Number(min));
+      return hit ? {
+        min,
+        foerder_m:hit.foerder_m??'',
+        schluck_m:hit.schluck_m??'',
+        foerder_menge:hit.foerder_menge??''
+      } : defaultMessung(min);
+    })
   };
 }
 
 /* ══════════════════════════════════════════════════════
    FIELD MAPS
 ══════════════════════════════════════════════════════ */
-const META_FIELDS=[
-  ['meta-objekt','objekt'],['meta-grundstueck','grundstueck'],['meta-ort','ort'],
-  ['meta-geologie','geologie'],['meta-auftragsnummer','auftragsnummer'],['meta-auftraggeber','auftraggeber'],
-  ['meta-bauleitung','bauleitung'],['meta-bohrmeister','bohrmeister'],['meta-koordination','koordination'],
-  ['meta-geprueftDurch','geprueftDurch'],['meta-geprueftAm','geprueftAm']
+const META_FIELDS = [
+  ['meta-objekt','objekt'],
+  ['meta-grundstueck','grundstueck'],
+  ['meta-ort','ort'],
+  ['meta-geologie','geologie'],
+  ['meta-auftragsnummer','auftragsnummer'],
+  ['meta-auftraggeber','auftraggeber'],
+  ['meta-bauleitung','bauleitung'],
+  ['meta-bohrmeister','bohrmeister'],
+  ['meta-koordination','koordination'],
+  ['meta-geprueftDurch','geprueftDurch'],
+  ['meta-geprueftAm','geprueftAm']
 ];
-const BRUNNEN_FIELDS=[
-  ['foerder-dm','foerder','dm'],['foerder-endteufe','foerder','endteufe'],['foerder-ruhe','foerder','ruhe'],
-  ['schluck-dm','schluck','dm'],['schluck-endteufe','schluck','endteufe'],['schluck-ruhe','schluck','ruhe']
+const BRUNNEN_FIELDS = [
+  ['foerder-dm','foerder','dm'],
+  ['foerder-endteufe','foerder','endteufe'],
+  ['foerder-ruhe','foerder','ruhe'],
+  ['schluck-dm','schluck','dm'],
+  ['schluck-endteufe','schluck','endteufe'],
+  ['schluck-ruhe','schluck','ruhe']
 ];
 
 /* ══════════════════════════════════════════════════════
@@ -229,43 +423,69 @@ function syncMetaToUi(){ META_FIELDS.forEach(([id,key])=>{ const el=$(id); if(el
 function collectMetaFromUi(){ META_FIELDS.forEach(([id,key])=>{ const el=$(id); if(el) state.meta[key]=el.value||''; }); }
 function syncBrunnenToUi(){ BRUNNEN_FIELDS.forEach(([id,g,k])=>{ const el=$(id); if(el) el.value=state[g][k]||''; }); }
 function collectBrunnenFromUi(){ BRUNNEN_FIELDS.forEach(([id,g,k])=>{ const el=$(id); if(el) state[g][k]=el.value||''; }); }
-function updateBrunnenVisibility(){ if($('box-foerder')) $('box-foerder').hidden=!state.selection.foerder; if($('box-schluck')) $('box-schluck').hidden=!state.selection.schluck; }
-function syncSelectionToUi(){ if($('sel-foerder')) $('sel-foerder').checked=!!state.selection.foerder; if($('sel-schluck')) $('sel-schluck').checked=!!state.selection.schluck; updateBrunnenVisibility(); }
-function collectSelectionFromUi(){
-  const f=!!$('sel-foerder')?.checked,s=!!$('sel-schluck')?.checked;
-  if(!f&&!s){ state.selection.foerder=true;state.selection.schluck=false;syncSelectionToUi();alert('Mindestens ein Brunnen muss ausgewählt sein.');return false; }
-  state.selection.foerder=f;state.selection.schluck=s;updateBrunnenVisibility();return true;
+function updateBrunnenVisibility(){
+  if($('box-foerder')) $('box-foerder').hidden=!state.selection.foerder;
+  if($('box-schluck')) $('box-schluck').hidden=!state.selection.schluck;
 }
-function updateMainPdfButtonLabel(){ const btn=$('btnPdf');if(btn) btn.textContent=state.settings.pdfExportType==='vollstaendig'?'PDF Vollständig':'PDF Protokoll'; }
+function syncSelectionToUi(){
+  if($('sel-foerder')) $('sel-foerder').checked=!!state.selection.foerder;
+  if($('sel-schluck')) $('sel-schluck').checked=!!state.selection.schluck;
+  updateBrunnenVisibility();
+}
+function collectSelectionFromUi(){
+  const f=!!$('sel-foerder')?.checked;
+  const s=!!$('sel-schluck')?.checked;
+  if(!f&&!s){
+    state.selection.foerder=true;
+    state.selection.schluck=false;
+    syncSelectionToUi();
+    alert('Mindestens ein Brunnen muss ausgewählt sein.');
+    return false;
+  }
+  state.selection.foerder=f;
+  state.selection.schluck=s;
+  updateBrunnenVisibility();
+  return true;
+}
+function updateMainPdfButtonLabel(){
+  const btn=$('btnPdf');
+  if(btn) btn.textContent=state.settings.pdfExportType==='vollstaendig'?'PDF Vollständig':'PDF Protokoll';
+}
 function syncSettingsToUi(){
-  $('settings-alarmDuration').value=state.settings.alarmDurationSec??4;
-  const a=$('pdfType-protokoll'),b=$('pdfType-vollstaendig');
+  $('settings-alarmDuration').value=state.settings.alarmDurationSec ?? 4;
+  const a=$('pdfType-protokoll');
+  const b=$('pdfType-vollstaendig');
   if(a) a.checked=state.settings.pdfExportType!=='vollstaendig';
   if(b) b.checked=state.settings.pdfExportType==='vollstaendig';
   updateMainPdfButtonLabel();
 }
 function collectSettingsFromUi(){
   state.settings.alarmDurationSec=clamp(Number($('settings-alarmDuration')?.value||4),1,30);
-  state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked?'vollstaendig':'protokoll';
+  state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked ? 'vollstaendig' : 'protokoll';
   updateMainPdfButtonLabel();
 }
 
 function renderOverviewPhotoThumb(){
-  const box=$('overviewPhotoThumb');if(!box) return;
-  if(!state.overviewPhotoDataUrl){ box.hidden=true;box.innerHTML='';return; }
+  const box=$('overviewPhotoThumb');
+  if(!box) return;
+  if(!state.overviewPhotoDataUrl){
+    box.hidden=true;
+    box.innerHTML='';
+    return;
+  }
   box.hidden=false;
   box.innerHTML=`<img src="${h(state.overviewPhotoDataUrl)}" alt="Übersichtsfoto"/><button class="overview-del-btn" data-photo-del="overview" type="button">Foto entfernen</button>`;
 }
 function renderRestsandPhotoAreas(){
   const defs=[
-    { key:'imhoff',area:'imhoffPhotoArea',inputId:'imhoffPhotoInput',label:'Foto aufnehmen' },
-    { key:'sieb',area:'siebPhotoArea',inputId:'siebPhotoInput',label:'Foto aufnehmen' }
+    { key:'imhoff', area:'imhoffPhotoArea', inputId:'imhoffPhotoInput', label:'Foto aufnehmen' },
+    { key:'sieb',   area:'siebPhotoArea',   inputId:'siebPhotoInput',   label:'Foto aufnehmen' }
   ];
   defs.forEach(def=>{
-    const area=$(def.area);if(!area) return;
+    const area=$(def.area); if(!area) return;
     const has=!!state.restsand[def.key].photoDataUrl;
     area.innerHTML=`
-      <button class="restsand-photo-btn" data-rs-photo="${def.key}" type="button">${cameraSvgStr(26,22)} ${has?'Foto ändern':def.label}</button>
+      <button class="restsand-photo-btn" data-rs-photo="${def.key}" type="button">${camSvg(26,22)} ${has?'Foto ändern':def.label}</button>
       <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-rs-input="${def.key}" style="display:none"/>
       ${has?`<img class="restsand-thumb" src="${h(state.restsand[def.key].photoDataUrl)}" alt="${def.key}"/><button class="restsand-del-btn" data-photo-del="restsand-${def.key}" type="button">Entfernen</button>`:''}
     `;
@@ -273,16 +493,16 @@ function renderRestsandPhotoAreas(){
 }
 function renderPhPhotoAreas(){
   const defs=[
-    { key:'sulfat',area:'sulfatPhotoArea',inputId:'sulfatPhotoInput',label:'Foto Teststäbchen' },
-    { key:'temperatur',area:'tempPhotoArea',inputId:'tempPhotoInput',label:'Foto Thermometer' },
-    { key:'ph',area:'phPhotoArea',inputId:'phPhotoInput',label:'Foto pH-Meter' }
+    { key:'sulfat', area:'sulfatPhotoArea', inputId:'sulfatPhotoInput', label:'Foto Teststäbchen' },
+    { key:'temperatur', area:'tempPhotoArea', inputId:'tempPhotoInput', label:'Foto Thermometer' },
+    { key:'ph', area:'phPhotoArea', inputId:'phPhotoInput', label:'Foto pH-Meter' }
   ];
   defs.forEach(def=>{
-    const area=$(def.area);if(!area) return;
-    const data=def.key==='ph'?state.ph.ph.photoDataUrl:state.ph[def.key].photoDataUrl;
+    const area=$(def.area); if(!area) return;
+    const data=def.key==='ph' ? state.ph.ph.photoDataUrl : state.ph[def.key].photoDataUrl;
     const has=!!data;
     area.innerHTML=`
-      <button class="restsand-photo-btn" data-ph-photo="${def.key}" type="button">${cameraSvgStr(22,18)} ${has?'Foto ändern':def.label}</button>
+      <button class="restsand-photo-btn" data-ph-photo="${def.key}" type="button">${camSvg(22,18)} ${has?'Foto ändern':def.label}</button>
       <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-ph-input="${def.key}" style="display:none"/>
       ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"/><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}
     `;
@@ -323,12 +543,19 @@ function collectPhFromUi(){
    SNAPSHOT / STORAGE
 ══════════════════════════════════════════════════════ */
 function collectSnapshot(){
-  collectMetaFromUi();collectBrunnenFromUi();collectSelectionFromUi();
-  collectRestsandFromUi();collectPhFromUi();collectSettingsFromUi();
+  collectMetaFromUi();
+  collectBrunnenFromUi();
+  collectSelectionFromUi();
+  collectRestsandFromUi();
+  collectPhFromUi();
+  collectSettingsFromUi();
+
   return {
-    v:16,
-    meta:clone(state.meta),selection:clone(state.selection),
-    foerder:clone(state.foerder),schluck:clone(state.schluck),
+    v:17,
+    meta:clone(state.meta),
+    selection:clone(state.selection),
+    foerder:clone(state.foerder),
+    schluck:clone(state.schluck),
     overviewPhotoDataUrl:state.overviewPhotoDataUrl||'',
     versuche:clone(state.versuche),
     restsand:clone(state.restsand),
@@ -337,7 +564,9 @@ function collectSnapshot(){
   };
 }
 function applySnapshot(snap,render=true){
-  const base=getInitialState();snap=snap||{};
+  const base=getInitialState();
+  snap=snap||{};
+
   state.meta={...base.meta,...(snap.meta||{})};
   state.selection={...base.selection,...(snap.selection||{})};
   state.foerder={...base.foerder,...(snap.foerder||{})};
@@ -349,27 +578,59 @@ function applySnapshot(snap,render=true){
     sieb:{...base.restsand.sieb,...((snap.restsand||{}).sieb||{})},
     bemerkung:(snap.restsand||{}).bemerkung||''
   };
-  state.ph={...base.ph,...(snap.ph||{}),
+  state.ph={
+    ...base.ph,...(snap.ph||{}),
     sulfat:{...base.ph.sulfat,...((snap.ph||{}).sulfat||{})},
     temperatur:{...base.ph.temperatur,...((snap.ph||{}).temperatur||{})},
     ph:{...base.ph.ph,...((snap.ph||{}).ph||{})}
   };
   state.settings={...base.settings,...(snap.settings||{})};
+
   Object.keys(timerMap).forEach(hardStopTimer);
+
   if(render){
-    syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();
-    syncRestsandToUi();syncPhToUi();syncSettingsToUi();
-    renderVersuche();renderLiveTab();renderHistoryList();
+    syncMetaToUi();
+    syncBrunnenToUi();
+    syncSelectionToUi();
+    renderOverviewPhotoThumb();
+    syncRestsandToUi();
+    syncPhToUi();
+    syncSettingsToUi();
+    renderVersuche();
+    renderLiveTab();
+    renderHistoryList();
   }
 }
-function saveDraftDebounced(){ clearTimeout(_saveT);_saveT=setTimeout(()=>{ try{ localStorage.setItem(STORAGE_DRAFT,JSON.stringify(collectSnapshot())); }catch{} },250); }
-function loadDraft(){ try{ const raw=localStorage.getItem(STORAGE_DRAFT);if(raw) applySnapshot(JSON.parse(raw),true); }catch(e){ console.warn('Draft load',e); } }
-function readHistory(){ try{ return JSON.parse(localStorage.getItem(STORAGE_HISTORY)||'[]'); }catch{ return []; } }
-function writeHistory(list){ try{ localStorage.setItem(STORAGE_HISTORY,JSON.stringify(list.slice(0,HISTORY_MAX))); }catch{} }
-function saveCurrentToHistory(){
+function saveDraftDebounced(){
+  clearTimeout(_saveT);
+  _saveT=setTimeout(()=>{
+    try{ localStorage.setItem(STORAGE_DRAFT,JSON.stringify(collectSnapshot())); }catch{}
+  },250);
+}
+function loadDraft(){
+  try{
+    const raw=localStorage.getItem(STORAGE_DRAFT);
+    if(raw) applySnapshot(JSON.parse(raw),true);
+  }catch(e){
+    console.warn('Draft load failed',e);
+  }
+}
+function readHistory(){
+  try{ return JSON.parse(localStorage.getItem(STORAGE_HISTORY)||'[]'); }
+  catch{ return []; }
+}
+function writeHistory(list){
+  try{ localStorage.setItem(STORAGE_HISTORY,JSON.stringify(list.slice(0,HISTORY_MAX))); }catch{}
+}
+function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
   const snap=collectSnapshot();
-  const entry={ id:uid(),savedAt:Date.now(),title:`${snap.meta.objekt||'—'} · ${snap.meta.ort||'—'}`,snapshot:snap };
-  const list=readHistory();list.unshift(entry);writeHistory(list);renderHistoryList();
+  const title=`${snap.meta.objekt||'—'} · ${snap.meta.ort||'—'}`;
+  const entry={ id:uid(), savedAt:Date.now(), title, snapshot:snap };
+  const list=readHistory();
+  list.unshift(entry);
+  writeHistory(list);
+  renderHistoryList();
+  if(msg) alert(msg);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -379,7 +640,11 @@ function initTabs(){
   document.querySelectorAll('.tab').forEach(btn=>{
     btn.addEventListener('click',()=>{
       document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('is-active',b===btn));
-      document.querySelectorAll('.pane').forEach(p=>{ const on=p.id===`tab-${btn.dataset.tab}`;p.classList.toggle('is-active',on);p.hidden=!on; });
+      document.querySelectorAll('.pane').forEach(p=>{
+        const on=p.id===`tab-${btn.dataset.tab}`;
+        p.classList.toggle('is-active',on);
+        p.hidden=!on;
+      });
       if(btn.dataset.tab==='verlauf') renderHistoryList();
       if(btn.dataset.tab==='live') renderLiveTab();
       updateFloatingTimerWidget();
@@ -391,37 +656,72 @@ function initTabs(){
    AUDIO / ALARM
 ══════════════════════════════════════════════════════ */
 function getAlarmAudioContext(){
-  const AC=window.AudioContext||window.webkitAudioContext;if(!AC) return null;
-  if(!_audioCtx){ try{ _audioCtx=new AC();_alarmGain=_audioCtx.createGain();_alarmGain.gain.value=1.0;_alarmGain.connect(_audioCtx.destination); }catch{ return null; } }
+  const AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC) return null;
+  if(!_audioCtx){
+    try{
+      _audioCtx=new AC();
+      _alarmGain=_audioCtx.createGain();
+      _alarmGain.gain.value=1.0;
+      _alarmGain.connect(_audioCtx.destination);
+    }catch{
+      return null;
+    }
+  }
   return _audioCtx;
 }
 function unlockAlarmAudio(){
-  const ctx=getAlarmAudioContext();if(!ctx) return false;
-  try{ if(ctx.state==='suspended') ctx.resume();const buf=ctx.createBuffer(1,1,22050);const src=ctx.createBufferSource();src.buffer=buf;src.connect(ctx.destination);src.start(0);return true; }catch{ return false; }
+  const ctx=getAlarmAudioContext();
+  if(!ctx) return false;
+  try{
+    if(ctx.state==='suspended') ctx.resume();
+    const buf=ctx.createBuffer(1,1,22050);
+    const src=ctx.createBufferSource();
+    src.buffer=buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    return true;
+  }catch{
+    return false;
+  }
 }
 function installAudioUnlock(){
-  const u=()=>unlockAlarmAudio();
-  ['pointerdown','touchstart','touchend','keydown','click'].forEach(e=>window.addEventListener(e,u,{passive:true}));
+  const fn=()=>unlockAlarmAudio();
+  ['pointerdown','touchstart','touchend','keydown','click'].forEach(evt=>{
+    window.addEventListener(evt,fn,{passive:true});
+  });
 }
 function scheduleBeep(ctx,start,duration=0.10,freq=2350,volume=0.52){
   const out=_alarmGain||ctx.destination;
   [freq,freq*1.015].forEach(f=>{
-    const osc=ctx.createOscillator(),g=ctx.createGain();
-    osc.type='square';osc.frequency.setValueAtTime(f,start);
+    const osc=ctx.createOscillator();
+    const g=ctx.createGain();
+    osc.type='square';
+    osc.frequency.setValueAtTime(f,start);
     g.gain.setValueAtTime(0.0001,start);
     g.gain.exponentialRampToValueAtTime(Math.max(0.0001,volume),start+0.005);
     g.gain.setValueAtTime(Math.max(0.0001,volume),start+Math.max(0.03,duration-0.02));
     g.gain.exponentialRampToValueAtTime(0.0001,start+duration);
-    osc.connect(g);g.connect(out);osc.start(start);osc.stop(start+duration+0.02);
+    osc.connect(g); g.connect(out);
+    osc.start(start); osc.stop(start+duration+0.02);
   });
 }
 function playIntervalBeep(){
-  try{ const p=[120,90,120,90,120,360];const tot=Math.max(1,Math.round(Number(state.settings.alarmDurationSec||4)/0.9));const v=[];for(let i=0;i<tot;i++) v.push(...p);navigator.vibrate?.(v); }catch{}
-  const ctx=getAlarmAudioContext();if(!ctx) return false;
+  try{
+    const p=[120,90,120,90,120,360];
+    const tot=Math.max(1,Math.round(Number(state.settings.alarmDurationSec||4)/0.9));
+    const vib=[]; for(let i=0;i<tot;i++) vib.push(...p);
+    navigator.vibrate?.(vib);
+  }catch{}
+
+  const ctx=getAlarmAudioContext();
+  if(!ctx) return false;
   try{ if(ctx.state==='suspended') ctx.resume(); }catch{}
   if(ctx.state==='suspended') return false;
+
   const dur=clamp(Number(state.settings.alarmDurationSec||4),1,30);
-  const now=ctx.currentTime+0.02,cycle=0.90;
+  const now=ctx.currentTime+0.02;
+  const cycle=0.90;
   for(let t=0;t<dur;t+=cycle){
     scheduleBeep(ctx,now+t+0.00,0.10,2350,0.52);
     scheduleBeep(ctx,now+t+0.20,0.10,2350,0.52);
@@ -439,242 +739,474 @@ async function downscaleImageFile(file,maxDim=1600,quality=0.78){
     reader.onload=()=>{
       const img=new Image();
       img.onload=()=>{
-        let {width,height}=img;const scale=Math.min(1,maxDim/Math.max(width,height));
-        width=Math.round(width*scale);height=Math.round(height*scale);
-        const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+        let { width,height }=img;
+        const scale=Math.min(1,maxDim/Math.max(width,height));
+        width=Math.round(width*scale);
+        height=Math.round(height*scale);
+        const canvas=document.createElement('canvas');
+        canvas.width=width;
+        canvas.height=height;
         canvas.getContext('2d').drawImage(img,0,0,width,height);
-        try{ resolve(canvas.toDataURL('image/jpeg',quality)); }catch(e){ reject(e); }
+        try{
+          resolve(canvas.toDataURL('image/jpeg',quality));
+        }catch(e){ reject(e); }
       };
-      img.onerror=reject;img.src=reader.result;
+      img.onerror=reject;
+      img.src=reader.result;
     };
-    reader.onerror=reject;reader.readAsDataURL(file);
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
   });
 }
 function dataUrlToUint8Array(dataUrl){
-  const b64=dataUrl.split(',')[1]||'',bin=atob(b64),bytes=new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);return bytes;
+  const b64=dataUrl.split(',')[1]||'';
+  const bin=atob(b64);
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return bytes;
 }
 async function embedDataUrlImage(pdf,dataUrl){
   if(!dataUrl) return null;
   const bytes=dataUrlToUint8Array(dataUrl);
-  return /^data:image\/png/i.test(dataUrl)?await pdf.embedPng(bytes):await pdf.embedJpg(bytes);
+  return /^data:image\/png/i.test(dataUrl) ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
 }
-async function handlePhotoSelected(file){ return downscaleImageFile(file,1600,0.78); }
+async function handlePhotoSelected(file){
+  return downscaleImageFile(file,1600,0.78);
+}
 
 /* ══════════════════════════════════════════════════════
    GLOBAL PHOTO DELEGATION
 ══════════════════════════════════════════════════════ */
 function hookGlobalPhotoDelegation(){
   document.addEventListener('click',async(e)=>{
-    const btn=e.target.closest('button');if(!btn) return;
-    if(btn.id==='overviewPhotoBtnTrigger'){ $('overviewPhotoInput')?.click();return; }
-    if(btn.dataset.rsPhoto){ $(`${btn.dataset.rsPhoto}PhotoInput`)?.click();return; }
+    const btn=e.target.closest('button');
+    if(!btn) return;
+
+    if(btn.id==='overviewPhotoBtnTrigger'){
+      $('overviewPhotoInput')?.click();
+      return;
+    }
+    if(btn.dataset.rsPhoto){
+      $(`${btn.dataset.rsPhoto}PhotoInput`)?.click();
+      return;
+    }
     if(btn.dataset.phPhoto){
-      ({ sulfat:'sulfatPhotoInput',temperatur:'tempPhotoInput',ph:'phPhotoInput' });
-      const map={ sulfat:'sulfatPhotoInput',temperatur:'tempPhotoInput',ph:'phPhotoInput' };
-      $(map[btn.dataset.phPhoto])?.click();return;
+      const map={ sulfat:'sulfatPhotoInput', temperatur:'tempPhotoInput', ph:'phPhotoInput' };
+      $(map[btn.dataset.phPhoto])?.click();
+      return;
     }
     if(btn.dataset.photoDel){
       const what=btn.dataset.photoDel;
-      if(what==='overview'){ state.overviewPhotoDataUrl='';renderOverviewPhotoThumb();saveDraftDebounced();return; }
+      if(what==='overview'){
+        state.overviewPhotoDataUrl='';
+        renderOverviewPhotoThumb();
+        saveDraftDebounced();
+        return;
+      }
       if(what.startsWith('restsand-')){
         const k=what.replace('restsand-','');
-        state.restsand[k].photoDataUrl='';renderRestsandPhotoAreas();saveDraftDebounced();return;
+        state.restsand[k].photoDataUrl='';
+        renderRestsandPhotoAreas();
+        saveDraftDebounced();
+        return;
       }
       if(what.startsWith('ph-')){
         const k=what.replace('ph-','');
-        if(k==='ph') state.ph.ph.photoDataUrl=''; else state.ph[k].photoDataUrl='';
-        renderPhPhotoAreas();saveDraftDebounced();return;
+        if(k==='ph') state.ph.ph.photoDataUrl='';
+        else state.ph[k].photoDataUrl='';
+        renderPhPhotoAreas();
+        saveDraftDebounced();
       }
     }
   });
+
   document.addEventListener('change',async(e)=>{
-    const input=e.target;if(!(input instanceof HTMLInputElement)||!input.files?.[0]) return;
+    const input=e.target;
+    if(!(input instanceof HTMLInputElement) || !input.files?.[0]) return;
     const file=input.files[0];
     try{
       const dataUrl=await handlePhotoSelected(file);
-      if(input.id==='overviewPhotoInput'){ state.overviewPhotoDataUrl=dataUrl;renderOverviewPhotoThumb(); }
-      else if(input.dataset.rsInput){ state.restsand[input.dataset.rsInput].photoDataUrl=dataUrl;renderRestsandPhotoAreas(); }
-      else if(input.dataset.phInput){
+      if(input.id==='overviewPhotoInput'){
+        state.overviewPhotoDataUrl=dataUrl;
+        renderOverviewPhotoThumb();
+      }else if(input.dataset.rsInput){
+        state.restsand[input.dataset.rsInput].photoDataUrl=dataUrl;
+        renderRestsandPhotoAreas();
+      }else if(input.dataset.phInput){
         if(input.dataset.phInput==='ph') state.ph.ph.photoDataUrl=dataUrl;
         else state.ph[input.dataset.phInput].photoDataUrl=dataUrl;
         renderPhPhotoAreas();
       }
       saveDraftDebounced();
-    }catch(err){ console.error(err);alert('Foto konnte nicht verarbeitet werden.'); }
-    finally{ input.value=''; }
+    }catch(err){
+      console.error(err);
+      alert('Foto konnte nicht verarbeitet werden.');
+    }finally{
+      input.value='';
+    }
   });
 }
 
 /* ══════════════════════════════════════════════════════
-   OCR / SCAN
+   OCR – verbessert für Werte mit 2 Nachkommastellen
 ══════════════════════════════════════════════════════ */
 function openOcrModal(vid,rowIdx){
-  _ocrTargetVid=vid;_ocrTargetRowIdx=rowIdx;
-  $('ocrPreviewImg').src='';$('ocrResultInput').value='';
+  _ocrTargetVid=vid;
+  _ocrTargetRowIdx=rowIdx;
+  $('ocrPreviewImg').src='';
+  $('ocrResultInput').value='';
   $('ocrStatus').textContent='Bitte Foto aufnehmen…';
   $('ocrModal').hidden=false;
   setTimeout(()=>$('ocrFileInput').click(),100);
 }
-function closeOcrModal(){ $('ocrModal').hidden=true;_ocrTargetVid=null;_ocrTargetRowIdx=null; }
+function closeOcrModal(){
+  $('ocrModal').hidden=true;
+  _ocrTargetVid=null;
+  _ocrTargetRowIdx=null;
+}
 
-$('ocrFileInput')?.addEventListener('change',async(e)=>{
-  const file=e.target.files?.[0];if(!file) return;
-  const dataUrl=await downscaleImageFile(file,1600,0.82);
-  $('ocrPreviewImg').src=dataUrl;
-  $('ocrStatus').textContent='Texterkennung läuft…';
-  e.target.value='';
-  try{
-    if(!window.Tesseract){ $('ocrStatus').textContent='Tesseract nicht geladen – Wert bitte manuell eingeben.';return; }
-    const { data:{ text } } = await Tesseract.recognize(dataUrl,'eng',{
-      logger:m=>{ if(m.status==='recognizing text') $('ocrStatus').textContent=`Erkenne… ${Math.round(m.progress*100)}%`; }
+function canvasToDataUrl(canvas){
+  return canvas.toDataURL('image/jpeg',0.92);
+}
+
+/* Bildvorverarbeitung:
+   - Mittelpunkt croppen (Display-Bereich)
+   - Graustufen
+   - Kontrast anheben
+   - Schwarz/Weiß
+   - 2x Upscale
+*/
+async function preprocessForOcr(dataUrl){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const srcW=img.width;
+      const srcH=img.height;
+
+      // typischer Bereich: mittig
+      const cropW=Math.round(srcW*0.78);
+      const cropH=Math.round(srcH*0.38);
+      const cropX=Math.round((srcW-cropW)/2);
+      const cropY=Math.round(srcH*0.30);
+
+      const tmp=document.createElement('canvas');
+      tmp.width=cropW*2;
+      tmp.height=cropH*2;
+      const ctx=tmp.getContext('2d');
+      ctx.imageSmoothingEnabled=false;
+      ctx.drawImage(img,cropX,cropY,cropW,cropH,0,0,tmp.width,tmp.height);
+
+      const imageData=ctx.getImageData(0,0,tmp.width,tmp.height);
+      const d=imageData.data;
+
+      for(let i=0;i<d.length;i+=4){
+        const gray=Math.round(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
+        // Kontrast strecken
+        let v=(gray-128)*1.8+128;
+        v=clamp(Math.round(v),0,255);
+        // binarisieren
+        v=v>145?255:0;
+        d[i]=d[i+1]=d[i+2]=v;
+        d[i+3]=255;
+      }
+      ctx.putImageData(imageData,0,0);
+      resolve(canvasToDataUrl(tmp));
+    };
+    img.onerror=reject;
+    img.src=dataUrl;
+  });
+}
+
+function extractBestDecimalValue(text){
+  const cleaned=String(text||'')
+    .replace(/[Oo]/g,'0')
+    .replace(/[lI]/g,'1')
+    .replace(/[^0-9,.\n ]+/g,' ');
+
+  // zuerst genau 2 Nachkommastellen bevorzugen
+  const strict = cleaned.match(/\d{1,4}[.,]\d{2}/g) || [];
+  const strictVals = strict
+    .map(s=>Number(s.replace(',','.')))
+    .filter(n=>Number.isFinite(n) && n>0 && n<9999);
+
+  if(strictVals.length){
+    // bei mehreren Treffern die "realistischste" Zahl für m³/h bevorzugen
+    const preferred=strictVals
+      .filter(n=>n>=0.01 && n<=250)
+      .sort((a,b)=>a-b);
+    return preferred[0] ?? strictVals[0];
+  }
+
+  const relaxed = cleaned.match(/\d{1,4}[.,]\d{1,3}|\d{1,4}/g) || [];
+  const relaxedVals = relaxed
+    .map(s=>Number(s.replace(',','.')))
+    .filter(n=>Number.isFinite(n) && n>0 && n<9999);
+
+  const preferred=relaxedVals
+    .filter(n=>n>=0.01 && n<=250)
+    .sort((a,b)=>a-b);
+
+  return preferred[0] ?? relaxedVals[0] ?? undefined;
+}
+
+async function runOcrWithFallbacks(originalDataUrl, processedDataUrl){
+  if(!window.Tesseract) throw new Error('Tesseract nicht geladen');
+
+  const configs=[
+    { label:'verarbeitet', img:processedDataUrl, psm:7 },
+    { label:'verarbeitet', img:processedDataUrl, psm:6 },
+    { label:'original', img:originalDataUrl, psm:7 }
+  ];
+
+  let texts=[];
+
+  for(const cfg of configs){
+    const { data:{ text } } = await Tesseract.recognize(cfg.img,'eng',{
+      tessedit_pageseg_mode: cfg.psm,
+      tessedit_char_whitelist: '0123456789.,',
+      preserve_interword_spaces: '1',
+      logger:m=>{
+        if(m.status==='recognizing text'){
+          $('ocrStatus').textContent=`Erkenne ${cfg.label}… ${Math.round(m.progress*100)}%`;
+        }
+      }
     });
-    // Erste plausible Zahl (mit optionalem Komma/Punkt) herauslösen
-    const matches=text.match(/\d+[.,]\d+|\d+/g)||[];
-    const candidate=matches.map(s=>Number(s.replace(',','.'))).filter(n=>n>0&&n<9999)[0];
-    if(candidate!==undefined){
-      $('ocrResultInput').value=String(candidate);
-      $('ocrStatus').textContent=`Erkannt: ${candidate} – bitte prüfen und übernehmen.`;
-    } else {
-      $('ocrStatus').textContent='Keine Zahl erkannt – bitte manuell eingeben.';
-    }
-  }catch(err){
-    console.error(err);
-    $('ocrStatus').textContent='Fehler bei der Texterkennung.';
+    texts.push(text||'');
+    const best=extractBestDecimalValue(text||'');
+    if(best!==undefined) return { best, text };
   }
-});
-$('ocrAccept')?.addEventListener('click',()=>{
-  const v=getVersuchById(_ocrTargetVid);
-  if(v&&Number.isFinite(Number($('ocrResultInput').value))){
-    const idx=_ocrTargetRowIdx;
-    if(v.messungen[idx]){
-      v.messungen[idx].foerder_menge=$('ocrResultInput').value;
-      updateStageRateDisplay(document.querySelector(`.versuch-card[data-vid="${_ocrTargetVid}"]`),v);
-      renderTableBody(document.querySelector(`.versuch-card[data-vid="${_ocrTargetVid}"]`),v);
-      saveDraftDebounced();scheduleLiveRender();
+
+  const merged=texts.join('\n');
+  return { best:extractBestDecimalValue(merged), text:merged };
+}
+
+function initOcrHandlers(){
+  $('ocrFileInput')?.addEventListener('change',async(e)=>{
+    const file=e.target.files?.[0];
+    if(!file) return;
+
+    try{
+      const originalDataUrl=await downscaleImageFile(file,1800,0.88);
+      $('ocrPreviewImg').src=originalDataUrl;
+      $('ocrStatus').textContent='Bild wird vorbereitet…';
+
+      const processedDataUrl=await preprocessForOcr(originalDataUrl);
+
+      $('ocrStatus').textContent='Texterkennung läuft…';
+      const { best } = await runOcrWithFallbacks(originalDataUrl, processedDataUrl);
+
+      if(best!==undefined){
+        $('ocrResultInput').value = Number(best).toFixed(2);
+        $('ocrStatus').textContent = `Erkannt: ${Number(best).toFixed(2)} – bitte prüfen und übernehmen.`;
+      }else{
+        $('ocrStatus').textContent = 'Keine plausible Zahl erkannt – bitte manuell eingeben.';
+      }
+    }catch(err){
+      console.error(err);
+      $('ocrStatus').textContent='Fehler bei der Texterkennung.';
+    }finally{
+      e.target.value='';
     }
-  }
-  closeOcrModal();
-});
-$('ocrCancel')?.addEventListener('click',closeOcrModal);
-$('ocrModal')?.addEventListener('click',e=>{ if(e.target.id==='ocrModal') closeOcrModal(); });
+  });
+
+  $('ocrAccept')?.addEventListener('click',()=>{
+    const v=getVersuchById(_ocrTargetVid);
+    if(v && Number.isFinite(Number(String($('ocrResultInput').value).replace(',','.')))){
+      const idx=_ocrTargetRowIdx;
+      if(v.messungen[idx]){
+        v.messungen[idx].foerder_menge = Number(String($('ocrResultInput').value).replace(',','.')).toFixed(2);
+        renderVersuche();
+        saveDraftDebounced();
+        scheduleLiveRender();
+      }
+    }
+    closeOcrModal();
+  });
+
+  $('ocrCancel')?.addEventListener('click',closeOcrModal);
+  $('ocrModal')?.addEventListener('click',e=>{
+    if(e.target.id==='ocrModal') closeOcrModal();
+  });
+}
 
 /* ══════════════════════════════════════════════════════
    TIMER
 ══════════════════════════════════════════════════════ */
 function ensureTimer(vid,versuch){
   if(!timerMap[vid]){
-    const eMin=Number(versuch?.elapsedMs||0)/60000;
+    const elapsedMin=Number(versuch?.elapsedMs||0)/60000;
     const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b);
-    timerMap[vid]={ running:false,startMs:0,accumulatedMs:Number(versuch?.elapsedMs||0),raf:null,alarmCount:mins.filter(iv=>iv>0&&eMin>=iv).length };
+    timerMap[vid]={
+      running:false,
+      startMs:0,
+      accumulatedMs:Number(versuch?.elapsedMs||0),
+      raf:null,
+      alarmCount:mins.filter(iv=>iv>0&&elapsedMin>=iv).length
+    };
   }
   return timerMap[vid];
 }
-function getElapsedMs(vid,versuch){ const t=timerMap[vid];if(!t) return Number(versuch?.elapsedMs||0);return t.running?t.accumulatedMs+(Date.now()-t.startMs):t.accumulatedMs; }
-
-/* Update head-timer display IN the summary */
+function getElapsedMs(vid,versuch){
+  const t=timerMap[vid];
+  if(!t) return Number(versuch?.elapsedMs||0);
+  return t.running ? t.accumulatedMs+(Date.now()-t.startMs) : t.accumulatedMs;
+}
 function updateHeadTimer(card,versuch){
   const el=card?.querySelector('.versuch-head-timer');
   if(!el) return;
   const ms=getElapsedMs(versuch.id,versuch);
   el.textContent=formatElapsed(ms);
-  const t=timerMap[versuch.id];
-  el.classList.toggle('is-running',!!(t?.running));
+  el.classList.toggle('is-running',!!timerMap[versuch.id]?.running);
 }
-
 function updateTimerUi(card,versuch){
   if(!card||!versuch) return;
   const t=ensureTimer(versuch.id,versuch);
   const ms=getElapsedMs(versuch.id,versuch);
   versuch.elapsedMs=ms;
 
-  // head timer (always visible even when collapsed)
   updateHeadTimer(card,versuch);
 
-  // body timer box
   const elapsedEl=card.querySelector('[data-role="elapsed"]');
   const startBtn=card.querySelector('[data-role="timer-start"]');
   const stopBtn=card.querySelector('[data-role="timer-stop"]');
   const startZeitEl=card.querySelector('[data-role="startzeit"]');
   const nextEl=card.querySelector('[data-role="naechstes"]');
+
   if(elapsedEl) elapsedEl.textContent=formatElapsed(ms);
-  if(startZeitEl) startZeitEl.textContent=versuch.startzeit?`Startzeit: ${versuch.startzeit}`:'Noch nicht gestartet';
-  if(startBtn){ startBtn.textContent=t.running?'Läuft':(versuch.elapsedMs>0?'Weiter':'Start');startBtn.disabled=t.running; }
+  if(startZeitEl) startZeitEl.textContent=versuch.startzeit ? `Startzeit: ${versuch.startzeit}` : 'Noch nicht gestartet';
+  if(startBtn){
+    startBtn.textContent=t.running ? 'Läuft' : (versuch.elapsedMs>0 ? 'Weiter' : 'Start');
+    startBtn.disabled=t.running;
+  }
   if(stopBtn) stopBtn.disabled=!t.running;
 
   const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b);
   const eMin=ms/60000;
   const nextIv=mins.filter(iv=>iv>0).find(iv=>eMin<iv);
-  if(nextEl) nextEl.textContent=nextIv!==undefined?`Nächste Messung: ${nextIv} min (in ${Math.max(0,Math.ceil((nextIv*60000-ms)/1000))}s)`:'Alle Messintervalle erreicht';
+  if(nextEl){
+    nextEl.textContent = nextIv!==undefined
+      ? `Nächste Messung: ${nextIv} min (in ${Math.max(0,Math.ceil((nextIv*60000-ms)/1000))}s)`
+      : 'Alle Messintervalle erreicht';
+  }
 
-  // highlight active row
   card.querySelectorAll('tbody tr').forEach(r=>r.classList.remove('row-active'));
   const passed=mins.filter(iv=>eMin>=iv);
-  const lastPassed=passed.length?passed[passed.length-1]:mins[0];
+  const lastPassed=passed.length ? passed[passed.length-1] : mins[0];
   const rowIdx=versuch.messungen.findIndex(m=>Number(m.min)===Number(lastPassed));
   if(rowIdx>=0) card.querySelector(`tr[data-row="${rowIdx}"]`)?.classList.add('row-active');
 }
-
 function triggerIntervalAlarm(vid){
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   const display=card?.querySelector('[data-role="elapsed"]');
-  document.body.classList.remove('screen-flash');void document.body.offsetWidth;document.body.classList.add('screen-flash');
-  card?.classList.remove('versuch-card--alarm');void card?.offsetWidth;card?.classList.add('versuch-card--alarm');
-  display?.classList.remove('timer-display--alarm');void display?.offsetWidth;display?.classList.add('timer-display--alarm');
+
+  document.body.classList.remove('screen-flash');
+  void document.body.offsetWidth;
+  document.body.classList.add('screen-flash');
+
+  card?.classList.remove('versuch-card--alarm');
+  void card?.offsetWidth;
+  card?.classList.add('versuch-card--alarm');
+
+  display?.classList.remove('timer-display--alarm');
+  void display?.offsetWidth;
+  display?.classList.add('timer-display--alarm');
+
   playIntervalBeep();
+
   setTimeout(()=>document.body.classList.remove('screen-flash'),1800);
-  setTimeout(()=>{ card?.classList.remove('versuch-card--alarm');display?.classList.remove('timer-display--alarm'); },Math.max(2400,Number(state.settings.alarmDurationSec||4)*1000+600));
+  setTimeout(()=>{
+    card?.classList.remove('versuch-card--alarm');
+    display?.classList.remove('timer-display--alarm');
+  },Math.max(2400,Number(state.settings.alarmDurationSec||4)*1000+600));
 }
 function tickTimer(vid){
-  const versuch=getVersuchById(vid);const t=timerMap[vid];
+  const versuch=getVersuchById(vid);
+  const t=timerMap[vid];
   if(!versuch||!t||!t.running) return;
+
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   versuch.elapsedMs=getElapsedMs(vid,versuch);
   if(card) updateTimerUi(card,versuch);
+
   const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
   const passed=mins.filter(iv=>versuch.elapsedMs/60000>=iv).length;
-  if(passed>t.alarmCount){ t.alarmCount=passed;triggerIntervalAlarm(vid); }
+  if(passed>t.alarmCount){
+    t.alarmCount=passed;
+    triggerIntervalAlarm(vid);
+  }
+
   updateFloatingTimerWidget();
   t.raf=requestAnimationFrame(()=>tickTimer(vid));
 }
 function startTimer(vid){
-  const versuch=getVersuchById(vid);if(!versuch) return;
+  const versuch=getVersuchById(vid);
+  if(!versuch) return;
   unlockAlarmAudio();
-  const t=ensureTimer(vid,versuch);if(t.running) return;
+  const t=ensureTimer(vid,versuch);
+  if(t.running) return;
   if(!versuch.startzeit) versuch.startzeit=formatTimeHHMMSS(new Date());
+
   const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b);
   t.alarmCount=mins.filter(iv=>iv>0&&t.accumulatedMs/60000>=iv).length;
-  t.running=true;t.startMs=Date.now();
+  t.running=true;
+  t.startMs=Date.now();
+
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
-  updateTimerUi(card,versuch);tickTimer(vid);startFloatingLoop();saveDraftDebounced();
+  updateTimerUi(card,versuch);
+  tickTimer(vid);
+  startFloatingLoop();
+  saveDraftDebounced();
 }
 function stopTimer(vid){
-  const versuch=getVersuchById(vid);const t=timerMap[vid];
+  const versuch=getVersuchById(vid);
+  const t=timerMap[vid];
   if(!versuch||!t||!t.running) return;
-  t.accumulatedMs+=(Date.now()-t.startMs);versuch.elapsedMs=t.accumulatedMs;
-  t.running=false;if(t.raf) cancelAnimationFrame(t.raf);t.raf=null;
+
+  t.accumulatedMs += (Date.now()-t.startMs);
+  versuch.elapsedMs=t.accumulatedMs;
+  t.running=false;
+  if(t.raf) cancelAnimationFrame(t.raf);
+  t.raf=null;
+
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
-  updateTimerUi(card,versuch);updateFloatingTimerWidget();stopFloatingLoopIfIdle();saveDraftDebounced();
+  updateTimerUi(card,versuch);
+  updateFloatingTimerWidget();
+  stopFloatingLoopIfIdle();
+  saveDraftDebounced();
 }
 function resetTimer(vid){
-  const versuch=getVersuchById(vid);if(!versuch) return;
+  const versuch=getVersuchById(vid);
+  if(!versuch) return;
   const t=ensureTimer(vid,versuch);
   if(t.raf) cancelAnimationFrame(t.raf);
-  t.running=false;t.startMs=0;t.accumulatedMs=0;t.raf=null;t.alarmCount=0;
-  versuch.elapsedMs=0;versuch.startzeit='';
+  t.running=false;
+  t.startMs=0;
+  t.accumulatedMs=0;
+  t.raf=null;
+  t.alarmCount=0;
+  versuch.elapsedMs=0;
+  versuch.startzeit='';
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
-  updateTimerUi(card,versuch);updateFloatingTimerWidget();stopFloatingLoopIfIdle();saveDraftDebounced();
+  updateTimerUi(card,versuch);
+  updateFloatingTimerWidget();
+  stopFloatingLoopIfIdle();
+  saveDraftDebounced();
 }
 function hardStopTimer(vid){
-  const t=timerMap[vid];if(!t) return;
+  const t=timerMap[vid];
+  if(!t) return;
   try{ if(t.raf) cancelAnimationFrame(t.raf); }catch{}
-  delete timerMap[vid];updateFloatingTimerWidget();stopFloatingLoopIfIdle();
+  delete timerMap[vid];
+  updateFloatingTimerWidget();
+  stopFloatingLoopIfIdle();
 }
 
 /* ══════════════════════════════════════════════════════
    FLOATING TIMER
 ══════════════════════════════════════════════════════ */
-function getFirstRunningStage(){ return state.versuche.find(v=>timerMap[v.id]?.running)||null; }
+function getFirstRunningStage(){
+  return state.versuche.find(v=>timerMap[v.id]?.running) || null;
+}
 function isElementVisible(el){
   if(!el) return false;
   const r=el.getBoundingClientRect();
@@ -683,13 +1215,20 @@ function isElementVisible(el){
   return r.top>=0&&r.bottom<=window.innerHeight&&r.left>=0&&r.right<=window.innerWidth;
 }
 function updateFloatingTimerWidget(){
-  const wrap=$('floatingTimer'),label=$('floatingTimerLabel'),display=$('floatingTimerDisplay');
+  const wrap=$('floatingTimer');
+  const label=$('floatingTimerLabel');
+  const display=$('floatingTimerDisplay');
   if(!wrap||!label||!display) return;
+
   const stage=getFirstRunningStage();
-  if(!stage){ wrap.hidden=true;return; }
+  if(!stage){
+    wrap.hidden=true;
+    return;
+  }
   const idx=state.versuche.findIndex(v=>v.id===stage.id);
   const card=document.querySelector(`.versuch-card[data-vid="${stage.id}"]`);
   const timerBox=card?.querySelector('.timer-box');
+
   label.textContent=getStageTitle(idx);
   display.textContent=formatElapsed(getElapsedMs(stage.id,stage));
   wrap.hidden=isElementVisible(timerBox);
@@ -699,13 +1238,24 @@ function startFloatingLoop(){
   const loop=()=>{
     updateFloatingTimerWidget();
     if(Object.values(timerMap).some(t=>t.running)) _floatingRaf=requestAnimationFrame(loop);
-    else{ cancelAnimationFrame(_floatingRaf);_floatingRaf=null; }
+    else{
+      cancelAnimationFrame(_floatingRaf);
+      _floatingRaf=null;
+    }
   };
   _floatingRaf=requestAnimationFrame(loop);
 }
-function stopFloatingLoopIfIdle(){ if(!Object.values(timerMap).some(t=>t.running)&&_floatingRaf){ cancelAnimationFrame(_floatingRaf);_floatingRaf=null; } }
+function stopFloatingLoopIfIdle(){
+  if(!Object.values(timerMap).some(t=>t.running) && _floatingRaf){
+    cancelAnimationFrame(_floatingRaf);
+    _floatingRaf=null;
+  }
+}
 function initFloatingTimer(){
-  $('floatingTimer')?.addEventListener('click',()=>{ const s=getFirstRunningStage();if(s) openTimeAdjustModal(s.id); });
+  $('floatingTimer')?.addEventListener('click',()=>{
+    const stage=getFirstRunningStage();
+    if(stage) openTimeAdjustModal(stage.id);
+  });
   window.addEventListener('scroll',updateFloatingTimerWidget,{passive:true});
   window.addEventListener('resize',updateFloatingTimerWidget);
 }
@@ -713,27 +1263,52 @@ function initFloatingTimer(){
 /* ══════════════════════════════════════════════════════
    TIME ADJUST MODAL
 ══════════════════════════════════════════════════════ */
-function openTimeAdjustModal(vid){ _timeAdjustVid=vid;$('timeAdjustInput').value='0';updateTimeAdjustPreview();$('timeAdjustModal').hidden=false; }
-function closeTimeAdjustModal(){ $('timeAdjustModal').hidden=true;_timeAdjustVid=null; }
+function openTimeAdjustModal(vid){
+  _timeAdjustVid=vid;
+  $('timeAdjustInput').value='0';
+  updateTimeAdjustPreview();
+  $('timeAdjustModal').hidden=false;
+}
+function closeTimeAdjustModal(){
+  $('timeAdjustModal').hidden=true;
+  _timeAdjustVid=null;
+}
 function updateTimeAdjustPreview(){
-  const v=getVersuchById(_timeAdjustVid);if(!v) return;
+  const v=getVersuchById(_timeAdjustVid);
+  if(!v) return;
   const next=Math.max(0,getElapsedMs(v.id,v)+Number($('timeAdjustInput')?.value||0)*1000);
   $('timeAdjustPreview').textContent=`Neue Zeit: ${formatElapsed(next)}`;
 }
 function applyTimeAdjustment(){
-  const v=getVersuchById(_timeAdjustVid);if(!v) return;
+  const v=getVersuchById(_timeAdjustVid);
+  if(!v) return;
   const offset=Number($('timeAdjustInput')?.value||0);
   const t=ensureTimer(v.id,v);
   const next=Math.max(0,getElapsedMs(v.id,v)+offset*1000);
-  if(t.running){ t.startMs=Date.now();t.accumulatedMs=next; }else{ t.accumulatedMs=next; }
-  v.elapsedMs=next;if(!v.startzeit&&next>0) v.startzeit=formatTimeHHMMSS(new Date());
+
+  if(t.running){
+    t.startMs=Date.now();
+    t.accumulatedMs=next;
+  }else{
+    t.accumulatedMs=next;
+  }
+
+  v.elapsedMs=next;
+  if(!v.startzeit && next>0) v.startzeit=formatTimeHHMMSS(new Date());
+
   const card=document.querySelector(`.versuch-card[data-vid="${v.id}"]`);
-  updateTimerUi(card,v);updateFloatingTimerWidget();saveDraftDebounced();closeTimeAdjustModal();
+  updateTimerUi(card,v);
+  updateFloatingTimerWidget();
+  saveDraftDebounced();
+  closeTimeAdjustModal();
 }
 function initTimeAdjustModal(){
   $('timeAdjustInput')?.addEventListener('input',updateTimeAdjustPreview);
   document.querySelectorAll('.modal-adj-btn').forEach(btn=>{
-    btn.addEventListener('click',()=>{ $('timeAdjustInput').value=String(Number($('timeAdjustInput').value||0)+Number(btn.dataset.adj||0));updateTimeAdjustPreview(); });
+    btn.addEventListener('click',()=>{
+      $('timeAdjustInput').value=String(Number($('timeAdjustInput').value||0)+Number(btn.dataset.adj||0));
+      updateTimeAdjustPreview();
+    });
   });
   $('timeAdjustApply')?.addEventListener('click',applyTimeAdjustment);
   $('timeAdjustCancel')?.addEventListener('click',closeTimeAdjustModal);
@@ -746,23 +1321,24 @@ function initTimeAdjustModal(){
 function buildTableHeadHtml(){
   const sel=getSelectedWells();
   let html='<tr><th style="width:56px">Min</th>';
-  if(sel.foerder) html+=`<th class="th-foerder">Entnahme<br/><span style="font-size:.75em;font-weight:600">m ab OK</span></th>`;
-  if(sel.schluck) html+=`<th class="th-schluck">Rückgabe<br/><span style="font-size:.75em;font-weight:600">m ab OK</span></th>`;
-  html+='<th>Fördermenge<br/><span style="font-size:.75em;font-weight:600">m³/h</span></th></tr>';
+  if(sel.foerder) html+=`<th class="th-foerder">Förderbrunnen<br><span style="font-size:.75em;font-weight:600">m ab OK</span></th>`;
+  if(sel.schluck) html+=`<th class="th-schluck">Rückgabe<br><span style="font-size:.75em;font-weight:600">m ab OK</span></th>`;
+  html+='<th>Fördermenge<br><span style="font-size:.75em;font-weight:600">m³/h</span></th></tr>';
   return html;
 }
 function buildTableRowHtml(v,row,rowIdx){
-  const sel=getSelectedWells();const isLast=rowIdx===v.messungen.length-1;
-  let html=`<tr data-row="${rowIdx}"><td><div class="minute-cell">
-    <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}" type="number" step="1" inputmode="numeric" value="${h(row.min)}"/>
-    ${isLast?`<button class="row-plus" data-role="row-plus" data-row="${rowIdx}" type="button">+</button>`:''}
-  </div></td>`;
-  if(sel.foerder) html+=`<td><input class="mess-input" data-role="foerder-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_m)}"/></td>`;
-  if(sel.schluck) html+=`<td><input class="mess-input" data-role="schluck-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.schluck_m)}"/></td>`;
-  // Fördermenge + Scan-Button
+  const sel=getSelectedWells();
+  const isLast=rowIdx===v.messungen.length-1;
+  let html=`<tr data-row="${rowIdx}">
+    <td><div class="minute-cell">
+      <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}" type="number" step="1" inputmode="numeric" value="${h(row.min)}">
+      ${isLast?`<button class="row-plus" data-role="row-plus" data-row="${rowIdx}" type="button">+</button>`:''}
+    </div></td>`;
+  if(sel.foerder) html+=`<td><input class="mess-input" data-role="foerder-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_m)}"></td>`;
+  if(sel.schluck) html+=`<td><input class="mess-input" data-role="schluck-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.schluck_m)}"></td>`;
   html+=`<td><div class="menge-wrap">
-    <input class="mess-input" data-role="foerder-menge" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_menge)}"/>
-    <button class="scan-btn" data-role="scan-menge" data-row="${rowIdx}" type="button" title="Wert fotografisch scannen (OCR)">
+    <input class="mess-input" data-role="foerder-menge" data-row="${rowIdx}" type="number" step="0.01" inputmode="decimal" value="${h(row.foerder_menge)}">
+    <button class="scan-btn" data-role="scan-menge" data-row="${rowIdx}" type="button" title="Wert scannen">
       <svg viewBox="0 0 24 20" width="16" height="13" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="1" y="4" width="22" height="15" rx="2" stroke="currentColor" stroke-width="1.8"/>
         <circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.8"/>
@@ -770,50 +1346,49 @@ function buildTableRowHtml(v,row,rowIdx){
         <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="currentColor"/>
       </svg>
     </button>
-  </div></td>`;
-  html+='</tr>';
+  </div></td></tr>`;
   return html;
 }
-function renderTableBody(card,versuch){
-  const tbody=card?.querySelector('tbody');
-  if(!tbody) return;
-  tbody.innerHTML=versuch.messungen.map((row,rowIdx)=>buildTableRowHtml(versuch,row,rowIdx)).join('');
-}
 function buildVersuchHtml(v,idx){
-  const effLs=getEffectiveRateLs(v),effM3h=getEffectiveRateM3h(v),avg=getAverageFoerderMenge(v);
+  const effLs=getEffectiveRateLs(v);
+  const effM3h=getEffectiveRateM3h(v);
+  const avg=getAverageFoerderMenge(v);
   const hasPhoto=!!v.photoDataUrl;
-  const ms=v.elapsedMs||0;
   const t=timerMap[v.id];
   const isRunning=!!(t?.running);
+
   return `
 <details class="card card--collapsible versuch-card" data-vid="${h(v.id)}" open>
   <summary class="card__title">
     <span class="versuch-head-title">${getStageTitle(idx)}</span>
-    <span class="versuch-head-timer ${isRunning?'is-running':''}">${formatElapsed(ms)}</span>
+    <span class="versuch-head-timer ${isRunning?'is-running':''}">${formatElapsed(v.elapsedMs||0)}</span>
     <span class="versuch-head-spacer"></span>
     <span class="versuch-head-actions">
       ${hasPhoto?`<button class="photo-del-btn" data-role="photo-del" type="button" title="Foto entfernen">✕</button>`:''}
-      <button class="photo-btn ${hasPhoto?'photo-btn--has':''}" data-role="photo-btn" type="button" title="Beweisfoto" aria-label="Beweisfoto">${cameraSvgStr(16,13)}</button>
-      <input class="photo-input" data-role="photo-input" type="file" accept="image/*" capture="environment"/>
+      <button class="photo-btn ${hasPhoto?'photo-btn--has':''}" data-role="photo-btn" type="button" title="Beweisfoto" aria-label="Beweisfoto">${camSvg(16,13)}</button>
+      <input class="photo-input" data-role="photo-input" type="file" accept="image/*" capture="environment">
     </span>
   </summary>
   <div class="card__body versuch-body">
-    ${hasPhoto?`<div class="photo-thumb-wrap"><img class="photo-thumb" src="${h(v.photoDataUrl)}" alt="Beweisfoto"/><div class="photo-thumb-caption">Beweisfoto Durchflussmesser</div></div>`:''}
+    ${hasPhoto?`<div class="photo-thumb-wrap"><img class="photo-thumb" src="${h(v.photoDataUrl)}" alt="Beweisfoto"><div class="photo-thumb-caption">Beweisfoto Durchflussmesser</div></div>`:''}
+
     <div class="versuch-row">
       <span class="rate-label">Förderrate [l/s]</span>
-      <input class="rate-input" data-role="manual-rate-ls" type="number" step="0.001" inputmode="decimal" value="${h(effLs)}"/>
+      <input class="rate-input" data-role="manual-rate-ls" type="number" step="0.001" inputmode="decimal" value="${h(effLs)}">
       <span class="rate-unit">=</span>
       <span class="rate-conv" data-role="head-rate-m3h">${effM3h?`${h(effM3h)} m³/h`:'—'}</span>
       <span class="rate-label">Ø Fördermenge</span>
-      <input class="rate-input rate-input--readonly" data-role="avg-foerder-menge" type="text" value="${h(avg||'—')}" readonly/>
+      <input class="rate-input rate-input--readonly" data-role="avg-foerder-menge" type="text" value="${h(avg||'—')}" readonly>
     </div>
+
     <div class="versuch-row">
       <span class="interval-label">Intervalle [min]</span>
-      <input class="interval-input" data-role="intervalle" type="text" value="${h(v.intervalleStr)}"/>
+      <input class="interval-input" data-role="intervalle" type="text" value="${h(v.intervalleStr)}">
     </div>
+
     <div class="timer-box">
       <div class="timer-row">
-        <div class="timer-display" data-role="elapsed" data-role2="timer-adjust-open" title="Tippen zum Anpassen">${formatElapsed(ms)}</div>
+        <div class="timer-display" data-role="elapsed" title="Tippen zum Anpassen">${formatElapsed(v.elapsedMs||0)}</div>
         <span class="timer-edit-hint">tippen = anpassen</span>
         <div class="timer-buttons">
           <button class="timer-btn timer-btn--start" data-role="timer-start" type="button">Start</button>
@@ -824,12 +1399,14 @@ function buildVersuchHtml(v,idx){
       <div class="timer-info" data-role="startzeit">${v.startzeit?`Startzeit: ${h(v.startzeit)}`:'Noch nicht gestartet'}</div>
       <div class="timer-info timer-next" data-role="naechstes"></div>
     </div>
+
     <div class="table-wrap">
       <table class="mess-table">
         <thead>${buildTableHeadHtml()}</thead>
         <tbody>${v.messungen.map((row,rowIdx)=>buildTableRowHtml(v,row,rowIdx)).join('')}</tbody>
       </table>
     </div>
+
     <div class="versuch-tools">
       <button class="del-btn" data-role="del" type="button">Stufe löschen</button>
     </div>
@@ -837,13 +1414,12 @@ function buildVersuchHtml(v,idx){
 </details>`;
 }
 function updateStageRateDisplay(card,versuch){
-  if(!card || !versuch) return;
+  if(!card||!versuch) return;
   const m3hEl=card.querySelector('[data-role="head-rate-m3h"]');
   const avgEl=card.querySelector('[data-role="avg-foerder-menge"]');
   if(m3hEl) m3hEl.textContent=getEffectiveRateM3h(versuch)?`${getEffectiveRateM3h(versuch)} m³/h`:'—';
   if(avgEl) avgEl.value=getAverageFoerderMenge(versuch)||'—';
 }
-
 function renderVersuche(){
   const host=$('versucheContainer');
   if(!host) return;
@@ -855,7 +1431,6 @@ function renderVersuche(){
   }
 
   host.innerHTML=state.versuche.map((v,idx)=>buildVersuchHtml(v,idx)).join('');
-
   document.querySelectorAll('.versuch-card').forEach(card=>{
     const v=getVersuchById(card.dataset.vid);
     if(v){
@@ -863,10 +1438,12 @@ function renderVersuche(){
       updateTimerUi(card,v);
     }
   });
-
   updateFloatingTimerWidget();
 }
 
+/* ══════════════════════════════════════════════════════
+   STAGE DELEGATION
+══════════════════════════════════════════════════════ */
 function hookVersuchDelegation(){
   const host=$('versucheContainer');
   if(!host || host.dataset.bound==='1') return;
@@ -978,7 +1555,6 @@ function hookVersuchDelegation(){
     const versuch=getVersuchById(card.dataset.vid);
     if(!versuch) return;
 
-    // Klick auf Kopf-Timer -> Zeit anpassen, ohne Details zu toggeln
     const headTimer=e.target.closest('.versuch-head-timer');
     if(headTimer){
       e.preventDefault();
@@ -987,7 +1563,6 @@ function hookVersuchDelegation(){
       return;
     }
 
-    // Klick auf Body-Timer -> Zeit anpassen
     const bodyTimer=e.target.closest('.timer-display');
     if(bodyTimer){
       e.preventDefault();
@@ -1001,30 +1576,24 @@ function hookVersuchDelegation(){
     const role=btn.dataset.role;
 
     if(role==='photo-btn'){
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       unlockAlarmAudio();
       card.querySelector('[data-role="photo-input"]')?.click();
       return;
     }
-
     if(role==='photo-del'){
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       if(!confirm('Beweisfoto wirklich entfernen?')) return;
       versuch.photoDataUrl='';
       renderVersuche();
       saveDraftDebounced();
       return;
     }
-
     if(role==='scan-menge'){
-      e.preventDefault();
-      e.stopPropagation();
-      openOcrModal(versuch.id, Number(btn.dataset.row));
+      e.preventDefault(); e.stopPropagation();
+      openOcrModal(versuch.id,Number(btn.dataset.row));
       return;
     }
-
     if(role==='row-plus'){
       sortMessungen(versuch);
       const step=getContinueStep(versuch);
@@ -1036,7 +1605,6 @@ function hookVersuchDelegation(){
       saveDraftDebounced();
       return;
     }
-
     if(role==='del'){
       const idx=state.versuche.findIndex(v=>v.id===versuch.id);
       if(!confirm(`${getStageTitle(idx)} wirklich löschen?`)) return;
@@ -1047,7 +1615,6 @@ function hookVersuchDelegation(){
       saveDraftDebounced();
       return;
     }
-
     if(role==='timer-start'){ e.stopPropagation(); startTimer(versuch.id); return; }
     if(role==='timer-stop'){ e.stopPropagation(); stopTimer(versuch.id); return; }
     if(role==='timer-reset'){ e.stopPropagation(); resetTimer(versuch.id); return; }
@@ -1098,19 +1665,23 @@ function hookStaticInputs(){
     setTimeout(()=>document.querySelector(`.versuch-card[data-vid="${v.id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'}),40);
   });
 
-  $('btnSave')?.addEventListener('click',()=>{
-    saveCurrentToHistory();
-    saveDraftDebounced();
-    alert('Pumpversuch im Verlauf gespeichert.');
-  });
+  $('btnSave')?.addEventListener('click',()=> saveCurrentToHistory('Pumpversuch im Verlauf gespeichert.'));
+  $('btnSaveRestsand')?.addEventListener('click',()=> saveCurrentToHistory('Restsanddaten im Verlauf gespeichert.'));
+  $('btnSavePh')?.addEventListener('click',()=> saveCurrentToHistory('pH/Sulfat-Daten im Verlauf gespeichert.'));
 
   $('btnPdf')?.addEventListener('click',async()=>{
-    try{
-      await exportPdf(null,state.settings.pdfExportType);
-    }catch(err){
-      console.error(err);
-      alert('PDF-Fehler: '+(err?.message||String(err)));
-    }
+    try{ await exportPdf(null,state.settings.pdfExportType); }
+    catch(err){ console.error(err); alert('PDF-Fehler: '+(err?.message||String(err))); }
+  });
+
+  $('btnPdfRestsand')?.addEventListener('click',async()=>{
+    try{ await exportRestsandPdf(); }
+    catch(err){ console.error(err); alert('Restsand-PDF Fehler'); }
+  });
+
+  $('btnPdfPh')?.addEventListener('click',async()=>{
+    try{ await exportPhPdf(); }
+    catch(err){ console.error(err); alert('Sulfat/pH-PDF Fehler'); }
   });
 
   $('btnReset')?.addEventListener('click',resetAll);
@@ -1203,12 +1774,12 @@ async function handleFullImport(e){
 function buildLiveChartSvg(points,key){
   const color=key==='foerder' ? '#56b7ff' : '#ffb45a';
   const W=560,H=280,ml=58,mr=18,mt=18,mb=42;
-  const pw=W-ml-mr,ph=H-mt-mb;
+  const pw=W-ml-mr, ph=H-mt-mb;
   const xMax=points.length?Math.max(...points.map(p=>p.x)):10;
   const yMax=points.length?Math.max(...points.map(p=>p.y)):10;
   const xAxis=getNiceAxis(0,xMax>0?xMax:10,6);
   const yAxis=getNiceAxis(0,yMax>0?yMax:10,6);
-  const xTicks=buildTicks(xAxis),yTicks=buildTicks(yAxis);
+  const xTicks=buildTicks(xAxis), yTicks=buildTicks(yAxis);
   const tx=v=>ml+((v-xAxis.min)/(xAxis.max-xAxis.min||1))*pw;
   const ty=v=>mt+ph-((v-yAxis.min)/(yAxis.max-yAxis.min||1))*ph;
   const gridY=yTicks.map(v=>`<line x1="${ml}" y1="${ty(v)}" x2="${W-mr}" y2="${ty(v)}" stroke="rgba(255,255,255,.12)" stroke-width="1"/><text x="${ml-8}" y="${ty(v)+4}" text-anchor="end" fill="rgba(220,240,255,.75)" font-size="11">${h(fmtTick(v,0))}</text>`).join('');
@@ -1226,7 +1797,6 @@ function buildLiveChartSvg(points,key){
     ${!points.length?`<text x="${ml+pw/2}" y="${mt+ph/2}" text-anchor="middle" fill="rgba(220,240,255,.72)" font-size="13">Noch keine Messwerte</text>`:''}
   </svg>`;
 }
-
 function buildLiveWellPanelHtml(versuch,key,brunnen){
   const est=getStageKfEstimate(versuch,key,brunnen);
   const points=getWellChartPoints(versuch,key,brunnen);
@@ -1250,11 +1820,9 @@ function buildLiveWellPanelHtml(versuch,key,brunnen){
   <div class="live-chart">${buildLiveChartSvg(points,key)}</div>
 </section>`;
 }
-
 function renderLiveTab(){
   const host=$('liveContainer');
   if(!host) return;
-
   if(!state.versuche.length){
     host.innerHTML=`<section class="card"><div class="empty-state">Noch keine Pumpstufe vorhanden.</div></section>`;
     return;
@@ -1264,7 +1832,7 @@ function renderLiveTab(){
   const single=(sel.foerder?1:0)+(sel.schluck?1:0)===1;
 
   host.innerHTML=state.versuche.map((v,idx)=>{
-    const rateM3h=getCalcRateM3h(v),rateLs=getCalcRateLs(v),rateSource=getCalcRateSource(v);
+    const rateM3h=getCalcRateM3h(v), rateLs=getCalcRateLs(v), rateSource=getCalcRateSource(v);
     return `<section class="card live-stage">
       <div class="live-stage__head">
         <div>
@@ -1291,7 +1859,7 @@ function buildHistoryKfHtml(snapshot){
     const parts=[];
     if(snapshot.selection?.foerder){
       const e=getStageKfEstimate(v,'foerder',snapshot.foerder||{});
-      parts.push(`Entnahme: ${Number.isFinite(e.kf)?fmtKf(e.kf):'—'}`);
+      parts.push(`Förderbrunnen: ${Number.isFinite(e.kf)?fmtKf(e.kf):'—'}`);
     }
     if(snapshot.selection?.schluck){
       const e=getStageKfEstimate(v,'schluck',snapshot.schluck||{});
@@ -1301,47 +1869,24 @@ function buildHistoryKfHtml(snapshot){
   });
   return `<div class="historyKf"><div class="historyKf__title">Kf-Abschätzung</div>${lines.join('')}</div>`;
 }
-
 function collectSnapshotPhotos(snapshot){
   const photos=[];
   const obj=(snapshot.meta?.objekt||'Pumpversuch').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_') || 'Pumpversuch';
 
-  if(snapshot.overviewPhotoDataUrl){
-    photos.push({ name:`${obj}_Uebersicht`, dataUrl:snapshot.overviewPhotoDataUrl });
-  }
-
-  (snapshot.versuche||[]).forEach((v,i)=>{
-    if(v.photoDataUrl){
-      photos.push({ name:`${obj}_Stufe_${i+1}_Durchflussmesser`, dataUrl:v.photoDataUrl });
-    }
-  });
-
-  if(snapshot.restsand?.imhoff?.photoDataUrl){
-    photos.push({ name:`${obj}_Restsand_Imhoff`, dataUrl:snapshot.restsand.imhoff.photoDataUrl });
-  }
-  if(snapshot.restsand?.sieb?.photoDataUrl){
-    photos.push({ name:`${obj}_Restsand_Sieb`, dataUrl:snapshot.restsand.sieb.photoDataUrl });
-  }
-
-  if(snapshot.ph?.sulfat?.photoDataUrl){
-    photos.push({ name:`${obj}_Sulfat`, dataUrl:snapshot.ph.sulfat.photoDataUrl });
-  }
-  if(snapshot.ph?.temperatur?.photoDataUrl){
-    photos.push({ name:`${obj}_Temperatur`, dataUrl:snapshot.ph.temperatur.photoDataUrl });
-  }
-  if(snapshot.ph?.ph?.photoDataUrl){
-    photos.push({ name:`${obj}_pH`, dataUrl:snapshot.ph.ph.photoDataUrl });
-  }
-
+  if(snapshot.overviewPhotoDataUrl) photos.push({ name:`${obj}_Uebersicht`, dataUrl:snapshot.overviewPhotoDataUrl });
+  (snapshot.versuche||[]).forEach((v,i)=>{ if(v.photoDataUrl) photos.push({ name:`${obj}_Stufe_${i+1}_Durchflussmesser`, dataUrl:v.photoDataUrl }); });
+  if(snapshot.restsand?.imhoff?.photoDataUrl) photos.push({ name:`${obj}_Restsand_Imhoff`, dataUrl:snapshot.restsand.imhoff.photoDataUrl });
+  if(snapshot.restsand?.sieb?.photoDataUrl) photos.push({ name:`${obj}_Restsand_Sieb`, dataUrl:snapshot.restsand.sieb.photoDataUrl });
+  if(snapshot.ph?.sulfat?.photoDataUrl) photos.push({ name:`${obj}_Sulfat`, dataUrl:snapshot.ph.sulfat.photoDataUrl });
+  if(snapshot.ph?.temperatur?.photoDataUrl) photos.push({ name:`${obj}_Temperatur`, dataUrl:snapshot.ph.temperatur.photoDataUrl });
+  if(snapshot.ph?.ph?.photoDataUrl) photos.push({ name:`${obj}_pH`, dataUrl:snapshot.ph.ph.photoDataUrl });
   return photos;
 }
-
 function guessExtFromDataUrl(dataUrl){
   if(/^data:image\/png/i.test(dataUrl)) return 'png';
   if(/^data:image\/webp/i.test(dataUrl)) return 'webp';
   return 'jpg';
 }
-
 function downloadDataUrl(dataUrl,filename){
   const a=document.createElement('a');
   a.href=dataUrl;
@@ -1350,20 +1895,14 @@ function downloadDataUrl(dataUrl,filename){
   a.click();
   a.remove();
 }
-
 async function exportPhotosFromSnapshot(snapshot){
   const photos=collectSnapshotPhotos(snapshot);
-  if(!photos.length){
-    alert('Keine Fotos in dieser Messung vorhanden.');
-    return;
-  }
-
+  if(!photos.length){ alert('Keine Fotos in dieser Messung vorhanden.'); return; }
   for(let i=0;i<photos.length;i++){
     const p=photos[i];
-    downloadDataUrl(p.dataUrl, `${p.name}.${guessExtFromDataUrl(p.dataUrl)}`);
+    downloadDataUrl(p.dataUrl,`${p.name}.${guessExtFromDataUrl(p.dataUrl)}`);
     await new Promise(r=>setTimeout(r,250));
   }
-
   alert(`${photos.length} Foto(s) wurden exportiert.`);
 }
 
@@ -1380,64 +1919,63 @@ function renderHistoryList(){
   host.innerHTML=list.map(entry=>{
     const snap=entry.snapshot||{};
     const count=Array.isArray(snap.versuche)?snap.versuche.length:0;
-    const wells=[];
-    if(snap.selection?.foerder) wells.push('Entnahme');
-    if(snap.selection?.schluck) wells.push('Rückgabe');
-
     const rsImhoff=snap.restsand?.imhoff?.menge || '—';
     const rsSieb=snap.restsand?.sieb?.menge || '—';
     const sulfat=snap.ph?.sulfat?.wert || '—';
     const temp=snap.ph?.temperatur?.wert || '—';
     const phv=snap.ph?.ph?.wert || '—';
 
-    return `<div class="historyItem">
-      <div class="historyTop">
-        <span>${h(entry.title)}</span>
-        <span style="color:var(--muted);font-size:.82em">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
+    return `<details class="historyItem" data-hid="${h(entry.id)}">
+      <summary class="historyItem__head">
+        <span class="historyItem__chevron">▸</span>
+        <span class="historyItem__title">${h(entry.title)}</span>
+        <span class="historyItem__date">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
+      </summary>
+
+      <div class="historyItem__body">
+        <div class="historySections">
+          <details class="historySection" open>
+            <summary>Protokoll</summary>
+            <div class="historySection__body">
+              Objekt: <b>${h(snap.meta?.objekt||'—')}</b><br>
+              Ort: <b>${h(snap.meta?.ort||'—')}</b><br>
+              Pumpstufen: <b>${count}</b><br>
+              Beweisfotos: <b>${(snap.versuche||[]).filter(v=>!!v.photoDataUrl).length}</b>
+            </div>
+          </details>
+
+          <details class="historySection">
+            <summary>Restsandmessung</summary>
+            <div class="historySection__body">
+              Imhoff: <b>${h(String(rsImhoff))}</b><br>
+              Sieb/Gewicht: <b>${h(String(rsSieb))}</b><br>
+              Fotos: <b>${(snap.restsand?.imhoff?.photoDataUrl?1:0)+(snap.restsand?.sieb?.photoDataUrl?1:0)}</b>
+            </div>
+          </details>
+
+          <details class="historySection">
+            <summary>pH / Sulfat</summary>
+            <div class="historySection__body">
+              Sulfat: <b>${h(String(sulfat))}</b><br>
+              Temperatur: <b>${h(String(temp))}</b><br>
+              pH: <b>${h(String(phv))}</b>
+            </div>
+          </details>
+        </div>
+
+        ${buildHistoryKfHtml(snap)}
+
+        <div class="historyBtns">
+          <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
+          <button type="button" data-hact="pdf-protokoll" data-id="${h(entry.id)}">PDF Protokoll</button>
+          <button type="button" data-hact="pdf-voll" data-id="${h(entry.id)}">PDF Vollständig</button>
+          <button type="button" data-hact="pdf-restsand" data-id="${h(entry.id)}">PDF Restsand</button>
+          <button type="button" data-hact="pdf-ph" data-id="${h(entry.id)}">PDF Sulfat</button>
+          <button type="button" class="btn--export-photos" data-hact="photos" data-id="${h(entry.id)}">Fotos exportieren</button>
+          <button type="button" data-hact="del" data-id="${h(entry.id)}">Löschen</button>
+        </div>
       </div>
-      <div class="historySub">
-        Objekt: <b>${h(snap.meta?.objekt||'—')}</b> · Ort: <b>${h(snap.meta?.ort||'—')}</b> · Brunnen: <b>${h(wells.join(' / ')||'—')}</b> · Stufen: <b>${count}</b>
-      </div>
-
-      <div class="historySections">
-        <details class="historySection" open>
-          <summary>Protokoll</summary>
-          <div class="historySection__body">
-            Pumpstufen: <b>${count}</b><br/>
-            Beweisfotos: <b>${(snap.versuche||[]).filter(v=>!!v.photoDataUrl).length}</b><br/>
-            PDF-Standard: <b>${h(snap.settings?.pdfExportType==='vollstaendig'?'Vollständige Auswertung':'Protokoll')}</b>
-          </div>
-        </details>
-
-        <details class="historySection">
-          <summary>Restsandmessung</summary>
-          <div class="historySection__body">
-            Imhoff: <b>${h(String(rsImhoff))}</b><br/>
-            Sieb/Gewicht: <b>${h(String(rsSieb))}</b><br/>
-            Fotos: <b>${(snap.restsand?.imhoff?.photoDataUrl?1:0)+(snap.restsand?.sieb?.photoDataUrl?1:0)}</b>
-          </div>
-        </details>
-
-        <details class="historySection">
-          <summary>pH / Sulfat</summary>
-          <div class="historySection__body">
-            Sulfat: <b>${h(String(sulfat))}</b><br/>
-            Temperatur: <b>${h(String(temp))}</b><br/>
-            pH: <b>${h(String(phv))}</b>
-          </div>
-        </details>
-      </div>
-
-      ${buildHistoryKfHtml(snap)}
-
-      <div class="historyBtns">
-        <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
-        <button type="button" data-hact="pdf-protokoll" data-id="${h(entry.id)}">PDF Protokoll</button>
-        <button type="button" data-hact="pdf-voll" data-id="${h(entry.id)}">PDF Vollständig</button>
-        <button type="button" class="btn--export-photos" data-hact="photos" data-id="${h(entry.id)}">Fotos exportieren</button>
-        <button type="button" data-hact="del" data-id="${h(entry.id)}">Löschen</button>
-      </div>
-    </div>`;
+    </details>`;
   }).join('');
 }
 
@@ -1460,7 +1998,6 @@ function hookHistoryDelegation(){
       renderHistoryList();
       return;
     }
-
     if(!entry) return;
 
     if(act==='load'){
@@ -1469,17 +2006,22 @@ function hookHistoryDelegation(){
       document.querySelector('.tab[data-tab="protokoll"]')?.click();
       return;
     }
-
     if(act==='pdf-protokoll'){
       try{ await exportPdf(entry.snapshot,'protokoll'); }catch(err){ console.error(err); alert('PDF-Fehler'); }
       return;
     }
-
     if(act==='pdf-voll'){
       try{ await exportPdf(entry.snapshot,'vollstaendig'); }catch(err){ console.error(err); alert('PDF-Fehler'); }
       return;
     }
-
+    if(act==='pdf-restsand'){
+      try{ await exportRestsandPdf(entry.snapshot); }catch(err){ console.error(err); alert('Restsand-PDF Fehler'); }
+      return;
+    }
+    if(act==='pdf-ph'){
+      try{ await exportPhPdf(entry.snapshot); }catch(err){ console.error(err); alert('Sulfat-PDF Fehler'); }
+      return;
+    }
     if(act==='photos'){
       try{ await exportPhotosFromSnapshot(entry.snapshot); }catch(err){ console.error(err); alert('Fotoexport fehlgeschlagen.'); }
     }
@@ -1489,7 +2031,37 @@ function hookHistoryDelegation(){
 /* ══════════════════════════════════════════════════════
    PDF HELPERS
 ══════════════════════════════════════════════════════ */
-function drawTextSafe(page,text,options){ page.drawText(pdfSafe(text),options); }
+function drawTextSafe(page,text,options){
+  page.drawText(pdfSafe(text),options);
+}
+async function loadPdfAssets(pdf){
+  const fontkit=window.fontkit || window.PDFLibFontkit;
+  if(!fontkit) throw new Error('fontkit nicht geladen');
+
+  pdf.registerFontkit(fontkit);
+
+  const fontBytesR=await fetch(`${BASE}fonts/arial.ttf?v=60`).then(r=>r.arrayBuffer());
+  let fontBytesB=null;
+  try{ fontBytesB=await fetch(`${BASE}fonts/arialbd.ttf?v=60`).then(r=>r.arrayBuffer()); }catch{}
+  const fontR=await pdf.embedFont(fontBytesR,{ subset:true });
+  const fontB=fontBytesB ? await pdf.embedFont(fontBytesB,{ subset:true }) : fontR;
+
+  let logo=null;
+  try{
+    const bytes=await fetch(`${BASE}logo.png?v=30`).then(r=>r.arrayBuffer());
+    logo=await pdf.embedPng(bytes);
+  }catch{}
+
+  return { fontR,fontB,logo };
+}
+function getPdfCtx(PDFLib,assets){
+  const { rgb, degrees } = PDFLib;
+  const PAGE_W=595.28, PAGE_H=841.89;
+  const mm=v=>v*72/25.4;
+  const K=rgb(0,0,0);
+  const GREY=rgb(0.90,0.90,0.90);
+  return { PAGE_W,PAGE_H,mm,K,GREY,rgb,degrees,...assets };
+}
 
 function getPdfRateM3hNumber(v){
   const m=Number(v?.manualRateM3h);
@@ -1498,9 +2070,14 @@ function getPdfRateM3hNumber(v){
   if(Number.isFinite(a)&&a>0) return a;
   return NaN;
 }
-function getPdfRateM3h(v){ const n=getPdfRateM3hNumber(v); return Number.isFinite(n)?n.toFixed(3):'—'; }
-function getPdfRateLs(v){ const n=getPdfRateM3hNumber(v); return Number.isFinite(n)?(n/3.6).toFixed(3):'—'; }
-
+function getPdfRateM3h(v){
+  const n=getPdfRateM3hNumber(v);
+  return Number.isFinite(n)?n.toFixed(3):'—';
+}
+function getPdfRateLs(v){
+  const n=getPdfRateM3hNumber(v);
+  return Number.isFinite(n)?(n/3.6).toFixed(3):'—';
+}
 function getWellRowsForPdf(versuch,key,ruhe){
   const field=key==='foerder'?'foerder_m':'schluck_m';
   const ruheNum=Number(ruhe);
@@ -1512,6 +2089,27 @@ function getWellRowsForPdf(versuch,key,ruhe){
     const deltaCm=deltaM!==null ? deltaM*100 : null;
     return { min:Number.isFinite(min)?min:null, valueNum, deltaM, deltaCm };
   });
+}
+
+function drawFooter(page,ctx,subtitle=''){
+  const { mm,fontR,K,PAGE_W }=ctx;
+  const y=mm(8);
+  drawTextSafe(page,`${FIRMA.name} ${FIRMA.adresse} ${FIRMA.tel}`,{ x:mm(12), y, size:7.8, font:fontR, color:K });
+  drawTextSafe(page,`${FIRMA.email} · ${FIRMA.web}${subtitle ? ' · '+subtitle : ''}`,{ x:mm(12), y:mm(4), size:7.8, font:fontR, color:K });
+}
+function drawHeaderBar(page,ctx,title,sub=''){
+  const { mm,fontR,fontB,K,GREY,logo,PAGE_W,PAGE_H }=ctx;
+  const margin=mm(8), W=PAGE_W-2*margin, H=PAGE_H-2*margin;
+  const hdrH=mm(13);
+
+  page.drawRectangle({ x:margin, y:margin+H-hdrH, width:W, height:hdrH, color:GREY, borderColor:K, borderWidth:0.8 });
+  if(logo){
+    const lh=hdrH*0.75;
+    const scale=lh/logo.height;
+    page.drawImage(logo,{ x:margin+mm(2), y:margin+H-hdrH+(hdrH-lh)/2, width:logo.width*scale, height:lh });
+  }
+  drawTextSafe(page,title,{ x:margin+mm(32), y:margin+H-hdrH+mm(4.2), size:13, font:fontB, color:K });
+  if(sub) drawTextSafe(page,sub,{ x:margin+mm(32), y:margin+H-hdrH+mm(1.5), size:8, font:fontR, color:K });
 }
 
 function drawMetaGrid(page,x,yTop,w,rowH,meta,fontR,fontB,K){
@@ -1547,7 +2145,9 @@ function drawWellTable(page,opt){
 
   const colWidths=[0.18,0.42,0.40];
   const xs=[x]; colWidths.forEach(cw=>xs.push(xs[xs.length-1]+w*cw));
-  for(let i=1;i<xs.length-1;i++) page.drawLine({ start:{x:xs[i],y:yTop-totalH}, end:{x:xs[i],y:yTop-titleH}, thickness:0.6, color:K });
+  for(let i=1;i<xs.length-1;i++){
+    page.drawLine({ start:{x:xs[i],y:yTop-totalH}, end:{x:xs[i],y:yTop-titleH}, thickness:0.6, color:K });
+  }
 
   drawTextSafe(page,'Min',{ x:xs[0]+3, y:yHead+5, size:6.8, font:fontB, color:K });
   drawTextSafe(page,'m ab OK Brunnen',{ x:xs[1]+3, y:yHead+5, size:6.8, font:fontB, color:K });
@@ -1566,9 +2166,9 @@ function drawWellTable(page,opt){
   page.drawRectangle({ x, y:yTop-totalH, width:w, height:totalH, borderColor:K, borderWidth:0.7 });
   return totalH;
 }
-
 function drawWellChart(page,opt){
   const { x,y,w,h,key,rows,fontR,fontB,K,grey,degrees,gridColor,lineColor }=opt;
+
   page.drawRectangle({ x, y, width:w, height:h, borderColor:K, borderWidth:0.7 });
   page.drawRectangle({ x, y:y+h-13, width:w, height:13, color:grey, borderColor:K, borderWidth:0.7 });
   drawTextSafe(page,`Diagramm ${getWellLabel(key)}`,{ x:x+4, y:y+h-9, size:7.6, font:fontB, color:K });
@@ -1591,7 +2191,6 @@ function drawWellChart(page,opt){
     page.drawLine({ start:{x:px,y:yy}, end:{x:px+pw,y:yy}, thickness:0.5, color:gridColor });
     drawTextSafe(page, fmtTick(v,0), { x:px-22, y:yy-2, size:6.2, font:fontR, color:K });
   });
-
   xTicks.forEach(v=>{
     const xx=tx(v);
     page.drawLine({ start:{x:xx,y:py}, end:{x:xx,y:py+ph}, thickness:0.5, color:gridColor });
@@ -1679,16 +2278,17 @@ async function drawImagePage(pdf,ctx,title,subtitle,dataUrl){
       console.error(err);
       drawTextSafe(page,'Bild konnte nicht eingebettet werden.',{ x:x0+20, y:y0+H/2, size:10, font:fontR, color:K });
     }
-  } else {
+  }else{
     page.drawRectangle({ x:x0+mm(15), y:y0+mm(20), width:W-mm(30), height:H-hdrH-mm(35), borderColor:K, borderWidth:0.8 });
     drawTextSafe(page,'Kein Bild vorhanden.',{ x:x0+35, y:y0+H/2, size:10, font:fontR, color:K });
   }
+  drawFooter(page,ctx,title);
 }
 
 async function drawCoverPage(pdf,ctx,snap){
   const { PAGE_W,PAGE_H,mm,fontR,fontB,K,logo }=ctx;
   const page=pdf.addPage([PAGE_W,PAGE_H]);
-  const margin=mm(14), W=PAGE_W-2*margin, H=PAGE_H-2*margin;
+  const margin=mm(14),W=PAGE_W-2*margin,H=PAGE_H-2*margin;
 
   page.drawRectangle({ x:margin, y:margin, width:W, height:H, borderColor:K, borderWidth:1.2 });
 
@@ -1697,12 +2297,19 @@ async function drawCoverPage(pdf,ctx,snap){
     page.drawImage(logo,{ x:margin+mm(4), y:PAGE_H-margin-h-mm(2), width:w, height:h });
   }
 
-  drawTextSafe(page,'Pumpversuch',{ x:margin+mm(4), y:PAGE_H-margin-mm(30), size:24, font:fontB, color:K });
-  drawTextSafe(page,'BAUVORHABEN',{ x:margin+mm(4), y:PAGE_H-margin-mm(45), size:10, font:fontB, color:K });
-  drawTextSafe(page,snap.meta?.objekt||'—',{ x:margin+mm(4), y:PAGE_H-margin-mm(54), size:18, font:fontR, color:K });
-  drawTextSafe(page,'AUFTRAGGEBER',{ x:margin+mm(4), y:PAGE_H-margin-mm(70), size:10, font:fontB, color:K });
-  drawTextSafe(page,snap.meta?.auftraggeber||'—',{ x:margin+mm(4), y:PAGE_H-margin-mm(79), size:16, font:fontR, color:K });
-  drawTextSafe(page,`Arzl, am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,{ x:margin+mm(4), y:PAGE_H-margin-mm(96), size:12, font:fontR, color:K });
+  drawTextSafe(page,FIRMA.name,{ x:margin+mm(4), y:PAGE_H-margin-mm(18), size:11, font:fontB, color:K });
+  drawTextSafe(page,FIRMA.slogan,{ x:margin+mm(4), y:PAGE_H-margin-mm(25), size:8.5, font:fontR, color:K });
+
+  drawTextSafe(page,'Pumpversuch',{ x:margin+mm(4), y:PAGE_H-margin-mm(38), size:24, font:fontB, color:K });
+  drawTextSafe(page,'BAUVORHABEN',{ x:margin+mm(4), y:PAGE_H-margin-mm(53), size:10, font:fontB, color:K });
+  drawTextSafe(page,snap.meta?.objekt || '—',{ x:margin+mm(4), y:PAGE_H-margin-mm(62), size:18, font:fontR, color:K });
+
+  drawTextSafe(page,'AUFTRAGGEBER',{ x:margin+mm(4), y:PAGE_H-margin-mm(78), size:10, font:fontB, color:K });
+  drawTextSafe(page,snap.meta?.auftraggeber || '—',{ x:margin+mm(4), y:PAGE_H-margin-mm(87), size:16, font:fontR, color:K });
+
+  drawTextSafe(page,`Arzl, am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,{
+    x:margin+mm(4), y:PAGE_H-margin-mm(104), size:12, font:fontR, color:K
+  });
 
   const photo=snap.overviewPhotoDataUrl || snap.versuche?.find(v=>v.photoDataUrl)?.photoDataUrl || '';
   if(photo){
@@ -1717,14 +2324,13 @@ async function drawCoverPage(pdf,ctx,snap){
     }catch(err){ console.error(err); }
   }
 
-  drawTextSafe(page,'HTB Baugesellschaft m.b.H. A-6471 Arzl im Pitztal, Gewerbepark Pitztal 16',{ x:margin+mm(4), y:margin+mm(8), size:8, font:fontR, color:K });
-  drawTextSafe(page,'office.arzl@htb-bau.at · www.htb-bau.at',{ x:margin+mm(4), y:margin+mm(4), size:8, font:fontR, color:K });
+  drawFooter(page,ctx,'Pumpversuch');
 }
 
 async function drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh){
   const { PAGE_W,PAGE_H,mm,fontR,fontB,K,logo }=ctx;
   const page=pdf.addPage([PAGE_W,PAGE_H]);
-  const margin=mm(14), W=PAGE_W-2*margin, H=PAGE_H-2*margin;
+  const margin=mm(14),W=PAGE_W-2*margin,H=PAGE_H-2*margin;
 
   page.drawRectangle({ x:margin, y:margin, width:W, height:H, borderColor:K, borderWidth:1.2 });
 
@@ -1746,6 +2352,67 @@ async function drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh){
     drawTextSafe(page,line,{ x:margin+mm(8), y, size:14, font:fontR, color:K });
     y-=mm(10);
   });
+
+  drawFooter(page,ctx,'Pumpversuch');
+}
+
+async function drawProtocolStagePage(pdf,ctx,snap,versuch,index){
+  const { PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY,logo,rgb,degrees }=ctx;
+  const page=pdf.addPage([PAGE_W,PAGE_H]);
+  const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
+
+  page.drawRectangle({ x:x0, y:y0, width:W, height:H, borderColor:K, borderWidth:1.2 });
+
+  drawHeaderBar(page,ctx,'Pumpversuch',FIRMA.name);
+
+  let cy=y0+H-mm(13)-mm(2);
+  const metaRowH=mm(9);
+  drawMetaGrid(page,x0,cy,W,metaRowH,snap.meta||{},fontR,fontB,K);
+  cy -= metaRowH*3;
+
+  const ruheHdrH=10, ruheRowH=13;
+  page.drawRectangle({ x:x0, y:cy-ruheHdrH, width:W, height:ruheHdrH, color:GREY, borderColor:K, borderWidth:0.7 });
+  drawTextSafe(page,'Ruhewasserspiegel [m]',{ x:x0+4, y:cy-ruheHdrH+2.5, size:7.5, font:fontB, color:K });
+  cy -= ruheHdrH;
+
+  const selection=snap.selection||{foerder:true,schluck:true};
+  const wellsRW=[];
+  if(selection.foerder) wellsRW.push({ label:'Förderbrunnen ab OK Brunnenausbau', value:snap.foerder?.ruhe?fmtComma(snap.foerder.ruhe,3):'—' });
+  if(selection.schluck) wellsRW.push({ label:'Rückgabebrunnen ab OK Brunnenausbau', value:snap.schluck?.ruhe?fmtComma(snap.schluck.ruhe,3):'—' });
+
+  page.drawRectangle({ x:x0, y:cy-ruheRowH, width:W, height:ruheRowH, borderColor:K, borderWidth:0.7 });
+  if(wellsRW.length===2){
+    const labelW=W*0.37, valueW=W*0.13;
+    const xs=[x0,x0+labelW,x0+labelW+valueW,x0+labelW+valueW+labelW,x0+W];
+    for(let k=1;k<4;k++) page.drawLine({ start:{x:xs[k],y:cy-ruheRowH}, end:{x:xs[k],y:cy}, thickness:0.7, color:K });
+    drawTextSafe(page,wellsRW[0].label,{ x:xs[0]+3, y:cy-ruheRowH+4, size:6.2, font:fontR, color:K });
+    drawTextSafe(page,wellsRW[0].value,{ x:xs[1]+3, y:cy-ruheRowH+4, size:7.2, font:fontR, color:K });
+    drawTextSafe(page,wellsRW[1].label,{ x:xs[2]+3, y:cy-ruheRowH+4, size:6.2, font:fontR, color:K });
+    drawTextSafe(page,wellsRW[1].value,{ x:xs[3]+3, y:cy-ruheRowH+4, size:7.2, font:fontR, color:K });
+  }else if(wellsRW.length===1){
+    const labelW=W*0.74;
+    const xs=[x0,x0+labelW,x0+W];
+    page.drawLine({ start:{x:xs[1],y:cy-ruheRowH}, end:{x:xs[1],y:cy}, thickness:0.7, color:K });
+    drawTextSafe(page,wellsRW[0].label,{ x:xs[0]+3, y:cy-ruheRowH+4, size:6.2, font:fontR, color:K });
+    drawTextSafe(page,wellsRW[0].value,{ x:xs[1]+3, y:cy-ruheRowH+4, size:7.2, font:fontR, color:K });
+  }
+  cy -= ruheRowH;
+
+  page.drawRectangle({ x:x0, y:cy-metaRowH, width:W, height:metaRowH, color:GREY, borderColor:K, borderWidth:0.7 });
+  const wellTexts=[];
+  if(selection.foerder) wellTexts.push(`Förderbrunnen: Ø ${snap.foerder?.dm||'—'} mm · ET ${snap.foerder?.endteufe||'—'} m`);
+  if(selection.schluck) wellTexts.push(`Rückgabebrunnen: Ø ${snap.schluck?.dm||'—'} mm · ET ${snap.schluck?.endteufe||'—'} m`);
+  drawTextSafe(page,wellTexts.join('   |   '),{ x:x0+4, y:cy-metaRowH+6, size:7.1, font:fontR, color:K });
+  cy -= metaRowH+mm(3);
+
+  versuch._stageTitle=getStageTitle(index);
+  drawStageSplitLayout(page,{
+    x:x0,yTop:cy,yBottom:y0+mm(9),w:W,
+    versuch,foerder:snap.foerder||{},schluck:snap.schluck||{},
+    fontR,fontB,K,grey:GREY,degrees,rgb,selection
+  });
+
+  drawFooter(page,ctx,'Pumpversuch');
 }
 
 async function drawRestsandPage(pdf,ctx,snap){
@@ -1754,10 +2421,17 @@ async function drawRestsandPage(pdf,ctx,snap){
   const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
 
   page.drawRectangle({ x:x0, y:y0, width:W, height:H, borderColor:K, borderWidth:1.2 });
-  page.drawRectangle({ x:x0, y:y0+H-mm(15), width:W, height:mm(15), color:GREY, borderColor:K, borderWidth:0.8 });
-  drawTextSafe(page,'Restsandmessung',{ x:x0+mm(4), y:y0+H-mm(9), size:15, font:fontB, color:K });
+  drawHeaderBar(page,ctx,'Restsandmessung',FIRMA.name);
 
-  const colGap=mm(6), colW=(W-colGap)/2, topY=y0+H-mm(24), blockH=H-mm(34);
+  const titleY=y0+H-mm(24);
+  page.drawRectangle({ x:x0, y:titleY-mm(10), width:W, height:mm(10), color:GREY, borderColor:K, borderWidth:0.8 });
+  drawTextSafe(page,`Objekt: ${snap.meta?.objekt || '—'} · Datum: ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,{ x:x0+4, y:titleY-mm(7), size:8.8, font:fontB, color:K });
+
+  const colGap=mm(6);
+  const colW=(W-colGap)/2;
+  const topY=titleY-mm(6);
+  const blockH=H-mm(46);
+
   const defs=[
     { title:'Imhoff-Trichter', data:snap.restsand?.imhoff, valueLabel:'Menge [ml/l]' },
     { title:'Sieb / Gewicht', data:snap.restsand?.sieb, valueLabel:'Menge [g]' }
@@ -1765,7 +2439,7 @@ async function drawRestsandPage(pdf,ctx,snap){
 
   for(let i=0;i<defs.length;i++){
     const x=x0+i*(colW+colGap);
-    page.drawRectangle({ x, y:y0+mm(10), width:colW, height:blockH, borderColor:K, borderWidth:0.8 });
+    page.drawRectangle({ x, y:y0+mm(20), width:colW, height:blockH, borderColor:K, borderWidth:0.8 });
     page.drawRectangle({ x, y:topY-mm(10), width:colW, height:mm(10), color:GREY, borderColor:K, borderWidth:0.8 });
     drawTextSafe(page,defs[i].title,{ x:x+4, y:topY-mm(7), size:10, font:fontB, color:K });
 
@@ -1773,22 +2447,26 @@ async function drawRestsandPage(pdf,ctx,snap){
     if(photoUrl){
       try{
         const img=await embedDataUrlImage(pdf,photoUrl);
-        const areaX=x+mm(4), areaW=colW-mm(8), areaTop=topY-mm(16), areaBottom=y0+mm(38), areaH=areaTop-areaBottom;
+        const areaX=x+mm(4), areaW=colW-mm(8), areaTop=topY-mm(16), areaBottom=y0+mm(45), areaH=areaTop-areaBottom;
         const ratio=img.width/img.height;
         let dw=areaW, dh=dw/ratio;
         if(dh>areaH){ dh=areaH; dw=dh*ratio; }
         const dx=areaX+(areaW-dw)/2, dy=areaBottom+(areaH-dh)/2;
         page.drawImage(img,{ x:dx, y:dy, width:dw, height:dh });
       }catch(err){ console.error(err); }
+    }else{
+      drawTextSafe(page,'Kein Foto vorhanden.',{ x:x+18, y:y0+blockH/2, size:10, font:fontR, color:K });
     }
 
-    page.drawRectangle({ x, y:y0+mm(10), width:colW, height:mm(14), color:GREY, borderColor:K, borderWidth:0.8 });
-    drawTextSafe(page,`${defs[i].valueLabel}: ${defs[i].data?.menge || '—'}`,{ x:x+4, y:y0+mm(14), size:10, font:fontB, color:K });
+    page.drawRectangle({ x, y:y0+mm(20), width:colW, height:mm(14), color:GREY, borderColor:K, borderWidth:0.8 });
+    drawTextSafe(page,`${defs[i].valueLabel}: ${defs[i].data?.menge || '—'}`,{ x:x+4, y:y0+mm(24), size:10, font:fontB, color:K });
   }
 
   if(snap.restsand?.bemerkung){
-    drawTextSafe(page,`Bemerkung: ${snap.restsand.bemerkung}`,{ x:x0+4, y:y0+4, size:8, font:fontR, color:K });
+    drawTextSafe(page,`Bemerkung: ${snap.restsand.bemerkung}`,{ x:x0+4, y:y0+7, size:8, font:fontR, color:K });
   }
+
+  drawFooter(page,ctx,'Restsandmessung');
 }
 
 async function drawPhPage(pdf,ctx,snap){
@@ -1797,10 +2475,9 @@ async function drawPhPage(pdf,ctx,snap){
   const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
 
   page.drawRectangle({ x:x0, y:y0, width:W, height:H, borderColor:K, borderWidth:1.2 });
-  drawTextSafe(page,'Prüfprotokoll Sulfatmessung Wasser',{ x:x0+mm(4), y:y0+H-mm(12), size:16, font:fontB, color:K });
+  drawHeaderBar(page,ctx,'Prüfprotokoll Sulfatmessung Wasser',FIRMA.name);
 
   const headerTop=y0+H-mm(20), rowH=mm(10);
-
   const cells=[
     ['Datum', dateDE(snap.ph?.datum)||dateDE(snap.meta?.geprueftAm)||todayDE(), x0, W*0.45],
     ['Bauherr', snap.ph?.bauherr || snap.meta?.auftraggeber || '—', x0+W*0.55, W*0.45]
@@ -1821,7 +2498,8 @@ async function drawPhPage(pdf,ctx,snap){
   drawTextSafe(page,'Messung mittels Teststäbchen "Quantofix" – Ergebnis nach 120 sec',{ x:x0+4, y:sectionY+3.5, size:9, font:fontB, color:K });
 
   const topBlockY=sectionY-mm(95);
-  const leftW=W*0.38, rightW=W-leftW-mm(6);
+  const leftW=W*0.38;
+  const rightW=W-leftW-mm(6);
 
   page.drawRectangle({ x:x0, y:topBlockY, width:leftW, height:mm(88), borderColor:K, borderWidth:0.8 });
   page.drawRectangle({ x:x0+leftW+mm(6), y:topBlockY, width:rightW, height:mm(88), borderColor:K, borderWidth:0.8 });
@@ -1837,7 +2515,6 @@ async function drawPhPage(pdf,ctx,snap){
       page.drawImage(img,{ x:dx, y:dy, width:dw, height:dh });
     }catch(err){ console.error(err); }
   }
-
   page.drawRectangle({ x:x0, y:topBlockY, width:leftW, height:mm(10), color:GREY, borderColor:K, borderWidth:0.8 });
   drawTextSafe(page,`${snap.ph?.sulfat?.wert || '—'} mg/l SO4²-`,{ x:x0+4, y:topBlockY+3.2, size:10, font:fontB, color:K });
 
@@ -1851,7 +2528,6 @@ async function drawPhPage(pdf,ctx,snap){
 
   const bottomY=y0+mm(16), blockH=mm(70), blockW=(W-mm(8))/2;
 
-  // Temperatur
   page.drawRectangle({ x:x0, y:bottomY, width:blockW, height:blockH, borderColor:K, borderWidth:0.8 });
   page.drawRectangle({ x:x0, y:bottomY+blockH-mm(10), width:blockW, height:mm(10), color:GREY, borderColor:K, borderWidth:0.8 });
   drawTextSafe(page,'Temperatur Messung',{ x:x0+4, y:bottomY+blockH-mm(7), size:10, font:fontB, color:K });
@@ -1869,7 +2545,6 @@ async function drawPhPage(pdf,ctx,snap){
   page.drawRectangle({ x:x0, y:bottomY, width:blockW, height:mm(10), color:GREY, borderColor:K, borderWidth:0.8 });
   drawTextSafe(page,`${snap.ph?.temperatur?.wert || '—'} °C Wert`,{ x:x0+4, y:bottomY+3.2, size:10, font:fontB, color:K });
 
-  // pH
   const px=x0+blockW+mm(8);
   page.drawRectangle({ x:px, y:bottomY, width:blockW, height:blockH, borderColor:K, borderWidth:0.8 });
   page.drawRectangle({ x:px, y:bottomY+blockH-mm(10), width:blockW, height:mm(10), color:GREY, borderColor:K, borderWidth:0.8 });
@@ -1887,107 +2562,24 @@ async function drawPhPage(pdf,ctx,snap){
   }
   page.drawRectangle({ x:px, y:bottomY, width:blockW, height:mm(10), color:GREY, borderColor:K, borderWidth:0.8 });
   drawTextSafe(page,`${snap.ph?.ph?.wert || '—'} pH Wert`,{ x:px+4, y:bottomY+3.2, size:10, font:fontB, color:K });
-}
 
-async function drawProtocolStagePage(pdf,ctx,snap,versuch,index){
-  const { PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY,logo,rgb,degrees }=ctx;
-  const page=pdf.addPage([PAGE_W,PAGE_H]);
-  const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
-
-  page.drawRectangle({ x:x0, y:y0, width:W, height:H, borderColor:K, borderWidth:1.2 });
-
-  const hdrH=mm(13);
-  page.drawRectangle({ x:x0, y:y0+H-hdrH, width:W, height:hdrH, color:GREY, borderColor:K, borderWidth:0.8 });
-
-  if(logo){
-    const lh=hdrH*0.75, scale=lh/logo.height;
-    page.drawImage(logo,{ x:x0+mm(2), y:y0+H-hdrH+(hdrH-lh)/2, width:logo.width*scale, height:lh });
-  }
-
-  drawTextSafe(page,'Pumpversuch',{ x:x0+mm(32), y:y0+H-hdrH+mm(4.2), size:13, font:fontB, color:K });
-  drawTextSafe(page,'HTB Baugesellschaft m.b.H.',{ x:x0+mm(32), y:y0+H-hdrH+mm(1.5), size:8, font:fontR, color:K });
-
-  let cy=y0+H-hdrH-mm(2);
-  const metaRowH=mm(9);
-  drawMetaGrid(page,x0,cy,W,metaRowH,snap.meta||{},fontR,fontB,K);
-  cy -= metaRowH*3;
-
-  const ruheHdrH=10, ruheRowH=13;
-  page.drawRectangle({ x:x0, y:cy-ruheHdrH, width:W, height:ruheHdrH, color:GREY, borderColor:K, borderWidth:0.7 });
-  drawTextSafe(page,'Ruhewasserspiegel [m]',{ x:x0+4, y:cy-ruheHdrH+2.5, size:7.5, font:fontB, color:K });
-  cy -= ruheHdrH;
-
-  const selection=snap.selection||{foerder:true,schluck:true};
-  const wellsRW=[];
-  if(selection.foerder) wellsRW.push({ label:`${getWellLabel('foerder')} ab OK Brunnenausbau`, value:snap.foerder?.ruhe?fmtComma(snap.foerder.ruhe,3):'—' });
-  if(selection.schluck) wellsRW.push({ label:`${getWellLabel('schluck')} ab OK Brunnenausbau`, value:snap.schluck?.ruhe?fmtComma(snap.schluck.ruhe,3):'—' });
-
-  page.drawRectangle({ x:x0, y:cy-ruheRowH, width:W, height:ruheRowH, borderColor:K, borderWidth:0.7 });
-  if(wellsRW.length===2){
-    const labelW=W*0.37, valueW=W*0.13;
-    const xs=[x0,x0+labelW,x0+labelW+valueW,x0+labelW+valueW+labelW,x0+W];
-    for(let k=1;k<4;k++) page.drawLine({ start:{x:xs[k],y:cy-ruheRowH}, end:{x:xs[k],y:cy}, thickness:0.7, color:K });
-    drawTextSafe(page,wellsRW[0].label,{ x:xs[0]+3, y:cy-ruheRowH+4, size:6.2, font:fontR, color:K });
-    drawTextSafe(page,wellsRW[0].value,{ x:xs[1]+3, y:cy-ruheRowH+4, size:7.2, font:fontR, color:K });
-    drawTextSafe(page,wellsRW[1].label,{ x:xs[2]+3, y:cy-ruheRowH+4, size:6.2, font:fontR, color:K });
-    drawTextSafe(page,wellsRW[1].value,{ x:xs[3]+3, y:cy-ruheRowH+4, size:7.2, font:fontR, color:K });
-  } else if(wellsRW.length===1){
-    const labelW=W*0.74, valueW=W*0.26;
-    const xs=[x0,x0+labelW,x0+W];
-    page.drawLine({ start:{x:xs[1],y:cy-ruheRowH}, end:{x:xs[1],y:cy}, thickness:0.7, color:K });
-    drawTextSafe(page,wellsRW[0].label,{ x:xs[0]+3, y:cy-ruheRowH+4, size:6.2, font:fontR, color:K });
-    drawTextSafe(page,wellsRW[0].value,{ x:xs[1]+3, y:cy-ruheRowH+4, size:7.2, font:fontR, color:K });
-  }
-  cy -= ruheRowH;
-
-  page.drawRectangle({ x:x0, y:cy-metaRowH, width:W, height:metaRowH, color:GREY, borderColor:K, borderWidth:0.7 });
-  const wellTexts=[];
-  if(selection.foerder) wellTexts.push(`${getWellLabel('foerder')}: Ø ${snap.foerder?.dm||'—'} mm · ET ${snap.foerder?.endteufe||'—'} m`);
-  if(selection.schluck) wellTexts.push(`${getWellLabel('schluck')}: Ø ${snap.schluck?.dm||'—'} mm · ET ${snap.schluck?.endteufe||'—'} m`);
-  drawTextSafe(page,wellTexts.join('   |   '),{ x:x0+4, y:cy-metaRowH+6, size:7.1, font:fontR, color:K });
-  cy -= metaRowH+mm(3);
-
-  versuch._stageTitle=getStageTitle(index);
-  drawStageSplitLayout(page,{
-    x:x0,yTop:cy,yBottom:y0+mm(9),w:W,
-    versuch,foerder:snap.foerder||{},schluck:snap.schluck||{},
-    fontR,fontB,K,grey:GREY,degrees,rgb,selection
-  });
+  drawFooter(page,ctx,'Sulfatmessung Wasser');
 }
 
 /* ══════════════════════════════════════════════════════
-   PDF EXPORT
+   PDF EXPORTS
 ══════════════════════════════════════════════════════ */
 async function exportPdf(snapshot=null,type='protokoll'){
   const snap=snapshot || collectSnapshot();
   if(!window.PDFLib){ alert('PDF-Library noch nicht geladen.'); return; }
-  const fontkit=window.fontkit || window.PDFLibFontkit;
-  if(!fontkit){ alert('fontkit nicht geladen.'); return; }
 
   const versuche=(snap.versuche||[]).map(v=>hydrateVersuch(v));
   if(!versuche.length){ alert('Es ist noch keine Pumpstufe vorhanden.'); return; }
 
-  const { PDFDocument, rgb, degrees }=window.PDFLib;
+  const { PDFDocument }=window.PDFLib;
   const pdf=await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-
-  const fontBytesR=await fetch(`${BASE}fonts/arial.ttf?v=60`).then(r=>r.arrayBuffer());
-  let fontBytesB=null;
-  try{ fontBytesB=await fetch(`${BASE}fonts/arialbd.ttf?v=60`).then(r=>r.arrayBuffer()); }catch{}
-  const fontR=await pdf.embedFont(fontBytesR,{ subset:true });
-  const fontB=fontBytesB ? await pdf.embedFont(fontBytesB,{ subset:true }) : fontR;
-
-  let logo=null;
-  try{
-    const bytes=await fetch(`${BASE}logo.png?v=30`).then(r=>r.arrayBuffer());
-    logo=await pdf.embedPng(bytes);
-  }catch{}
-
-  const PAGE_W=595.28, PAGE_H=841.89;
-  const mm=v=>v*72/25.4;
-  const K=rgb(0,0,0);
-  const GREY=rgb(0.90,0.90,0.90);
-  const ctx={ PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY,logo,rgb,degrees };
+  const assets=await loadPdfAssets(pdf);
+  const ctx=getPdfCtx(window.PDFLib,assets);
 
   if(type==='vollstaendig'){
     const hasOverview=!!snap.overviewPhotoDataUrl;
@@ -2000,7 +2592,7 @@ async function exportPdf(snapshot=null,type='protokoll'){
     for(let i=0;i<versuche.length;i++){
       await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
       if(versuche[i].photoDataUrl){
-        await drawImagePage(pdf,ctx,`Foto Durchflussmesser ${getStageTitle(i)}`,`${snap.meta?.objekt || ''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,versuche[i].photoDataUrl);
+        await drawImagePage(pdf,ctx,`Foto Durchflussmesser ${getStageTitle(i)}`,`${snap.meta?.objekt||''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,versuche[i].photoDataUrl);
       }
     }
 
@@ -2011,7 +2603,7 @@ async function exportPdf(snapshot=null,type='protokoll'){
 
     if(hasRestsand) await drawRestsandPage(pdf,ctx,snap);
     if(hasPh) await drawPhPage(pdf,ctx,snap);
-  } else {
+  }else{
     for(let i=0;i<versuche.length;i++){
       await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
     }
@@ -2034,14 +2626,50 @@ async function exportPdf(snapshot=null,type='protokoll'){
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 
+async function exportRestsandPdf(snapshot=null){
+  const snap=snapshot || collectSnapshot();
+  if(!window.PDFLib){ alert('PDF-Library noch nicht geladen.'); return; }
+  const { PDFDocument }=window.PDFLib;
+  const pdf=await PDFDocument.create();
+  const assets=await loadPdfAssets(pdf);
+  const ctx=getPdfCtx(window.PDFLib,assets);
+  await drawRestsandPage(pdf,ctx,snap);
+  const bytes=await pdf.save();
+  const blob=new Blob([bytes],{ type:'application/pdf' });
+  const url=URL.createObjectURL(blob);
+  const obj=(snap.meta?.objekt||'Restsand').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');
+  const fileName=`${dateTag()}_HTB_Restsandprotokoll_${obj||'Dokument'}.pdf`;
+  const w=window.open(url,'_blank');
+  if(!w){ const a=document.createElement('a'); a.href=url; a.download=fileName; a.click(); }
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
+async function exportPhPdf(snapshot=null){
+  const snap=snapshot || collectSnapshot();
+  if(!window.PDFLib){ alert('PDF-Library noch nicht geladen.'); return; }
+  const { PDFDocument }=window.PDFLib;
+  const pdf=await PDFDocument.create();
+  const assets=await loadPdfAssets(pdf);
+  const ctx=getPdfCtx(window.PDFLib,assets);
+  await drawPhPage(pdf,ctx,snap);
+  const bytes=await pdf.save();
+  const blob=new Blob([bytes],{ type:'application/pdf' });
+  const url=URL.createObjectURL(blob);
+  const obj=(snap.meta?.objekt||'Sulfatmessung').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');
+  const fileName=`${dateTag()}_HTB_Sulfatprotokoll_${obj||'Dokument'}.pdf`;
+  const w=window.open(url,'_blank');
+  if(!w){ const a=document.createElement('a'); a.href=url; a.download=fileName; a.click(); }
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+
 /* ══════════════════════════════════════════════════════
    RESET / INSTALL
 ══════════════════════════════════════════════════════ */
 function resetAll(){
   if(!confirm('Alle Eingaben wirklich zurücksetzen?')) return;
   Object.keys(timerMap).forEach(hardStopTimer);
-
   const base=getInitialState();
+
   state.meta=clone(base.meta);
   state.selection=clone(base.selection);
   state.foerder=clone(base.foerder);
@@ -2063,7 +2691,6 @@ function resetAll(){
   renderLiveTab();
   saveDraftDebounced();
 }
-
 function initInstallButton(){
   let installPrompt=null;
   const btn=$('btnInstall');
@@ -2100,6 +2727,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   hookGlobalPhotoDelegation();
   initTimeAdjustModal();
   initFloatingTimer();
+  initOcrHandlers();
 
   loadDraft();
 
@@ -2116,6 +2744,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   initInstallButton();
 
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register(`${BASE}sw.js?v=50`).catch(err=>console.error('SW:',err));
+    navigator.serviceWorker.register(`${BASE}sw.js?v=55`).catch(err=>console.error('SW:',err));
   }
 });
