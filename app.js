@@ -1,5 +1,5 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v56 loaded');
+console.log('HTB Pumpversuch app.js v57 loaded');
 
 const BASE = '/Pumpversuch/';
 const STORAGE_DRAFT   = 'htb-pumpversuch-draft-v18';
@@ -7,7 +7,6 @@ const STORAGE_HISTORY = 'htb-pumpversuch-history-v18';
 const HISTORY_MAX = 30;
 const DEFAULT_INTERVALLE = [0,1,2,3,4,5,15,30,45,60,75,90,105,120,135,150,165,180];
 
-/* ── Firmendaten aus Referenz-PDF / DOCX ── */
 const FIRMA = {
   name:    'HTB Baugesellschaft m.b.H.',
   slogan:  'BAUEN MIT SPEZIALISTEN ALS PARTNER',
@@ -57,19 +56,6 @@ let _audioCtx = null;
 let _alarmGain = null;
 let _timeAdjustVid = null;
 let _floatingRaf = null;
-let _ocrTargetVid = null;
-let _ocrTargetRowIdx = null;
-
-/* OCR runtime */
-let _ocrOriginalDataUrl = null;
-let _ocrOriginalImage = null;
-let _ocrDisplayCanvasW = 0;
-let _ocrDisplayCanvasH = 0;
-let _ocrCropRect = null;
-let _ocrDragging = false;
-let _ocrDragStart = null;
-let _ocrDragEnd = null;
-let _ocrCanvasEventsBound = false;
 
 /* ══════════════════════════════════════════════════════
    HELPERS
@@ -101,7 +87,7 @@ function fmtMaybe(v,d=3){
 }
 function fmtSci(v,d=2){
   const n=Number(v);
-  if(!Number.isFinite(n) || n<=0) return '—';
+  if(!Number.isFinite(n)||n<=0) return '—';
   const [m,e]=n.toExponential(d).split('e');
   return `${m.replace('.',',')}e${Number(e)}`;
 }
@@ -129,7 +115,9 @@ function formatElapsed(ms){
   const hh=Math.floor(t/3600);
   const mm=Math.floor((t%3600)/60);
   const ss=t%60;
-  return hh>0 ? `${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  return hh>0
+    ? `${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
+    : `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
 }
 function parseIntervalStr(str){
   return [...new Set(
@@ -210,7 +198,7 @@ function getEffectiveRateLs(v){
 }
 function getAverageFoerderMengeNumber(v){
   const vals=(v.messungen||[])
-    .filter(m=>String(m.foerder_menge??'').trim()!=='' && Number.isFinite(Number(m.foerder_menge)))
+    .filter(m=>String(m.foerder_menge??'').trim()!==''&&Number.isFinite(Number(m.foerder_menge)))
     .map(m=>Number(m.foerder_menge));
   return vals.length ? vals.reduce((s,n)=>s+n,0)/vals.length : NaN;
 }
@@ -250,22 +238,14 @@ function getDisplacementCm(raw,ruhe){
   return Number.isFinite(d) ? Math.abs(d*100) : NaN;
 }
 function estimateRowKfDupuit({ qM3h,dmMm,endteufe,ruhe,dyn,key }){
-  const Q=Number(qM3h)/3600;
-  const rw=Number(dmMm)/2000;
-  const ET=Number(endteufe);
-  const RWS=Number(ruhe);
-  const dynL=Number(dyn);
-
-  if(![Q,rw,ET,RWS,dynL].every(Number.isFinite) || Q<=0 || rw<=0 || ET<=0) return NaN;
-
-  const H0=ET-RWS;
-  const Hd=ET-dynL;
-  const s=key==='foerder' ? (dynL-RWS) : (RWS-dynL);
+  const Q=Number(qM3h)/3600, rw=Number(dmMm)/2000;
+  const ET=Number(endteufe), RWS=Number(ruhe), dynL=Number(dyn);
+  if(![Q,rw,ET,RWS,dynL].every(Number.isFinite)||Q<=0||rw<=0||ET<=0) return NaN;
+  const H0=ET-RWS, Hd=ET-dynL;
+  const s=key==='foerder'?(dynL-RWS):(RWS-dynL);
   if(!Number.isFinite(H0)||!Number.isFinite(Hd)||!Number.isFinite(s)||H0<=0||Hd<=0||s<=0) return NaN;
-
-  const denom = key==='foerder' ? (H0*H0-Hd*Hd) : (Hd*Hd-H0*H0);
+  const denom=key==='foerder'?(H0*H0-Hd*Hd):(Hd*Hd-H0*H0);
   if(!(denom>0)) return NaN;
-
   let k=1e-4;
   for(let i=0;i<30;i++){
     const R=Math.max(rw*20,3000*s*Math.sqrt(Math.max(k,1e-12)));
@@ -281,47 +261,29 @@ function estimateRowKfDupuit({ qM3h,dmMm,endteufe,ruhe,dyn,key }){
 function getStageKfEstimate(versuch,key,brunnen){
   const rateM3h=getCalcRateM3hNumber(versuch);
   if(!Number.isFinite(rateM3h)||rateM3h<=0) return { kf:NaN, reason:'Keine Förderrate' };
-
-  const field=key==='foerder'?'foerder_m':'schluck_m';
   const rows=getRowsForExport(versuch).map(row=>{
     const min=Number(row.min);
-    const raw=row[field];
-    const kf=estimateRowKfDupuit({
-      qM3h:rateM3h, dmMm:brunnen?.dm, endteufe:brunnen?.endteufe, ruhe:brunnen?.ruhe, dyn:raw, key
-    });
+    const raw=row[key==='foerder'?'foerder_m':'schluck_m'];
+    const kf=estimateRowKfDupuit({ qM3h:rateM3h, dmMm:brunnen?.dm, endteufe:brunnen?.endteufe, ruhe:brunnen?.ruhe, dyn:raw, key });
     const s=getProcessHeadChangeM(raw,brunnen?.ruhe,key);
     if(!Number.isFinite(kf)||!Number.isFinite(min)||!Number.isFinite(s)||s<=0) return null;
     return { min,kf,s };
   }).filter(Boolean).sort((a,b)=>a.min-b.min);
-
   if(!rows.length) return { kf:NaN, reason:'Noch keine auswertbaren Messpunkte' };
-
   const tail=rows.length>=4 ? rows.slice(Math.floor(rows.length/2)) : rows;
   const weights=tail.map(p=>Math.max(1,p.min||1));
   const sumW=weights.reduce((a,b)=>a+b,0);
   const logMean=Math.exp(tail.reduce((sum,it,i)=>sum+Math.log(it.kf)*weights[i],0)/sumW);
-  const minK=Math.min(...tail.map(x=>x.kf));
-  const maxK=Math.max(...tail.map(x=>x.kf));
-  const spread=maxK/minK;
-
+  const spread=Math.max(...tail.map(x=>x.kf))/Math.min(...tail.map(x=>x.kf));
   let quality='gering';
   if(tail.length>=4&&spread<=3) quality='gut';
   else if(tail.length>=3&&spread<=10) quality='mittel';
-
-  return {
-    kf:logMean,
-    quality,
-    used:tail.length,
-    total:rows.length,
-    rateM3h,
-    rateSource:getCalcRateSource(versuch)
-  };
+  return { kf:logMean, quality, used:tail.length, total:rows.length, rateM3h, rateSource:getCalcRateSource(versuch) };
 }
 function getWellChartPoints(versuch,key,brunnen){
-  const field=key==='foerder'?'foerder_m':'schluck_m';
   const ruhe=Number(brunnen?.ruhe);
   return getRowsForExport(versuch)
-    .map(row=>({ x:Number(row.min), y:getDisplacementCm(row[field],ruhe) }))
+    .map(row=>({ x:Number(row.min), y:getDisplacementCm(row[key==='foerder'?'foerder_m':'schluck_m'],ruhe) }))
     .filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))
     .sort((a,b)=>a.x-b.x);
 }
@@ -330,26 +292,13 @@ function niceNum(r,round){
   const exp=Math.floor(Math.log10(r));
   const f=r/Math.pow(10,exp);
   let nf;
-  if(round){
-    if(f<1.5) nf=1;
-    else if(f<3) nf=2;
-    else if(f<7) nf=5;
-    else nf=10;
-  }else{
-    if(f<=1) nf=1;
-    else if(f<=2) nf=2;
-    else if(f<=5) nf=5;
-    else nf=10;
-  }
+  if(round){ if(f<1.5)nf=1; else if(f<3)nf=2; else if(f<7)nf=5; else nf=10; }
+  else{ if(f<=1)nf=1; else if(f<=2)nf=2; else if(f<=5)nf=5; else nf=10; }
   return nf*Math.pow(10,exp);
 }
 function getNiceAxis(lo,hi,ticks=6){
-  let min=Number.isFinite(lo)?lo:0;
-  let max=Number.isFinite(hi)?hi:1;
-  if(min===max){
-    if(min===0) max=1;
-    else { min=Math.min(0,min); max=max*1.1; }
-  }
+  let min=Number.isFinite(lo)?lo:0, max=Number.isFinite(hi)?hi:1;
+  if(min===max){ if(min===0)max=1; else{ min=Math.min(0,min); max=max*1.1; } }
   const r=niceNum(max-min,false);
   const step=niceNum(r/Math.max(2,ticks-1),true);
   return { min:Math.floor(min/step)*step, max:Math.ceil(max/step)*step, step };
@@ -372,13 +321,8 @@ function defaultMessung(min){
 function defaultVersuch(){
   const ints=[...DEFAULT_INTERVALLE];
   return {
-    id:uid(),
-    manualRateM3h:'',
-    startzeit:'',
-    elapsedMs:0,
-    intervalleStr:ints.join(', '),
-    messungen:ints.map(defaultMessung),
-    photoDataUrl:''
+    id:uid(), manualRateM3h:'', startzeit:'', elapsedMs:0,
+    intervalleStr:ints.join(', '), messungen:ints.map(defaultMessung), photoDataUrl:''
   };
 }
 function hydrateVersuch(v){
@@ -392,12 +336,7 @@ function hydrateVersuch(v){
     photoDataUrl:typeof v?.photoDataUrl==='string' ? v.photoDataUrl : '',
     messungen:ints.map(min=>{
       const hit=existing.find(m=>Number(m.min)===Number(min));
-      return hit ? {
-        min,
-        foerder_m:hit.foerder_m??'',
-        schluck_m:hit.schluck_m??'',
-        foerder_menge:hit.foerder_menge??''
-      } : defaultMessung(min);
+      return hit ? { min, foerder_m:hit.foerder_m??'', schluck_m:hit.schluck_m??'', foerder_menge:hit.foerder_menge??'' } : defaultMessung(min);
     })
   };
 }
@@ -406,25 +345,15 @@ function hydrateVersuch(v){
    FIELD MAPS
 ══════════════════════════════════════════════════════ */
 const META_FIELDS = [
-  ['meta-objekt','objekt'],
-  ['meta-grundstueck','grundstueck'],
-  ['meta-ort','ort'],
-  ['meta-geologie','geologie'],
-  ['meta-auftragsnummer','auftragsnummer'],
-  ['meta-auftraggeber','auftraggeber'],
-  ['meta-bauleitung','bauleitung'],
-  ['meta-bohrmeister','bohrmeister'],
-  ['meta-koordination','koordination'],
-  ['meta-geprueftDurch','geprueftDurch'],
-  ['meta-geprueftAm','geprueftAm']
+  ['meta-objekt','objekt'],['meta-grundstueck','grundstueck'],['meta-ort','ort'],
+  ['meta-geologie','geologie'],['meta-auftragsnummer','auftragsnummer'],
+  ['meta-auftraggeber','auftraggeber'],['meta-bauleitung','bauleitung'],
+  ['meta-bohrmeister','bohrmeister'],['meta-koordination','koordination'],
+  ['meta-geprueftDurch','geprueftDurch'],['meta-geprueftAm','geprueftAm']
 ];
 const BRUNNEN_FIELDS = [
-  ['foerder-dm','foerder','dm'],
-  ['foerder-endteufe','foerder','endteufe'],
-  ['foerder-ruhe','foerder','ruhe'],
-  ['schluck-dm','schluck','dm'],
-  ['schluck-endteufe','schluck','endteufe'],
-  ['schluck-ruhe','schluck','ruhe']
+  ['foerder-dm','foerder','dm'],['foerder-endteufe','foerder','endteufe'],['foerder-ruhe','foerder','ruhe'],
+  ['schluck-dm','schluck','dm'],['schluck-endteufe','schluck','endteufe'],['schluck-ruhe','schluck','ruhe']
 ];
 
 /* ══════════════════════════════════════════════════════
@@ -444,17 +373,14 @@ function syncSelectionToUi(){
   updateBrunnenVisibility();
 }
 function collectSelectionFromUi(){
-  const f=!!$('sel-foerder')?.checked;
-  const s=!!$('sel-schluck')?.checked;
+  const f=!!$('sel-foerder')?.checked, s=!!$('sel-schluck')?.checked;
   if(!f&&!s){
-    state.selection.foerder=true;
-    state.selection.schluck=false;
+    state.selection.foerder=true; state.selection.schluck=false;
     syncSelectionToUi();
     alert('Mindestens ein Brunnen muss ausgewählt sein.');
     return false;
   }
-  state.selection.foerder=f;
-  state.selection.schluck=s;
+  state.selection.foerder=f; state.selection.schluck=s;
   updateBrunnenVisibility();
   return true;
 }
@@ -464,27 +390,19 @@ function updateMainPdfButtonLabel(){
 }
 function syncSettingsToUi(){
   $('settings-alarmDuration').value=state.settings.alarmDurationSec ?? 4;
-  const a=$('pdfType-protokoll');
-  const b=$('pdfType-vollstaendig');
+  const a=$('pdfType-protokoll'), b=$('pdfType-vollstaendig');
   if(a) a.checked=state.settings.pdfExportType!=='vollstaendig';
   if(b) b.checked=state.settings.pdfExportType==='vollstaendig';
   updateMainPdfButtonLabel();
 }
-
 function collectSettingsFromUi(){
   state.settings.alarmDurationSec=clamp(Number($('settings-alarmDuration')?.value||4),1,30);
-  state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked ? 'vollstaendig' : 'protokoll';
+  state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked?'vollstaendig':'protokoll';
   updateMainPdfButtonLabel();
 }
-
 function renderOverviewPhotoThumb(){
-  const box=$('overviewPhotoThumb');
-  if(!box) return;
-  if(!state.overviewPhotoDataUrl){
-    box.hidden=true;
-    box.innerHTML='';
-    return;
-  }
+  const box=$('overviewPhotoThumb'); if(!box) return;
+  if(!state.overviewPhotoDataUrl){ box.hidden=true; box.innerHTML=''; return; }
   box.hidden=false;
   box.innerHTML=`<img src="${h(state.overviewPhotoDataUrl)}" alt="Übersichtsfoto"><button class="overview-del-btn" data-photo-del="overview" type="button">Foto entfernen</button>`;
 }
@@ -499,15 +417,14 @@ function renderRestsandPhotoAreas(){
     area.innerHTML=`
       <button class="restsand-photo-btn" data-rs-photo="${def.key}" type="button">${camSvg(26,22)} ${has?'Foto ändern':def.label}</button>
       <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-rs-input="${def.key}" style="display:none">
-      ${has?`<img class="restsand-thumb" src="${h(state.restsand[def.key].photoDataUrl)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="restsand-${def.key}" type="button">Entfernen</button>`:''}
-    `;
+      ${has?`<img class="restsand-thumb" src="${h(state.restsand[def.key].photoDataUrl)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="restsand-${def.key}" type="button">Entfernen</button>`:''}`;
   });
 }
 function renderPhPhotoAreas(){
   const defs=[
-    { key:'sulfat', area:'sulfatPhotoArea', inputId:'sulfatPhotoInput', label:'Foto Teststäbchen' },
-    { key:'temperatur', area:'tempPhotoArea', inputId:'tempPhotoInput', label:'Foto Thermometer' },
-    { key:'ph', area:'phPhotoArea', inputId:'phPhotoInput', label:'Foto pH-Meter' }
+    { key:'sulfat',     area:'sulfatPhotoArea', inputId:'sulfatPhotoInput', label:'Foto Teststäbchen' },
+    { key:'temperatur', area:'tempPhotoArea',   inputId:'tempPhotoInput',   label:'Foto Thermometer' },
+    { key:'ph',         area:'phPhotoArea',     inputId:'phPhotoInput',     label:'Foto pH-Meter' }
   ];
   defs.forEach(def=>{
     const area=$(def.area); if(!area) return;
@@ -516,8 +433,7 @@ function renderPhPhotoAreas(){
     area.innerHTML=`
       <button class="restsand-photo-btn" data-ph-photo="${def.key}" type="button">${camSvg(22,18)} ${has?'Foto ändern':def.label}</button>
       <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-ph-input="${def.key}" style="display:none">
-      ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}
-    `;
+      ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}`;
   });
 }
 function syncRestsandToUi(){
@@ -555,30 +471,20 @@ function collectPhFromUi(){
    SNAPSHOT / STORAGE
 ══════════════════════════════════════════════════════ */
 function collectSnapshot(){
-  collectMetaFromUi();
-  collectBrunnenFromUi();
-  collectSelectionFromUi();
-  collectRestsandFromUi();
-  collectPhFromUi();
-  collectSettingsFromUi();
-
+  collectMetaFromUi(); collectBrunnenFromUi(); collectSelectionFromUi();
+  collectRestsandFromUi(); collectPhFromUi(); collectSettingsFromUi();
   return {
     v:18,
-    meta:clone(state.meta),
-    selection:clone(state.selection),
-    foerder:clone(state.foerder),
-    schluck:clone(state.schluck),
+    meta:clone(state.meta), selection:clone(state.selection),
+    foerder:clone(state.foerder), schluck:clone(state.schluck),
     overviewPhotoDataUrl:state.overviewPhotoDataUrl||'',
-    versuche:clone(state.versuche),
-    restsand:clone(state.restsand),
-    ph:clone(state.ph),
-    settings:clone(state.settings)
+    versuche:clone(state.versuche), restsand:clone(state.restsand),
+    ph:clone(state.ph), settings:clone(state.settings)
   };
 }
 function applySnapshot(snap,render=true){
   const base=getInitialState();
   snap=snap||{};
-
   state.meta={...base.meta,...(snap.meta||{})};
   state.selection={...base.selection,...(snap.selection||{})};
   state.foerder={...base.foerder,...(snap.foerder||{})};
@@ -597,39 +503,23 @@ function applySnapshot(snap,render=true){
     ph:{...base.ph.ph,...((snap.ph||{}).ph||{})}
   };
   state.settings={...base.settings,...(snap.settings||{})};
-
   Object.keys(timerMap).forEach(hardStopTimer);
-
   if(render){
-    syncMetaToUi();
-    syncBrunnenToUi();
-    syncSelectionToUi();
-    renderOverviewPhotoThumb();
-    syncRestsandToUi();
-    syncPhToUi();
-    syncSettingsToUi();
-    renderVersuche();
-    renderLiveTab();
-    renderHistoryList();
+    syncMetaToUi(); syncBrunnenToUi(); syncSelectionToUi();
+    renderOverviewPhotoThumb(); syncRestsandToUi(); syncPhToUi();
+    syncSettingsToUi(); renderVersuche(); renderLiveTab(); renderHistoryList();
   }
 }
 function saveDraftDebounced(){
   clearTimeout(_saveT);
-  _saveT=setTimeout(()=>{
-    try{ localStorage.setItem(STORAGE_DRAFT,JSON.stringify(collectSnapshot())); }catch{}
-  },250);
+  _saveT=setTimeout(()=>{ try{ localStorage.setItem(STORAGE_DRAFT,JSON.stringify(collectSnapshot())); }catch{} },250);
 }
 function loadDraft(){
-  try{
-    const raw=localStorage.getItem(STORAGE_DRAFT);
-    if(raw) applySnapshot(JSON.parse(raw),true);
-  }catch(e){
-    console.warn('Draft load failed',e);
-  }
+  try{ const raw=localStorage.getItem(STORAGE_DRAFT); if(raw) applySnapshot(JSON.parse(raw),true); }
+  catch(e){ console.warn('Draft load failed',e); }
 }
 function readHistory(){
-  try{ return JSON.parse(localStorage.getItem(STORAGE_HISTORY)||'[]'); }
-  catch{ return []; }
+  try{ return JSON.parse(localStorage.getItem(STORAGE_HISTORY)||'[]'); } catch{ return []; }
 }
 function writeHistory(list){
   try{ localStorage.setItem(STORAGE_HISTORY,JSON.stringify(list.slice(0,HISTORY_MAX))); }catch{}
@@ -638,10 +528,8 @@ function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
   const snap=collectSnapshot();
   const title=`${snap.meta.objekt||'—'} · ${snap.meta.ort||'—'}`;
   const entry={ id:uid(), savedAt:Date.now(), title, snapshot:snap };
-  const list=readHistory();
-  list.unshift(entry);
-  writeHistory(list);
-  renderHistoryList();
+  const list=readHistory(); list.unshift(entry);
+  writeHistory(list); renderHistoryList();
   if(msg) alert(msg);
 }
 
@@ -654,8 +542,7 @@ function initTabs(){
       document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('is-active',b===btn));
       document.querySelectorAll('.pane').forEach(p=>{
         const on=p.id===`tab-${btn.dataset.tab}`;
-        p.classList.toggle('is-active',on);
-        p.hidden=!on;
+        p.classList.toggle('is-active',on); p.hidden=!on;
       });
       if(btn.dataset.tab==='verlauf') renderHistoryList();
       if(btn.dataset.tab==='live') renderLiveTab();
@@ -676,26 +563,19 @@ function getAlarmAudioContext(){
       _alarmGain=_audioCtx.createGain();
       _alarmGain.gain.value=1.0;
       _alarmGain.connect(_audioCtx.destination);
-    }catch{
-      return null;
-    }
+    }catch{ return null; }
   }
   return _audioCtx;
 }
 function unlockAlarmAudio(){
-  const ctx=getAlarmAudioContext();
-  if(!ctx) return false;
+  const ctx=getAlarmAudioContext(); if(!ctx) return false;
   try{
     if(ctx.state==='suspended') ctx.resume();
     const buf=ctx.createBuffer(1,1,22050);
     const src=ctx.createBufferSource();
-    src.buffer=buf;
-    src.connect(ctx.destination);
-    src.start(0);
+    src.buffer=buf; src.connect(ctx.destination); src.start(0);
     return true;
-  }catch{
-    return false;
-  }
+  }catch{ return false; }
 }
 function installAudioUnlock(){
   const fn=()=>unlockAlarmAudio();
@@ -706,10 +586,8 @@ function installAudioUnlock(){
 function scheduleBeep(ctx,start,duration=0.10,freq=2350,volume=0.52){
   const out=_alarmGain||ctx.destination;
   [freq,freq*1.015].forEach(f=>{
-    const osc=ctx.createOscillator();
-    const g=ctx.createGain();
-    osc.type='square';
-    osc.frequency.setValueAtTime(f,start);
+    const osc=ctx.createOscillator(), g=ctx.createGain();
+    osc.type='square'; osc.frequency.setValueAtTime(f,start);
     g.gain.setValueAtTime(0.0001,start);
     g.gain.exponentialRampToValueAtTime(Math.max(0.0001,volume),start+0.005);
     g.gain.setValueAtTime(Math.max(0.0001,volume),start+Math.max(0.03,duration-0.02));
@@ -725,15 +603,11 @@ function playIntervalBeep(){
     const vib=[]; for(let i=0;i<tot;i++) vib.push(...p);
     navigator.vibrate?.(vib);
   }catch{}
-
-  const ctx=getAlarmAudioContext();
-  if(!ctx) return false;
+  const ctx=getAlarmAudioContext(); if(!ctx) return false;
   try{ if(ctx.state==='suspended') ctx.resume(); }catch{}
   if(ctx.state==='suspended') return false;
-
   const dur=clamp(Number(state.settings.alarmDurationSec||4),1,30);
-  const now=ctx.currentTime+0.02;
-  const cycle=0.90;
+  const now=ctx.currentTime+0.02, cycle=0.90;
   for(let t=0;t<dur;t+=cycle){
     scheduleBeep(ctx,now+t+0.00,0.10,2350,0.52);
     scheduleBeep(ctx,now+t+0.20,0.10,2350,0.52);
@@ -753,26 +627,19 @@ async function downscaleImageFile(file,maxDim=1600,quality=0.78){
       img.onload=()=>{
         let { width,height }=img;
         const scale=Math.min(1,maxDim/Math.max(width,height));
-        width=Math.round(width*scale);
-        height=Math.round(height*scale);
+        width=Math.round(width*scale); height=Math.round(height*scale);
         const canvas=document.createElement('canvas');
-        canvas.width=width;
-        canvas.height=height;
+        canvas.width=width; canvas.height=height;
         canvas.getContext('2d').drawImage(img,0,0,width,height);
-        try{
-          resolve(canvas.toDataURL('image/jpeg',quality));
-        }catch(e){ reject(e); }
+        try{ resolve(canvas.toDataURL('image/jpeg',quality)); }catch(e){ reject(e); }
       };
-      img.onerror=reject;
-      img.src=reader.result;
+      img.onerror=reject; img.src=reader.result;
     };
-    reader.onerror=reject;
-    reader.readAsDataURL(file);
+    reader.onerror=reject; reader.readAsDataURL(file);
   });
 }
 function dataUrlToUint8Array(dataUrl){
-  const b64=dataUrl.split(',')[1]||'';
-  const bin=atob(b64);
+  const b64=dataUrl.split(',')[1]||'', bin=atob(b64);
   const bytes=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
   return bytes;
@@ -791,558 +658,36 @@ async function handlePhotoSelected(file){
 ══════════════════════════════════════════════════════ */
 function hookGlobalPhotoDelegation(){
   document.addEventListener('click',async(e)=>{
-    const btn=e.target.closest('button');
-    if(!btn) return;
-
-    if(btn.id==='overviewPhotoBtnTrigger'){
-      $('overviewPhotoInput')?.click();
-      return;
-    }
-    if(btn.dataset.rsPhoto){
-      $(`${btn.dataset.rsPhoto}PhotoInput`)?.click();
-      return;
-    }
+    const btn=e.target.closest('button'); if(!btn) return;
+    if(btn.id==='overviewPhotoBtnTrigger'){ $('overviewPhotoInput')?.click(); return; }
+    if(btn.dataset.rsPhoto){ $(`${btn.dataset.rsPhoto}PhotoInput`)?.click(); return; }
     if(btn.dataset.phPhoto){
       const map={ sulfat:'sulfatPhotoInput', temperatur:'tempPhotoInput', ph:'phPhotoInput' };
-      $(map[btn.dataset.phPhoto])?.click();
-      return;
+      $(map[btn.dataset.phPhoto])?.click(); return;
     }
     if(btn.dataset.photoDel){
       const what=btn.dataset.photoDel;
-      if(what==='overview'){
-        state.overviewPhotoDataUrl='';
-        renderOverviewPhotoThumb();
-        saveDraftDebounced();
-        return;
-      }
-      if(what.startsWith('restsand-')){
-        const k=what.replace('restsand-','');
-        state.restsand[k].photoDataUrl='';
-        renderRestsandPhotoAreas();
-        saveDraftDebounced();
-        return;
-      }
-      if(what.startsWith('ph-')){
-        const k=what.replace('ph-','');
-        if(k==='ph') state.ph.ph.photoDataUrl='';
-        else state.ph[k].photoDataUrl='';
-        renderPhPhotoAreas();
-        saveDraftDebounced();
-      }
+      if(what==='overview'){ state.overviewPhotoDataUrl=''; renderOverviewPhotoThumb(); saveDraftDebounced(); return; }
+      if(what.startsWith('restsand-')){ const k=what.replace('restsand-',''); state.restsand[k].photoDataUrl=''; renderRestsandPhotoAreas(); saveDraftDebounced(); return; }
+      if(what.startsWith('ph-')){ const k=what.replace('ph-',''); if(k==='ph') state.ph.ph.photoDataUrl=''; else state.ph[k].photoDataUrl=''; renderPhPhotoAreas(); saveDraftDebounced(); }
     }
   });
-
   document.addEventListener('change',async(e)=>{
     const input=e.target;
-    if(!(input instanceof HTMLInputElement) || !input.files?.[0]) return;
+    if(!(input instanceof HTMLInputElement)||!input.files?.[0]) return;
     const file=input.files[0];
     try{
       const dataUrl=await handlePhotoSelected(file);
-      if(input.id==='overviewPhotoInput'){
-        state.overviewPhotoDataUrl=dataUrl;
-        renderOverviewPhotoThumb();
-      }else if(input.dataset.rsInput){
-        state.restsand[input.dataset.rsInput].photoDataUrl=dataUrl;
-        renderRestsandPhotoAreas();
-      }else if(input.dataset.phInput){
+      if(input.id==='overviewPhotoInput'){ state.overviewPhotoDataUrl=dataUrl; renderOverviewPhotoThumb(); }
+      else if(input.dataset.rsInput){ state.restsand[input.dataset.rsInput].photoDataUrl=dataUrl; renderRestsandPhotoAreas(); }
+      else if(input.dataset.phInput){
         if(input.dataset.phInput==='ph') state.ph.ph.photoDataUrl=dataUrl;
         else state.ph[input.dataset.phInput].photoDataUrl=dataUrl;
         renderPhPhotoAreas();
       }
       saveDraftDebounced();
-    }catch(err){
-      console.error(err);
-      alert('Foto konnte nicht verarbeitet werden.');
-    }finally{
-      input.value='';
-    }
-  });
-}
-
-/* ══════════════════════════════════════════════════════
-   OCR – CROP ONLY, OHNE API
-   Foto → Displaybereich einrahmen → Tesseract nur auf Crop
-══════════════════════════════════════════════════════ */
-function ceilTo2(n){
-  return Math.ceil(n * 100) / 100;
-}
-function ensureEnhancedOcrUi(){
-  let modal=$('ocrModal');
-  if(!modal){
-    modal=document.createElement('div');
-    modal.id='ocrModal';
-    modal.className='modal-overlay';
-    modal.hidden=true;
-    document.body.appendChild(modal);
-  }
-
-  if(modal.dataset.enhanced==='1') return;
-
-  modal.dataset.enhanced='1';
-  modal.innerHTML=`
-    <div class="modal-box" style="max-width:540px">
-      <div class="modal-title">📷 Wert scannen – FLYPPER Display</div>
-      <div class="modal-sub" id="ocrSub">Foto aufnehmen → dann Display-Bereich einrahmen</div>
-
-      <div id="ocrStep1">
-        <button id="ocrTakePhoto" class="btn btn--save" type="button" style="width:100%;margin-bottom:8px">📷 Foto aufnehmen</button>
-        <button id="ocrTakePhotoLib" class="btn btn--ghost btn--small" type="button" style="width:100%">Aus Bibliothek wählen</button>
-      </div>
-
-      <div id="ocrStep2" hidden>
-        <div style="font-size:.78em;color:var(--accent);font-weight:900;margin-bottom:6px;text-align:center">
-          ☝️ Display-Bereich mit Finger/Maus einrahmen
-        </div>
-        <div style="position:relative;width:100%;touch-action:none">
-          <canvas id="ocrCropCanvas"
-            style="width:100%;border-radius:8px;border:2px solid var(--accent);display:block;cursor:crosshair;background:#0b1725"></canvas>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button id="ocrDoCrop" class="btn btn--save btn--small" type="button" style="flex:1">✓ Bereich bestätigen &amp; erkennen</button>
-          <button id="ocrResetCrop" class="btn btn--ghost btn--small" type="button">Neu zeichnen</button>
-        </div>
-      </div>
-
-      <div id="ocrStep3" hidden>
-        <div id="ocrCroppedPreview" style="margin-bottom:10px;background:#0b1725;border-radius:8px;padding:6px;text-align:center"></div>
-        <div id="ocrStatus" class="ocr-status" style="margin-bottom:10px;min-height:2em"></div>
-        <label class="field" style="margin-bottom:12px">
-          <span class="field__label">Erkannter Wert [m³/h] – bitte prüfen</span>
-          <input id="ocrResultInput" class="field__input" type="text"
-            style="font-size:1.35em;font-weight:900;text-align:center;letter-spacing:.08em"
-            placeholder="z.B. 2,15">
-        </label>
-        <div class="modal-buttons" style="justify-content:stretch">
-          <button id="ocrAccept" class="btn btn--save" type="button" style="flex:1">✓ Übernehmen</button>
-          <button id="ocrRetry" class="btn btn--ghost btn--small" type="button">Nochmal</button>
-        </div>
-      </div>
-
-      <div style="margin-top:10px;text-align:right">
-        <button id="ocrCancel" class="btn btn--ghost btn--small" type="button">Abbrechen</button>
-      </div>
-    </div>
-  `;
-
-  if(!$('ocrFileInput')){
-    const inp=document.createElement('input');
-    inp.id='ocrFileInput';
-    inp.type='file';
-    inp.accept='image/*';
-    inp.capture='environment';
-    inp.style.display='none';
-    document.body.appendChild(inp);
-  }
-  if(!$('ocrFileInputLib')){
-    const inp=document.createElement('input');
-    inp.id='ocrFileInputLib';
-    inp.type='file';
-    inp.accept='image/*';
-    inp.style.display='none';
-    document.body.appendChild(inp);
-  }
-}
-function ocrShowStep(step){
-  $('ocrStep1').hidden = step!==1;
-  $('ocrStep2').hidden = step!==2;
-  $('ocrStep3').hidden = step!==3;
-}
-function openOcrModal(vid,rowIdx){
-  ensureEnhancedOcrUi();
-  _ocrTargetVid=vid;
-  _ocrTargetRowIdx=rowIdx;
-  _ocrOriginalDataUrl=null;
-  _ocrOriginalImage=null;
-  _ocrCropRect=null;
-  _ocrDragging=false;
-  _ocrDragStart=null;
-  _ocrDragEnd=null;
-  $('ocrStatus') && ($('ocrStatus').textContent='');
-  $('ocrResultInput') && ($('ocrResultInput').value='');
-  $('ocrModal').hidden=false;
-  ocrShowStep(1);
-}
-function closeOcrModal(){
-  $('ocrModal').hidden=true;
-  _ocrTargetVid=null;
-  _ocrTargetRowIdx=null;
-  _ocrOriginalDataUrl=null;
-  _ocrOriginalImage=null;
-  _ocrCropRect=null;
-  _ocrDragging=false;
-  _ocrDragStart=null;
-  _ocrDragEnd=null;
-}
-
-function getOcrCanvas(){
-  return $('ocrCropCanvas');
-}
-function getCanvasEventPos(e,canvas){
-  const rect=canvas.getBoundingClientRect();
-  const scaleX=canvas.width/rect.width;
-  const scaleY=canvas.height/rect.height;
-  const clientX=e.touches ? e.touches[0].clientX : e.clientX;
-  const clientY=e.touches ? e.touches[0].clientY : e.clientY;
-  return {
-    x:(clientX-rect.left)*scaleX,
-    y:(clientY-rect.top)*scaleY
-  };
-}
-function drawOcrCanvas(){
-  const canvas=getOcrCanvas();
-  if(!canvas || !_ocrOriginalImage) return;
-  const ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.drawImage(_ocrOriginalImage,0,0,canvas.width,canvas.height);
-
-  const rect = _ocrDragging && _ocrDragStart && _ocrDragEnd
-    ? {
-        x:Math.min(_ocrDragStart.x,_ocrDragEnd.x),
-        y:Math.min(_ocrDragStart.y,_ocrDragEnd.y),
-        w:Math.abs(_ocrDragEnd.x-_ocrDragStart.x),
-        h:Math.abs(_ocrDragEnd.y-_ocrDragStart.y)
-      }
-    : _ocrCropRect;
-
-  if(!rect) return;
-
-  ctx.save();
-  ctx.fillStyle='rgba(0,0,0,0.55)';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.clearRect(rect.x,rect.y,rect.w,rect.h);
-
-  ctx.strokeStyle='#ffed00';
-  ctx.lineWidth=3;
-  ctx.strokeRect(rect.x,rect.y,rect.w,rect.h);
-
-  const cs=18;
-  ctx.lineWidth=5;
-  [[rect.x,rect.y],[rect.x+rect.w,rect.y],[rect.x,rect.y+rect.h],[rect.x+rect.w,rect.y+rect.h]].forEach(([cx,cy])=>{
-    const sx=cx===rect.x?1:-1;
-    const sy=cy===rect.y?1:-1;
-    ctx.beginPath();
-    ctx.moveTo(cx+sx*cs,cy);
-    ctx.lineTo(cx,cy);
-    ctx.lineTo(cx,cy+sy*cs);
-    ctx.stroke();
-  });
-  ctx.restore();
-}
-function bindOcrCanvasEvents(){
-  if(_ocrCanvasEventsBound) return;
-  _ocrCanvasEventsBound=true;
-  const canvas=getOcrCanvas();
-  if(!canvas) return;
-
-  const onStart=e=>{
-    e.preventDefault();
-    const p=getCanvasEventPos(e,canvas);
-    _ocrDragging=true;
-    _ocrDragStart=p;
-    _ocrDragEnd={...p};
-    drawOcrCanvas();
-  };
-  const onMove=e=>{
-    if(!_ocrDragging) return;
-    e.preventDefault();
-    _ocrDragEnd=getCanvasEventPos(e,canvas);
-    drawOcrCanvas();
-  };
-  const onEnd=e=>{
-    if(!_ocrDragging) return;
-    e.preventDefault();
-    _ocrDragging=false;
-    const r={
-      x:Math.min(_ocrDragStart.x,_ocrDragEnd.x),
-      y:Math.min(_ocrDragStart.y,_ocrDragEnd.y),
-      w:Math.abs(_ocrDragEnd.x-_ocrDragStart.x),
-      h:Math.abs(_ocrDragEnd.y-_ocrDragStart.y)
-    };
-    if(r.w>20 && r.h>10) _ocrCropRect=r;
-    drawOcrCanvas();
-  };
-
-  canvas.addEventListener('mousedown',onStart,{passive:false});
-  canvas.addEventListener('mousemove',onMove,{passive:false});
-  canvas.addEventListener('mouseup',onEnd,{passive:false});
-  canvas.addEventListener('mouseleave',onEnd,{passive:false});
-  canvas.addEventListener('touchstart',onStart,{passive:false});
-  canvas.addEventListener('touchmove',onMove,{passive:false});
-  canvas.addEventListener('touchend',onEnd,{passive:false});
-}
-
-async function loadOcrImage(file){
-  const dataUrl=await downscaleImageFile(file,2400,0.92);
-  _ocrOriginalDataUrl=dataUrl;
-
-  const img=new Image();
-  await new Promise((resolve,reject)=>{
-    img.onload=resolve;
-    img.onerror=reject;
-    img.src=dataUrl;
-  });
-  _ocrOriginalImage=img;
-
-  const maxCssW=Math.min(460,window.innerWidth-80);
-  let displayW=img.width;
-  let displayH=img.height;
-  if(displayW>maxCssW){
-    const r=maxCssW/displayW;
-    displayW=Math.round(displayW*r);
-    displayH=Math.round(displayH*r);
-  }
-
-  _ocrDisplayCanvasW=displayW;
-  _ocrDisplayCanvasH=displayH;
-
-  const canvas=getOcrCanvas();
-  canvas.width=displayW;
-  canvas.height=displayH;
-  canvas.style.width='100%';
-
-  // Default-Vorschlag auf Displaybereich
-  _ocrCropRect={
-    x:Math.round(displayW*0.20),
-    y:Math.round(displayH*0.30),
-    w:Math.round(displayW*0.60),
-    h:Math.round(displayH*0.20)
-  };
-
-  drawOcrCanvas();
-}
-
-function cropImageFromCanvasRect(){
-  return new Promise((resolve,reject)=>{
-    if(!_ocrOriginalImage || !_ocrCropRect) return reject(new Error('Kein Crop definiert'));
-    const sx=_ocrOriginalImage.width/_ocrDisplayCanvasW;
-    const sy=_ocrOriginalImage.height/_ocrDisplayCanvasH;
-
-    const x=Math.round(_ocrCropRect.x*sx);
-    const y=Math.round(_ocrCropRect.y*sy);
-    const w=Math.round(_ocrCropRect.w*sx);
-    const h=Math.round(_ocrCropRect.h*sy);
-
-    const tmp=document.createElement('canvas');
-    tmp.width=w;
-    tmp.height=h;
-    const ctx=tmp.getContext('2d');
-    ctx.drawImage(_ocrOriginalImage,x,y,w,h,0,0,w,h);
-    resolve(tmp.toDataURL('image/jpeg',0.95));
-  });
-}
-
-function preprocessDisplayCrop(dataUrl,invert=true){
-  return new Promise((resolve,reject)=>{
-    const img=new Image();
-    img.onload=()=>{
-      const scale=4;
-      const tmp=document.createElement('canvas');
-      tmp.width=img.width*scale;
-      tmp.height=img.height*scale;
-      const ctx=tmp.getContext('2d');
-      ctx.imageSmoothingEnabled=true;
-      ctx.imageSmoothingQuality='high';
-      ctx.drawImage(img,0,0,tmp.width,tmp.height);
-
-      const id=ctx.getImageData(0,0,tmp.width,tmp.height);
-      const d=id.data;
-      for(let i=0;i<d.length;i+=4){
-        const gray=Math.round(d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114);
-        let v=clamp(Math.round((gray-110)*2.4+110),0,255);
-        v=v>128 ? 255 : 0;
-        if(invert) v=255-v;
-        d[i]=d[i+1]=d[i+2]=v;
-        d[i+3]=255;
-      }
-      ctx.putImageData(id,0,0);
-      resolve(tmp.toDataURL('image/jpeg',0.95));
-    };
-    img.onerror=reject;
-    img.src=dataUrl;
-  });
-}
-
-function extractBestDecimalValue(text){
-  const raw=String(text||'')
-    .replace(/[Oo]/g,'0')
-    .replace(/[lIi|]/g,'1')
-    .replace(/[Ss]/g,'5')
-    .replace(/[Bb]/g,'8')
-    .replace(/[Gg]/g,'9')
-    .replace(/[Zz]/g,'2')
-    .replace(/[^0-9,.\n ]+/g,' ');
-
-  const pattern3=raw.match(/\d{1,3}[.,]\d{3}/g) || [];
-  const vals3=pattern3
-    .map(s=>Number(s.replace(',','.')))
-    .filter(n=>Number.isFinite(n)&&n>0&&n<9999);
-  if(vals3.length){
-    const preferred=vals3.filter(n=>n>=0.01&&n<=250).sort((a,b)=>a-b);
-    const best=preferred[0] ?? vals3[0];
-    return ceilTo2(best);
-  }
-
-  const pattern2=raw.match(/\d{1,3}[.,]\d{2}/g) || [];
-  const vals2=pattern2
-    .map(s=>Number(s.replace(',','.')))
-    .filter(n=>Number.isFinite(n)&&n>0&&n<9999);
-  if(vals2.length){
-    const preferred=vals2.filter(n=>n>=0.01&&n<=250).sort((a,b)=>a-b);
-    const best=preferred[0] ?? vals2[0];
-    return ceilTo2(best);
-  }
-
-  const allNums=raw.match(/\d{1,4}[.,]\d{1,4}|\d{2,4}/g) || [];
-  const allVals=allNums
-    .map(s=>Number(s.replace(',','.')))
-    .filter(n=>Number.isFinite(n)&&n>=0.01&&n<=250)
-    .sort((a,b)=>a-b);
-
-  return allVals.length ? ceilTo2(allVals[0]) : undefined;
-}
-
-async function runOcrOnCrop(croppedDataUrl){
-  if(!window.Tesseract) throw new Error('Tesseract nicht geladen');
-
-  const processedInvert = await preprocessDisplayCrop(croppedDataUrl,true);
-  const processedNormal = await preprocessDisplayCrop(croppedDataUrl,false);
-
-  const configs=[
-    { label:'Crop invertiert (Zeile)', img:processedInvert, psm:7 },
-    { label:'Crop invertiert (Wort)',  img:processedInvert, psm:8 },
-    { label:'Crop normal (Zeile)',     img:processedNormal, psm:7 },
-    { label:'Crop normal (Block)',     img:processedNormal, psm:6 },
-    { label:'Crop original (Zeile)',   img:croppedDataUrl,  psm:7 }
-  ];
-
-  const allTexts=[];
-
-  for(const cfg of configs){
-    try{
-      const { data:{ text } } = await Tesseract.recognize(cfg.img,'eng',{
-        tessedit_pageseg_mode: String(cfg.psm),
-        tessedit_char_whitelist: '0123456789,.',
-        preserve_interword_spaces: '1',
-        logger: m => {
-          if(m.status==='recognizing text'){
-            $('ocrStatus').textContent = `${cfg.label}… ${Math.round(m.progress*100)}%`;
-          }
-        }
-      });
-      allTexts.push(text||'');
-      const best=extractBestDecimalValue(text||'');
-      if(best!==undefined){
-        $('ocrStatus').textContent=`Erkannt via ${cfg.label}: ${best.toFixed(2).replace('.',',')} m³/h`;
-        return { best, text };
-      }
-    }catch(err){
-      console.warn(`OCR-Versuch "${cfg.label}" fehlgeschlagen:`,err);
-    }
-  }
-
-  const merged=allTexts.join('\n');
-  return { best:extractBestDecimalValue(merged), text:merged };
-}
-
-function showOcrCropPreview(dataUrl){
-  const box=$('ocrCroppedPreview');
-  if(!box) return;
-  box.innerHTML=`
-    <div style="font-size:.72em;color:var(--muted);margin-bottom:4px;font-weight:900;text-transform:uppercase">
-      Display-Crop
-    </div>
-    <img src="${dataUrl}" style="max-width:100%;max-height:120px;border-radius:6px;border:2px solid var(--accent)">
-  `;
-}
-
-function initOcrHandlers(){
-  ensureEnhancedOcrUi();
-  bindOcrCanvasEvents();
-
-  $('ocrTakePhoto')?.addEventListener('click',()=> $('ocrFileInput')?.click());
-  $('ocrTakePhotoLib')?.addEventListener('click',()=> $('ocrFileInputLib')?.click());
-
-  const onFileSelected = async file => {
-    if(!file) return;
-    try{
-      ocrShowStep(2);
-      await loadOcrImage(file);
-      $('ocrSub').textContent='Display-Bereich einrahmen → bestätigen';
-      $('ocrStatus').textContent='';
-    }catch(err){
-      console.error(err);
-      alert('Foto konnte nicht geladen werden.');
-      closeOcrModal();
-    }
-  };
-
-  $('ocrFileInput')?.addEventListener('change',e=>{
-    const file=e.target.files?.[0];
-    onFileSelected(file);
-    e.target.value='';
-  });
-  $('ocrFileInputLib')?.addEventListener('change',e=>{
-    const file=e.target.files?.[0];
-    onFileSelected(file);
-    e.target.value='';
-  });
-
-  $('ocrResetCrop')?.addEventListener('click',()=>{
-    _ocrCropRect=null;
-    _ocrDragStart=null;
-    _ocrDragEnd=null;
-    drawOcrCanvas();
-  });
-
-  $('ocrDoCrop')?.addEventListener('click',async()=>{
-    if(!_ocrCropRect){
-      alert('Bitte zuerst den Display-Bereich einrahmen.');
-      return;
-    }
-    try{
-      ocrShowStep(3);
-      $('ocrStatus').textContent='Display wird zugeschnitten…';
-      const cropped=await cropImageFromCanvasRect();
-      showOcrCropPreview(cropped);
-      $('ocrResultInput').value='';
-      $('ocrStatus').textContent='Texterkennung läuft…';
-
-      const { best } = await runOcrOnCrop(cropped);
-      if(best!==undefined){
-        $('ocrResultInput').value=best.toFixed(2).replace('.',',');
-        $('ocrStatus').textContent=`Erkannt: ${best.toFixed(2).replace('.',',')} m³/h (auf 2 Stellen aufgerundet) – bitte prüfen.`;
-      }else{
-        $('ocrStatus').textContent='Keine plausible Zahl erkannt. Bitte Crop enger setzen oder Wert manuell eingeben.';
-      }
-    }catch(err){
-      console.error(err);
-      $('ocrStatus').textContent='Fehler bei der Texterkennung.';
-    }
-  });
-
-  $('ocrRetry')?.addEventListener('click',()=>{
-    if(_ocrOriginalDataUrl) ocrShowStep(2);
-    else ocrShowStep(1);
-  });
-
-  $('ocrAccept')?.addEventListener('click',()=>{
-    const v=getVersuchById(_ocrTargetVid);
-    const num=Number(String($('ocrResultInput').value).replace(',','.'));
-    if(v && Number.isFinite(num) && num>0){
-      const idx=_ocrTargetRowIdx;
-      if(v.messungen[idx]){
-        v.messungen[idx].foerder_menge=ceilTo2(num).toFixed(2);
-        renderVersuche();
-        saveDraftDebounced();
-        scheduleLiveRender();
-      }
-    }
-    closeOcrModal();
-  });
-
-  $('ocrCancel')?.addEventListener('click',closeOcrModal);
-  $('ocrModal')?.addEventListener('click',e=>{
-    if(e.target.id==='ocrModal') closeOcrModal();
+    }catch(err){ console.error(err); alert('Foto konnte nicht verarbeitet werden.'); }
+    finally{ input.value=''; }
   });
 }
 
@@ -1353,35 +698,19 @@ function ensureTimer(vid,versuch){
   if(!timerMap[vid]){
     const elapsedMin=Number(versuch?.elapsedMs||0)/60000;
     const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b);
-    timerMap[vid]={
-      running:false,
-      startMs:0,
-      accumulatedMs:Number(versuch?.elapsedMs||0),
-      raf:null,
-      alarmCount:mins.filter(iv=>iv>0&&elapsedMin>=iv).length
-    };
+    timerMap[vid]={ running:false, startMs:0, accumulatedMs:Number(versuch?.elapsedMs||0), raf:null, alarmCount:mins.filter(iv=>iv>0&&elapsedMin>=iv).length };
   }
   return timerMap[vid];
 }
 function getElapsedMs(vid,versuch){
-  const t=timerMap[vid];
-  if(!t) return Number(versuch?.elapsedMs||0);
+  const t=timerMap[vid]; if(!t) return Number(versuch?.elapsedMs||0);
   return t.running ? t.accumulatedMs+(Date.now()-t.startMs) : t.accumulatedMs;
-}
-function updateHeadTimer(card,versuch){
-  const el=card?.querySelector('.versuch-head-timer');
-  if(!el) return;
-  const ms=getElapsedMs(versuch.id,versuch);
-  el.textContent=formatElapsed(ms);
-  el.classList.toggle('is-running',!!timerMap[versuch.id]?.running);
 }
 function updateTimerUi(card,versuch){
   if(!card||!versuch) return;
   const t=ensureTimer(versuch.id,versuch);
   const ms=getElapsedMs(versuch.id,versuch);
   versuch.elapsedMs=ms;
-
-  updateHeadTimer(card,versuch);
 
   const elapsedEl=card.querySelector('[data-role="elapsed"]');
   const startBtn=card.querySelector('[data-role="timer-start"]');
@@ -1390,140 +719,85 @@ function updateTimerUi(card,versuch){
   const nextEl=card.querySelector('[data-role="naechstes"]');
 
   if(elapsedEl) elapsedEl.textContent=formatElapsed(ms);
-  if(startZeitEl) startZeitEl.textContent=versuch.startzeit ? `Startzeit: ${versuch.startzeit}` : 'Noch nicht gestartet';
-  if(startBtn){
-    startBtn.textContent=t.running ? 'Läuft' : (versuch.elapsedMs>0 ? 'Weiter' : 'Start');
-    startBtn.disabled=t.running;
-  }
+  if(startZeitEl) startZeitEl.textContent=versuch.startzeit?`Startzeit: ${versuch.startzeit}`:'Noch nicht gestartet';
+  if(startBtn){ startBtn.textContent=t.running?'Läuft':(versuch.elapsedMs>0?'Weiter':'Start'); startBtn.disabled=t.running; }
   if(stopBtn) stopBtn.disabled=!t.running;
 
   const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b);
   const eMin=ms/60000;
   const nextIv=mins.filter(iv=>iv>0).find(iv=>eMin<iv);
   if(nextEl){
-    nextEl.textContent = nextIv!==undefined
-      ? `Nächste Messung: ${nextIv} min (in ${Math.max(0,Math.ceil((nextIv*60000-ms)/1000))}s)`
-      : 'Alle Messintervalle erreicht';
+    nextEl.textContent=nextIv!==undefined
+      ?`Nächste Messung: ${nextIv} min (in ${Math.max(0,Math.ceil((nextIv*60000-ms)/1000))}s)`
+      :'Alle Messintervalle erreicht';
   }
 
   card.querySelectorAll('tbody tr').forEach(r=>r.classList.remove('row-active'));
   const passed=mins.filter(iv=>eMin>=iv);
-  const lastPassed=passed.length ? passed[passed.length-1] : mins[0];
+  const lastPassed=passed.length?passed[passed.length-1]:mins[0];
   const rowIdx=versuch.messungen.findIndex(m=>Number(m.min)===Number(lastPassed));
   if(rowIdx>=0) card.querySelector(`tr[data-row="${rowIdx}"]`)?.classList.add('row-active');
 }
 function triggerIntervalAlarm(vid){
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   const display=card?.querySelector('[data-role="elapsed"]');
-
-  document.body.classList.remove('screen-flash');
-  void document.body.offsetWidth;
-  document.body.classList.add('screen-flash');
-
-  card?.classList.remove('versuch-card--alarm');
-  void card?.offsetWidth;
-  card?.classList.add('versuch-card--alarm');
-
-  display?.classList.remove('timer-display--alarm');
-  void display?.offsetWidth;
-  display?.classList.add('timer-display--alarm');
-
+  document.body.classList.remove('screen-flash'); void document.body.offsetWidth; document.body.classList.add('screen-flash');
+  card?.classList.remove('versuch-card--alarm'); void card?.offsetWidth; card?.classList.add('versuch-card--alarm');
+  display?.classList.remove('timer-display--alarm'); void display?.offsetWidth; display?.classList.add('timer-display--alarm');
   playIntervalBeep();
-
   setTimeout(()=>document.body.classList.remove('screen-flash'),1800);
-  setTimeout(()=>{
-    card?.classList.remove('versuch-card--alarm');
-    display?.classList.remove('timer-display--alarm');
-  },Math.max(2400,Number(state.settings.alarmDurationSec||4)*1000+600));
+  setTimeout(()=>{ card?.classList.remove('versuch-card--alarm'); display?.classList.remove('timer-display--alarm'); },Math.max(2400,Number(state.settings.alarmDurationSec||4)*1000+600));
 }
 function tickTimer(vid){
-  const versuch=getVersuchById(vid);
-  const t=timerMap[vid];
+  const versuch=getVersuchById(vid); const t=timerMap[vid];
   if(!versuch||!t||!t.running) return;
-
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   versuch.elapsedMs=getElapsedMs(vid,versuch);
   if(card) updateTimerUi(card,versuch);
-
   const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
   const passed=mins.filter(iv=>versuch.elapsedMs/60000>=iv).length;
-  if(passed>t.alarmCount){
-    t.alarmCount=passed;
-    triggerIntervalAlarm(vid);
-  }
-
+  if(passed>t.alarmCount){ t.alarmCount=passed; triggerIntervalAlarm(vid); }
   updateFloatingTimerWidget();
   t.raf=requestAnimationFrame(()=>tickTimer(vid));
 }
 function startTimer(vid){
-  const versuch=getVersuchById(vid);
-  if(!versuch) return;
+  const versuch=getVersuchById(vid); if(!versuch) return;
   unlockAlarmAudio();
-  const t=ensureTimer(vid,versuch);
-  if(t.running) return;
+  const t=ensureTimer(vid,versuch); if(t.running) return;
   if(!versuch.startzeit) versuch.startzeit=formatTimeHHMMSS(new Date());
-
   const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b);
   t.alarmCount=mins.filter(iv=>iv>0&&t.accumulatedMs/60000>=iv).length;
-  t.running=true;
-  t.startMs=Date.now();
-
+  t.running=true; t.startMs=Date.now();
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
-  updateTimerUi(card,versuch);
-  tickTimer(vid);
-  startFloatingLoop();
-  saveDraftDebounced();
+  updateTimerUi(card,versuch); tickTimer(vid); startFloatingLoop(); saveDraftDebounced();
 }
 function stopTimer(vid){
-  const versuch=getVersuchById(vid);
-  const t=timerMap[vid];
+  const versuch=getVersuchById(vid); const t=timerMap[vid];
   if(!versuch||!t||!t.running) return;
-
-  t.accumulatedMs += (Date.now()-t.startMs);
-  versuch.elapsedMs=t.accumulatedMs;
-  t.running=false;
-  if(t.raf) cancelAnimationFrame(t.raf);
-  t.raf=null;
-
+  t.accumulatedMs+=(Date.now()-t.startMs); versuch.elapsedMs=t.accumulatedMs;
+  t.running=false; if(t.raf) cancelAnimationFrame(t.raf); t.raf=null;
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
-  updateTimerUi(card,versuch);
-  updateFloatingTimerWidget();
-  stopFloatingLoopIfIdle();
-  saveDraftDebounced();
+  updateTimerUi(card,versuch); updateFloatingTimerWidget(); stopFloatingLoopIfIdle(); saveDraftDebounced();
 }
 function resetTimer(vid){
-  const versuch=getVersuchById(vid);
-  if(!versuch) return;
+  const versuch=getVersuchById(vid); if(!versuch) return;
   const t=ensureTimer(vid,versuch);
   if(t.raf) cancelAnimationFrame(t.raf);
-  t.running=false;
-  t.startMs=0;
-  t.accumulatedMs=0;
-  t.raf=null;
-  t.alarmCount=0;
-  versuch.elapsedMs=0;
-  versuch.startzeit='';
+  t.running=false; t.startMs=0; t.accumulatedMs=0; t.raf=null; t.alarmCount=0;
+  versuch.elapsedMs=0; versuch.startzeit='';
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
-  updateTimerUi(card,versuch);
-  updateFloatingTimerWidget();
-  stopFloatingLoopIfIdle();
-  saveDraftDebounced();
+  updateTimerUi(card,versuch); updateFloatingTimerWidget(); stopFloatingLoopIfIdle(); saveDraftDebounced();
 }
 function hardStopTimer(vid){
-  const t=timerMap[vid];
-  if(!t) return;
+  const t=timerMap[vid]; if(!t) return;
   try{ if(t.raf) cancelAnimationFrame(t.raf); }catch{}
-  delete timerMap[vid];
-  updateFloatingTimerWidget();
-  stopFloatingLoopIfIdle();
+  delete timerMap[vid]; updateFloatingTimerWidget(); stopFloatingLoopIfIdle();
 }
 
 /* ══════════════════════════════════════════════════════
    FLOATING TIMER
 ══════════════════════════════════════════════════════ */
-function getFirstRunningStage(){
-  return state.versuche.find(v=>timerMap[v.id]?.running) || null;
-}
+function getFirstRunningStage(){ return state.versuche.find(v=>timerMap[v.id]?.running)||null; }
 function isElementVisible(el){
   if(!el) return false;
   const r=el.getBoundingClientRect();
@@ -1532,20 +806,13 @@ function isElementVisible(el){
   return r.top>=0&&r.bottom<=window.innerHeight&&r.left>=0&&r.right<=window.innerWidth;
 }
 function updateFloatingTimerWidget(){
-  const wrap=$('floatingTimer');
-  const label=$('floatingTimerLabel');
-  const display=$('floatingTimerDisplay');
+  const wrap=$('floatingTimer'), label=$('floatingTimerLabel'), display=$('floatingTimerDisplay');
   if(!wrap||!label||!display) return;
-
   const stage=getFirstRunningStage();
-  if(!stage){
-    wrap.hidden=true;
-    return;
-  }
+  if(!stage){ wrap.hidden=true; return; }
   const idx=state.versuche.findIndex(v=>v.id===stage.id);
   const card=document.querySelector(`.versuch-card[data-vid="${stage.id}"]`);
   const timerBox=card?.querySelector('.timer-box');
-
   label.textContent=getStageTitle(idx);
   display.textContent=formatElapsed(getElapsedMs(stage.id,stage));
   wrap.hidden=isElementVisible(timerBox);
@@ -1555,24 +822,15 @@ function startFloatingLoop(){
   const loop=()=>{
     updateFloatingTimerWidget();
     if(Object.values(timerMap).some(t=>t.running)) _floatingRaf=requestAnimationFrame(loop);
-    else{
-      cancelAnimationFrame(_floatingRaf);
-      _floatingRaf=null;
-    }
+    else{ cancelAnimationFrame(_floatingRaf); _floatingRaf=null; }
   };
   _floatingRaf=requestAnimationFrame(loop);
 }
 function stopFloatingLoopIfIdle(){
-  if(!Object.values(timerMap).some(t=>t.running) && _floatingRaf){
-    cancelAnimationFrame(_floatingRaf);
-    _floatingRaf=null;
-  }
+  if(!Object.values(timerMap).some(t=>t.running)&&_floatingRaf){ cancelAnimationFrame(_floatingRaf); _floatingRaf=null; }
 }
 function initFloatingTimer(){
-  $('floatingTimer')?.addEventListener('click',()=>{
-    const stage=getFirstRunningStage();
-    if(stage) openTimeAdjustModal(stage.id);
-  });
+  $('floatingTimer')?.addEventListener('click',()=>{ const stage=getFirstRunningStage(); if(stage) openTimeAdjustModal(stage.id); });
   window.addEventListener('scroll',updateFloatingTimerWidget,{passive:true});
   window.addEventListener('resize',updateFloatingTimerWidget);
 }
@@ -1580,44 +838,27 @@ function initFloatingTimer(){
 /* ══════════════════════════════════════════════════════
    TIME ADJUST MODAL
 ══════════════════════════════════════════════════════ */
+let _timeAdjustVid = null;
 function openTimeAdjustModal(vid){
-  _timeAdjustVid=vid;
-  $('timeAdjustInput').value='0';
-  updateTimeAdjustPreview();
-  $('timeAdjustModal').hidden=false;
+  _timeAdjustVid=vid; $('timeAdjustInput').value='0';
+  updateTimeAdjustPreview(); $('timeAdjustModal').hidden=false;
 }
-function closeTimeAdjustModal(){
-  $('timeAdjustModal').hidden=true;
-  _timeAdjustVid=null;
-}
+function closeTimeAdjustModal(){ $('timeAdjustModal').hidden=true; _timeAdjustVid=null; }
 function updateTimeAdjustPreview(){
-  const v=getVersuchById(_timeAdjustVid);
-  if(!v) return;
+  const v=getVersuchById(_timeAdjustVid); if(!v) return;
   const next=Math.max(0,getElapsedMs(v.id,v)+Number($('timeAdjustInput')?.value||0)*1000);
   $('timeAdjustPreview').textContent=`Neue Zeit: ${formatElapsed(next)}`;
 }
 function applyTimeAdjustment(){
-  const v=getVersuchById(_timeAdjustVid);
-  if(!v) return;
+  const v=getVersuchById(_timeAdjustVid); if(!v) return;
   const offset=Number($('timeAdjustInput')?.value||0);
   const t=ensureTimer(v.id,v);
   const next=Math.max(0,getElapsedMs(v.id,v)+offset*1000);
-
-  if(t.running){
-    t.startMs=Date.now();
-    t.accumulatedMs=next;
-  }else{
-    t.accumulatedMs=next;
-  }
-
+  if(t.running){ t.startMs=Date.now(); t.accumulatedMs=next; } else{ t.accumulatedMs=next; }
   v.elapsedMs=next;
-  if(!v.startzeit && next>0) v.startzeit=formatTimeHHMMSS(new Date());
-
+  if(!v.startzeit&&next>0) v.startzeit=formatTimeHHMMSS(new Date());
   const card=document.querySelector(`.versuch-card[data-vid="${v.id}"]`);
-  updateTimerUi(card,v);
-  updateFloatingTimerWidget();
-  saveDraftDebounced();
-  closeTimeAdjustModal();
+  updateTimerUi(card,v); updateFloatingTimerWidget(); saveDraftDebounced(); closeTimeAdjustModal();
 }
 function initTimeAdjustModal(){
   $('timeAdjustInput')?.addEventListener('input',updateTimeAdjustPreview);
@@ -1643,69 +884,84 @@ function buildTableHeadHtml(){
   html+='<th>Fördermenge<br><span style="font-size:.75em;font-weight:600">m³/h</span></th></tr>';
   return html;
 }
+
 function buildTableRowHtml(v,row,rowIdx){
   const sel=getSelectedWells();
   const isLast=rowIdx===v.messungen.length-1;
+  /* ── Minuten-Zelle ── */
   let html=`<tr data-row="${rowIdx}">
     <td><div class="minute-cell">
-      <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}" type="number" step="1" inputmode="numeric" value="${h(row.min)}">
+      <input class="mess-input minute-input" data-role="min" data-row="${rowIdx}"
+        type="number" step="1" inputmode="numeric" value="${h(row.min)}">
       ${isLast?`<button class="row-plus" data-role="row-plus" data-row="${rowIdx}" type="button">+</button>`:''}
     </div></td>`;
+  /* ── Messwerte ── */
   if(sel.foerder) html+=`<td><input class="mess-input" data-role="foerder-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.foerder_m)}"></td>`;
   if(sel.schluck) html+=`<td><input class="mess-input" data-role="schluck-m" data-row="${rowIdx}" type="number" step="0.001" inputmode="decimal" value="${h(row.schluck_m)}"></td>`;
-  html+=`<td><div class="menge-wrap">
-    <input class="mess-input" data-role="foerder-menge" data-row="${rowIdx}" type="number" step="0.01" inputmode="decimal" value="${h(row.foerder_menge)}">
-    <button class="scan-btn" data-role="scan-menge" data-row="${rowIdx}" type="button" title="Wert scannen">
-      <svg viewBox="0 0 24 20" width="16" height="13" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="1" y="4" width="22" height="15" rx="2" stroke="currentColor" stroke-width="1.8"/>
-        <circle cx="12" cy="12" r="4.5" stroke="currentColor" stroke-width="1.8"/>
-        <path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/>
-        <rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="currentColor"/>
-      </svg>
-    </button>
-  </div></td></tr>`;
+  /* ── Fördermenge – nur Eingabefeld, kein Scan-Button ── */
+  html+=`<td><input class="mess-input" data-role="foerder-menge" data-row="${rowIdx}"
+    type="number" step="0.01" inputmode="decimal" value="${h(row.foerder_menge)}"></td>`;
+  html+=`</tr>`;
   return html;
 }
+
 function buildVersuchHtml(v,idx){
-  const effLs=getEffectiveRateLs(v);
-  const effM3h=getEffectiveRateM3h(v);
-  const avg=getAverageFoerderMenge(v);
-  const hasPhoto=!!v.photoDataUrl;
-  const t=timerMap[v.id];
-  const isRunning=!!(t?.running);
+  const effLs  = getEffectiveRateLs(v);
+  const effM3h = getEffectiveRateM3h(v);
+  const avg    = getAverageFoerderMenge(v);
+  const hasPhoto = !!v.photoDataUrl;
 
   return `
 <details class="card card--collapsible versuch-card" data-vid="${h(v.id)}" open>
   <summary class="card__title">
     <span class="versuch-head-title">${getStageTitle(idx)}</span>
-    <span class="versuch-head-timer ${isRunning?'is-running':''}">${formatElapsed(v.elapsedMs||0)}</span>
     <span class="versuch-head-spacer"></span>
     <span class="versuch-head-actions">
       ${hasPhoto?`<button class="photo-del-btn" data-role="photo-del" type="button" title="Foto entfernen">✕</button>`:''}
-      <button class="photo-btn ${hasPhoto?'photo-btn--has':''}" data-role="photo-btn" type="button" title="Beweisfoto" aria-label="Beweisfoto">${camSvg(16,13)}</button>
+      <button class="photo-btn ${hasPhoto?'photo-btn--has':''}" data-role="photo-btn"
+        type="button" title="Beweisfoto" aria-label="Beweisfoto">${camSvg(16,13)}</button>
       <input class="photo-input" data-role="photo-input" type="file" accept="image/*" capture="environment">
     </span>
   </summary>
   <div class="card__body versuch-body">
-    ${hasPhoto?`<div class="photo-thumb-wrap"><img class="photo-thumb" src="${h(v.photoDataUrl)}" alt="Beweisfoto"><div class="photo-thumb-caption">Beweisfoto Durchflussmesser</div></div>`:''}
 
+    ${hasPhoto?`<div class="photo-thumb-wrap">
+      <img class="photo-thumb" src="${h(v.photoDataUrl)}" alt="Beweisfoto">
+      <div class="photo-thumb-caption">Beweisfoto Durchflussmesser</div>
+    </div>`:''}
+
+    <!-- Zeile 1: Förderrate [l/s] = [m³/h] -->
     <div class="versuch-row">
       <span class="rate-label">Förderrate [l/s]</span>
-      <input class="rate-input" data-role="manual-rate-ls" type="number" step="0.001" inputmode="decimal" value="${h(effLs)}">
+      <input class="rate-input" data-role="manual-rate-ls"
+        type="number" step="0.001" inputmode="decimal" value="${h(effLs)}">
       <span class="rate-unit">=</span>
-      <span class="rate-conv" data-role="head-rate-m3h">${effM3h?`${h(effM3h)} m³/h`:'—'}</span>
-      <span class="rate-label">Ø Fördermenge</span>
-      <input class="rate-input rate-input--readonly" data-role="avg-foerder-menge" type="text" value="${h(avg||'—')}" readonly>
+      <span class="rate-conv" data-role="head-rate-m3h">
+        ${effM3h ? `${h(effM3h)} m³/h` : '—'}
+      </span>
     </div>
 
+    <!-- Zeile 2: Ø Fördermenge (Durchschnitt aus Tabellenwerten) -->
+    <div class="versuch-row versuch-row--avg">
+      <span class="rate-label">Ø Fördermenge [m³/h]</span>
+      <input class="rate-input rate-input--readonly"
+        data-role="avg-foerder-menge" type="text"
+        value="${h(avg||'—')}" readonly>
+      <span class="rate-hint">Ø aus Messwerten</span>
+    </div>
+
+    <!-- Intervalle -->
     <div class="versuch-row">
       <span class="interval-label">Intervalle [min]</span>
-      <input class="interval-input" data-role="intervalle" type="text" value="${h(v.intervalleStr)}">
+      <input class="interval-input" data-role="intervalle"
+        type="text" value="${h(v.intervalleStr)}">
     </div>
 
+    <!-- Stoppuhr -->
     <div class="timer-box">
       <div class="timer-row">
-        <div class="timer-display" data-role="elapsed" title="Tippen zum Anpassen">${formatElapsed(v.elapsedMs||0)}</div>
+        <div class="timer-display" data-role="elapsed"
+          title="Tippen zum Anpassen">${formatElapsed(v.elapsedMs||0)}</div>
         <span class="timer-edit-hint">tippen = anpassen</span>
         <div class="timer-buttons">
           <button class="timer-btn timer-btn--start" data-role="timer-start" type="button">Start</button>
@@ -1713,10 +969,13 @@ function buildVersuchHtml(v,idx){
           <button class="timer-btn timer-btn--ghost" data-role="timer-reset" type="button">Reset</button>
         </div>
       </div>
-      <div class="timer-info" data-role="startzeit">${v.startzeit?`Startzeit: ${h(v.startzeit)}`:'Noch nicht gestartet'}</div>
+      <div class="timer-info" data-role="startzeit">
+        ${v.startzeit?`Startzeit: ${h(v.startzeit)}`:'Noch nicht gestartet'}
+      </div>
       <div class="timer-info timer-next" data-role="naechstes"></div>
     </div>
 
+    <!-- Messtabelle -->
     <div class="table-wrap">
       <table class="mess-table">
         <thead>${buildTableHeadHtml()}</thead>
@@ -1730,6 +989,7 @@ function buildVersuchHtml(v,idx){
   </div>
 </details>`;
 }
+
 function updateStageRateDisplay(card,versuch){
   if(!card||!versuch) return;
   const m3hEl=card.querySelector('[data-role="head-rate-m3h"]');
@@ -1738,22 +998,15 @@ function updateStageRateDisplay(card,versuch){
   if(avgEl) avgEl.value=getAverageFoerderMenge(versuch)||'—';
 }
 function renderVersuche(){
-  const host=$('versucheContainer');
-  if(!host) return;
-
+  const host=$('versucheContainer'); if(!host) return;
   if(!state.versuche.length){
     host.innerHTML=`<div class="empty-state">Noch keine Pumpstufe angelegt.<br>Bitte über den Plus-Button eine neue Stufe hinzufügen.</div>`;
-    updateFloatingTimerWidget();
-    return;
+    updateFloatingTimerWidget(); return;
   }
-
   host.innerHTML=state.versuche.map((v,idx)=>buildVersuchHtml(v,idx)).join('');
   document.querySelectorAll('.versuch-card').forEach(card=>{
     const v=getVersuchById(card.dataset.vid);
-    if(v){
-      updateStageRateDisplay(card,v);
-      updateTimerUi(card,v);
-    }
+    if(v){ updateStageRateDisplay(card,v); updateTimerUi(card,v); }
   });
   updateFloatingTimerWidget();
 }
@@ -1763,25 +1016,17 @@ function renderVersuche(){
 ══════════════════════════════════════════════════════ */
 function hookVersuchDelegation(){
   const host=$('versucheContainer');
-  if(!host || host.dataset.bound==='1') return;
+  if(!host||host.dataset.bound==='1') return;
   host.dataset.bound='1';
 
-  host.addEventListener('input',(e)=>{
-    const el=e.target.closest('[data-role]');
-    if(!el) return;
-    const card=el.closest('.versuch-card');
-    if(!card) return;
-    const versuch=getVersuchById(card.dataset.vid);
-    if(!versuch) return;
-
-    const role=el.dataset.role;
-    const idx=Number(el.dataset.row);
-
+  host.addEventListener('input',e=>{
+    const el=e.target.closest('[data-role]'); if(!el) return;
+    const card=el.closest('.versuch-card'); if(!card) return;
+    const versuch=getVersuchById(card.dataset.vid); if(!versuch) return;
+    const role=el.dataset.role, idx=Number(el.dataset.row);
     if(role==='manual-rate-ls'){
       versuch.manualRateM3h=String(el.value).trim()===''?'':lsToM3h(el.value);
-      updateStageRateDisplay(card,versuch);
-      saveDraftDebounced();
-      scheduleLiveRender();
+      updateStageRateDisplay(card,versuch); saveDraftDebounced();      scheduleLiveRender();
       return;
     }
     if(role==='min'){
@@ -1811,7 +1056,7 @@ function hookVersuchDelegation(){
     }
   });
 
-  host.addEventListener('change',async(e)=>{
+  host.addEventListener('change',async e=>{
     const el=e.target.closest('[data-role]');
     if(!el) return;
     const card=el.closest('.versuch-card');
@@ -1866,19 +1111,11 @@ function hookVersuchDelegation(){
     }
   });
 
-  host.addEventListener('click',(e)=>{
+  host.addEventListener('click',e=>{
     const card=e.target.closest('.versuch-card');
     if(!card) return;
     const versuch=getVersuchById(card.dataset.vid);
     if(!versuch) return;
-
-    const headTimer=e.target.closest('.versuch-head-timer');
-    if(headTimer){
-      e.preventDefault();
-      e.stopPropagation();
-      openTimeAdjustModal(versuch.id);
-      return;
-    }
 
     const bodyTimer=e.target.closest('.timer-display');
     if(bodyTimer){
@@ -1893,22 +1130,19 @@ function hookVersuchDelegation(){
     const role=btn.dataset.role;
 
     if(role==='photo-btn'){
-      e.preventDefault(); e.stopPropagation();
+      e.preventDefault();
+      e.stopPropagation();
       unlockAlarmAudio();
       card.querySelector('[data-role="photo-input"]')?.click();
       return;
     }
     if(role==='photo-del'){
-      e.preventDefault(); e.stopPropagation();
+      e.preventDefault();
+      e.stopPropagation();
       if(!confirm('Beweisfoto wirklich entfernen?')) return;
       versuch.photoDataUrl='';
       renderVersuche();
       saveDraftDebounced();
-      return;
-    }
-    if(role==='scan-menge'){
-      e.preventDefault(); e.stopPropagation();
-      openOcrModal(versuch.id,Number(btn.dataset.row));
       return;
     }
     if(role==='row-plus'){
@@ -1979,7 +1213,9 @@ function hookStaticInputs(){
     renderVersuche();
     renderLiveTab();
     saveDraftDebounced();
-    setTimeout(()=>document.querySelector(`.versuch-card[data-vid="${v.id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'}),40);
+    setTimeout(()=>{
+      document.querySelector(`.versuch-card[data-vid="${v.id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'});
+    },40);
   });
 
   $('btnSave')?.addEventListener('click',()=> saveCurrentToHistory('Pumpversuch im Verlauf gespeichert.'));
@@ -2138,13 +1374,11 @@ function buildLiveWellPanelHtml(versuch,key,brunnen){
 </section>`;
 }
 function renderLiveTab(){
-  const host=$('liveContainer');
-  if(!host) return;
+  const host=$('liveContainer'); if(!host) return;
   if(!state.versuche.length){
     host.innerHTML=`<section class="card"><div class="empty-state">Noch keine Pumpstufe vorhanden.</div></section>`;
     return;
   }
-
   const sel=getSelectedWells();
   const single=(sel.foerder?1:0)+(sel.schluck?1:0)===1;
 
@@ -2206,11 +1440,8 @@ function guessExtFromDataUrl(dataUrl){
 }
 function downloadDataUrl(dataUrl,filename){
   const a=document.createElement('a');
-  a.href=dataUrl;
-  a.download=filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  a.href=dataUrl; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
 }
 async function exportPhotosFromSnapshot(snapshot){
   const photos=collectSnapshotPhotos(snapshot);
@@ -2222,12 +1453,9 @@ async function exportPhotosFromSnapshot(snapshot){
   }
   alert(`${photos.length} Foto(s) wurden exportiert.`);
 }
-
 function renderHistoryList(){
-  const host=$('historyList');
-  if(!host) return;
+  const host=$('historyList'); if(!host) return;
   const list=readHistory();
-
   if(!list.length){
     host.innerHTML=`<div class="text"><p>Noch keine Protokolle gespeichert.</p></div>`;
     return;
@@ -2295,53 +1523,26 @@ function renderHistoryList(){
     </details>`;
   }).join('');
 }
-
 function hookHistoryDelegation(){
   const host=$('historyList');
-  if(!host || host.dataset.bound==='1') return;
+  if(!host||host.dataset.bound==='1') return;
   host.dataset.bound='1';
 
-  host.addEventListener('click',async(e)=>{
-    const btn=e.target.closest('[data-hact]');
-    if(!btn) return;
-
-    const id=btn.dataset.id;
-    const act=btn.dataset.hact;
+  host.addEventListener('click',async e=>{
+    const btn=e.target.closest('[data-hact]'); if(!btn) return;
+    const id=btn.dataset.id, act=btn.dataset.hact;
     const list=readHistory();
     const entry=list.find(x=>x.id===id);
 
-    if(act==='del'){
-      writeHistory(list.filter(x=>x.id!==id));
-      renderHistoryList();
-      return;
-    }
+    if(act==='del'){ writeHistory(list.filter(x=>x.id!==id)); renderHistoryList(); return; }
     if(!entry) return;
 
-    if(act==='load'){
-      applySnapshot(entry.snapshot,true);
-      saveDraftDebounced();
-      document.querySelector('.tab[data-tab="protokoll"]')?.click();
-      return;
-    }
-    if(act==='pdf-protokoll'){
-      try{ await exportPdf(entry.snapshot,'protokoll'); }catch(err){ console.error(err); alert('PDF-Fehler'); }
-      return;
-    }
-    if(act==='pdf-voll'){
-      try{ await exportPdf(entry.snapshot,'vollstaendig'); }catch(err){ console.error(err); alert('PDF-Fehler'); }
-      return;
-    }
-    if(act==='pdf-restsand'){
-      try{ await exportRestsandPdf(entry.snapshot); }catch(err){ console.error(err); alert('Restsand-PDF Fehler'); }
-      return;
-    }
-    if(act==='pdf-ph'){
-      try{ await exportPhPdf(entry.snapshot); }catch(err){ console.error(err); alert('Sulfat-PDF Fehler'); }
-      return;
-    }
-    if(act==='photos'){
-      try{ await exportPhotosFromSnapshot(entry.snapshot); }catch(err){ console.error(err); alert('Fotoexport fehlgeschlagen.'); }
-    }
+    if(act==='load'){ applySnapshot(entry.snapshot,true); saveDraftDebounced(); document.querySelector('.tab[data-tab="protokoll"]')?.click(); return; }
+    if(act==='pdf-protokoll'){ try{ await exportPdf(entry.snapshot,'protokoll'); }catch(err){ console.error(err); alert('PDF-Fehler'); } return; }
+    if(act==='pdf-voll'){ try{ await exportPdf(entry.snapshot,'vollstaendig'); }catch(err){ console.error(err); alert('PDF-Fehler'); } return; }
+    if(act==='pdf-restsand'){ try{ await exportRestsandPdf(entry.snapshot); }catch(err){ console.error(err); alert('Restsand-PDF Fehler'); } return; }
+    if(act==='pdf-ph'){ try{ await exportPhPdf(entry.snapshot); }catch(err){ console.error(err); alert('Sulfat-PDF Fehler'); } return; }
+    if(act==='photos'){ try{ await exportPhotosFromSnapshot(entry.snapshot); }catch(err){ console.error(err); alert('Fotoexport fehlgeschlagen.'); } }
   });
 }
 
@@ -2354,7 +1555,6 @@ function drawTextSafe(page,text,options){
 async function loadPdfAssets(pdf){
   const fontkit=window.fontkit || window.PDFLibFontkit;
   if(!fontkit) throw new Error('fontkit nicht geladen');
-
   pdf.registerFontkit(fontkit);
 
   const fontBytesR=await fetch(`${BASE}fonts/arial.ttf?v=60`).then(r=>r.arrayBuffer());
@@ -2379,7 +1579,6 @@ function getPdfCtx(PDFLib,assets){
   const GREY=rgb(0.90,0.90,0.90);
   return { PAGE_W,PAGE_H,mm,K,GREY,rgb,degrees,...assets };
 }
-
 function getPdfRateM3hNumber(v){
   const m=Number(v?.manualRateM3h);
   if(Number.isFinite(m)&&m>0) return m;
@@ -2407,7 +1606,6 @@ function getWellRowsForPdf(versuch,key,ruhe){
     return { min:Number.isFinite(min)?min:null, valueNum, deltaM, deltaCm };
   });
 }
-
 function drawFooter(page,ctx,subtitle=''){
   const { mm,fontR,K }=ctx;
   const y=mm(8);
@@ -2418,7 +1616,6 @@ function drawHeaderBar(page,ctx,title,sub=''){
   const { mm,fontR,fontB,K,GREY,logo,PAGE_W,PAGE_H }=ctx;
   const margin=mm(8), W=PAGE_W-2*margin, H=PAGE_H-2*margin;
   const hdrH=mm(13);
-
   page.drawRectangle({ x:margin, y:margin+H-hdrH, width:W, height:hdrH, color:GREY, borderColor:K, borderWidth:0.8 });
   if(logo){
     const lh=hdrH*0.75;
@@ -2428,7 +1625,6 @@ function drawHeaderBar(page,ctx,title,sub=''){
   drawTextSafe(page,title,{ x:margin+mm(32), y:margin+H-hdrH+mm(4.2), size:13, font:fontB, color:K });
   if(sub) drawTextSafe(page,sub,{ x:margin+mm(32), y:margin+H-hdrH+mm(1.5), size:8, font:fontR, color:K });
 }
-
 function drawMetaGrid(page,x,yTop,w,rowH,meta,fontR,fontB,K){
   const rows=[
     [['Objekt',meta.objekt||''],['Geprüft durch',meta.geprueftDurch||''],['Straße',meta.grundstueck||''],['Geprüft am',dateDE(meta.geprueftAm)||'']],
@@ -2447,7 +1643,6 @@ function drawMetaGrid(page,x,yTop,w,rowH,meta,fontR,fontB,K){
     });
   });
 }
-
 function drawWellTable(page,opt){
   const { x,yTop,w,key,rows,fontR,fontB,K,grey }=opt;
   const title=getWellLabel(key);
@@ -2462,9 +1657,7 @@ function drawWellTable(page,opt){
 
   const colWidths=[0.18,0.42,0.40];
   const xs=[x]; colWidths.forEach(cw=>xs.push(xs[xs.length-1]+w*cw));
-  for(let i=1;i<xs.length-1;i++){
-    page.drawLine({ start:{x:xs[i],y:yTop-totalH}, end:{x:xs[i],y:yTop-titleH}, thickness:0.6, color:K });
-  }
+  for(let i=1;i<xs.length-1;i++) page.drawLine({ start:{x:xs[i],y:yTop-totalH}, end:{x:xs[i],y:yTop-titleH}, thickness:0.6, color:K });
 
   drawTextSafe(page,'Min',{ x:xs[0]+3, y:yHead+5, size:6.8, font:fontB, color:K });
   drawTextSafe(page,'m ab OK Brunnen',{ x:xs[1]+3, y:yHead+5, size:6.8, font:fontB, color:K });
@@ -2485,7 +1678,6 @@ function drawWellTable(page,opt){
 }
 function drawWellChart(page,opt){
   const { x,y,w,h,key,rows,fontR,fontB,K,grey,degrees,gridColor,lineColor }=opt;
-
   page.drawRectangle({ x, y, width:w, height:h, borderColor:K, borderWidth:0.7 });
   page.drawRectangle({ x, y:y+h-13, width:w, height:13, color:grey, borderColor:K, borderWidth:0.7 });
   drawTextSafe(page,`Diagramm ${getWellLabel(key)}`,{ x:x+4, y:y+h-9, size:7.6, font:fontB, color:K });
@@ -2531,7 +1723,6 @@ function drawWellChart(page,opt){
     page.drawCircle({ x:tx(p.min), y:ty(p.deltaCm), size:2.1, color:lineColor, borderColor:K, borderWidth:0.3 });
   });
 }
-
 function drawStageSplitLayout(page,opt){
   const { x,yTop,yBottom,w,versuch,foerder,schluck,fontR,fontB,K,grey,degrees,rgb,selection }=opt;
   const stageH=22;
@@ -2564,7 +1755,6 @@ function drawStageSplitLayout(page,opt){
     });
   });
 }
-
 async function drawImagePage(pdf,ctx,title,subtitle,dataUrl){
   const { PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY,logo }=ctx;
   const page=pdf.addPage([PAGE_W,PAGE_H]);
@@ -2601,7 +1791,6 @@ async function drawImagePage(pdf,ctx,title,subtitle,dataUrl){
   }
   drawFooter(page,ctx,title);
 }
-
 async function drawCoverPage(pdf,ctx,snap){
   const { PAGE_W,PAGE_H,mm,fontR,fontB,K,logo }=ctx;
   const page=pdf.addPage([PAGE_W,PAGE_H]);
@@ -2643,7 +1832,6 @@ async function drawCoverPage(pdf,ctx,snap){
 
   drawFooter(page,ctx,'Pumpversuch');
 }
-
 async function drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh){
   const { PAGE_W,PAGE_H,mm,fontR,fontB,K,logo }=ctx;
   const page=pdf.addPage([PAGE_W,PAGE_H]);
@@ -2672,7 +1860,6 @@ async function drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh){
 
   drawFooter(page,ctx,'Pumpversuch');
 }
-
 async function drawProtocolStagePage(pdf,ctx,snap,versuch,index){
   const { PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY,logo,rgb,degrees }=ctx;
   const page=pdf.addPage([PAGE_W,PAGE_H]);
@@ -2730,12 +1917,10 @@ async function drawProtocolStagePage(pdf,ctx,snap,versuch,index){
 
   drawFooter(page,ctx,'Pumpversuch');
 }
-
 async function drawRestsandPage(pdf,ctx,snap){
   const { PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY }=ctx;
   const page=pdf.addPage([PAGE_W,PAGE_H]);
   const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
-
   page.drawRectangle({ x:x0, y:y0, width:W, height:H, borderColor:K, borderWidth:1.2 });
   drawHeaderBar(page,ctx,'Restsandmessung',FIRMA.name);
 
@@ -2743,11 +1928,7 @@ async function drawRestsandPage(pdf,ctx,snap){
   page.drawRectangle({ x:x0, y:titleY-mm(10), width:W, height:mm(10), color:GREY, borderColor:K, borderWidth:0.8 });
   drawTextSafe(page,`Objekt: ${snap.meta?.objekt || '—'} · Datum: ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,{ x:x0+4, y:titleY-mm(7), size:8.8, font:fontB, color:K });
 
-  const colGap=mm(6);
-  const colW=(W-colGap)/2;
-  const topY=titleY-mm(6);
-  const blockH=H-mm(46);
-
+  const colGap=mm(6), colW=(W-colGap)/2, topY=titleY-mm(6), blockH=H-mm(46);
   const defs=[
     { title:'Imhoff-Trichter', data:snap.restsand?.imhoff, valueLabel:'Menge [ml/l]' },
     { title:'Sieb / Gewicht', data:snap.restsand?.sieb, valueLabel:'Menge [g]' }
@@ -2784,12 +1965,10 @@ async function drawRestsandPage(pdf,ctx,snap){
 
   drawFooter(page,ctx,'Restsandmessung');
 }
-
 async function drawPhPage(pdf,ctx,snap){
   const { PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY }=ctx;
   const page=pdf.addPage([PAGE_W,PAGE_H]);
   const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
-
   page.drawRectangle({ x:x0, y:y0, width:W, height:H, borderColor:K, borderWidth:1.2 });
   drawHeaderBar(page,ctx,'Prüfprotokoll Sulfatmessung Wasser',FIRMA.name);
 
@@ -2920,9 +2099,7 @@ async function exportPdf(snapshot=null,type='protokoll'){
     if(hasRestsand) await drawRestsandPage(pdf,ctx,snap);
     if(hasPh) await drawPhPage(pdf,ctx,snap);
   }else{
-    for(let i=0;i<versuche.length;i++){
-      await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
-    }
+    for(let i=0;i<versuche.length;i++) await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
   }
 
   const bytes=await pdf.save();
@@ -2933,12 +2110,7 @@ async function exportPdf(snapshot=null,type='protokoll'){
   const fileName=`${dateTag()}_HTB_Pumpversuch_${suffix}_${obj||'Dokument'}.pdf`;
 
   const w=window.open(url,'_blank');
-  if(!w){
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=fileName;
-    a.click();
-  }
+  if(!w){ const a=document.createElement('a'); a.href=url; a.download=fileName; a.click(); }
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 async function exportRestsandPdf(snapshot=null){
@@ -3009,7 +2181,7 @@ function initInstallButton(){
   let installPrompt=null;
   const btn=$('btnInstall');
 
-  window.addEventListener('beforeinstallprompt',(e)=>{
+  window.addEventListener('beforeinstallprompt',e=>{
     e.preventDefault();
     installPrompt=e;
     if(btn) btn.hidden=false;
@@ -3033,8 +2205,6 @@ function initInstallButton(){
    INIT
 ══════════════════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded',()=>{
-  ensureEnhancedOcrUi();
-
   installAudioUnlock();
   initTabs();
   hookStaticInputs();
@@ -3043,7 +2213,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   hookGlobalPhotoDelegation();
   initTimeAdjustModal();
   initFloatingTimer();
-  initOcrHandlers();
 
   loadDraft();
 
@@ -3060,6 +2229,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   initInstallButton();
 
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register(`${BASE}sw.js?v=56`).catch(err=>console.error('SW:',err));
+    navigator.serviceWorker.register(`${BASE}sw.js?v=57`).catch(err=>console.error('SW:',err));
   }
 });
