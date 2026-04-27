@@ -845,8 +845,13 @@ function getWellRowsForPdf(versuch,key,ruhe){
 }
 function drawFooter(page,ctx,subtitle=''){
   const{mm,fontR,K}=ctx;
-  drawTextSafe(page,`${FIRMA.name} ${FIRMA.adresse} ${FIRMA.tel}`,{x:mm(12),y:mm(8),size:7.8,font:fontR,color:K});
-  drawTextSafe(page,`${FIRMA.email} · ${FIRMA.web}${subtitle?' · '+subtitle:''}`,{x:mm(12),y:mm(4),size:7.8,font:fontR,color:K});
+  const margin=mm(8);
+  // Fußzeile INNERHALB des Rahmens (margin = Rahmenboden)
+  drawTextSafe(page,`${FIRMA.name}  ·  ${FIRMA.adresse}  ·  ${FIRMA.tel}`,
+    {x:mm(12),y:margin+mm(4.5),size:7.5,font:fontR,color:K});
+  drawTextSafe(page,`${FIRMA.email}  ·  ${FIRMA.web}${subtitle?' · '+subtitle:''}`,
+    {x:mm(12),y:margin+mm(1.5),size:7.5,font:fontR,color:K});
+}
 }
 function drawHeaderBar(page,ctx,title,sub=''){
   const{mm,fontR,fontB,K,GREY,logo,PAGE_W,PAGE_H}=ctx;
@@ -1041,34 +1046,66 @@ async function drawRestsandPage(pdf,ctx,snap){
   const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
   page.drawRectangle({x:x0,y:y0,width:W,height:H,borderColor:K,borderWidth:1.2});
   drawHeaderBar(page,ctx,'Restsandmessung',FIRMA.name);
-  const titleY=y0+H-mm(24);
-  page.drawRectangle({x:x0,y:titleY-mm(10),width:W,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`Objekt: ${snap.meta?.objekt||'—'} · Datum: ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,{x:x0+4,y:titleY-mm(7),size:8.8,font:fontB,color:K});
-  const colGap=mm(6),colW=(W-colGap)/2,topY=titleY-mm(6),blockH=H-mm(46);
-  const defs=[{title:'Imhoff-Trichter',data:snap.restsand?.imhoff,valueLabel:'Menge [ml/l]'},{title:'Sieb / Gewicht',data:snap.restsand?.sieb,valueLabel:'Menge [g]'}];
+
+  // Info-Balken unter Header
+  const infoBarH=mm(10);
+  const infoBarY=y0+H-mm(13)-mm(3)-infoBarH;
+  page.drawRectangle({x:x0,y:infoBarY,width:W,height:infoBarH,color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Objekt: ${snap.meta?.objekt||'—'}   ·   Datum: ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,
+    {x:x0+4,y:infoBarY+mm(2.5),size:8.8,font:fontB,color:K});
+
+  // Spalten
+  const colGap=mm(6),colW=(W-colGap)/2;
+  const contentTop=infoBarY-mm(4);         // Beginn der Spalten (unter Info-Balken + Abstand)
+  const contentBottom=y0+mm(14);           // Boden (Platz für Fußzeile innerhalb Rahmen)
+  const colH=contentTop-contentBottom;
+
+  const defs=[
+    {title:'Imhoff-Trichter',data:snap.restsand?.imhoff,valueLabel:'Menge [ml/l]'},
+    {title:'Sieb / Gewicht',  data:snap.restsand?.sieb,  valueLabel:'Menge [g]'}
+  ];
+
   for(let i=0;i<defs.length;i++){
     const cx=x0+i*(colW+colGap);
-    page.drawRectangle({x:cx,y:y0+mm(20),width:colW,height:blockH,borderColor:K,borderWidth:0.8});
-    page.drawRectangle({x:cx,y:topY-mm(10),width:colW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-    drawTextSafe(page,defs[i].title,{x:cx+4,y:topY-mm(7),size:10,font:fontB,color:K});
+
+    // Außenrahmen Spalte
+    page.drawRectangle({x:cx,y:contentBottom,width:colW,height:colH,borderColor:K,borderWidth:0.8});
+
+    // Titelbalken oben
+    const titleBarH=mm(11);
+    page.drawRectangle({x:cx,y:contentTop-titleBarH,width:colW,height:titleBarH,color:GREY,borderColor:K,borderWidth:0.8});
+    drawTextSafe(page,defs[i].title,{x:cx+5,y:contentTop-titleBarH+mm(3),size:10,font:fontB,color:K});
+
+    // Foto
+    const photoAreaTop=contentTop-titleBarH-mm(2);
+    const photoAreaBottom=contentBottom+mm(14);
     const photoUrl=defs[i].data?.photoDataUrl||'';
     if(photoUrl){
       try{
         const img=await embedDataUrlImage(pdf,photoUrl);
-        const areaX=cx+mm(4),areaW=colW-mm(8),areaTop=topY-mm(16),areaBottom=y0+mm(45),areaH=areaTop-areaBottom;
-        const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
+        const areaX=cx+mm(3),areaW=colW-mm(6),areaH=photoAreaTop-photoAreaBottom;
+        const ratio=img.width/img.height;
+        let dw=areaW,dh=dw/ratio;
         if(dh>areaH){dh=areaH;dw=dh*ratio;}
-        page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaBottom+(areaH-dh)/2,width:dw,height:dh});
+        page.drawImage(img,{x:areaX+(areaW-dw)/2,y:photoAreaBottom+(areaH-dh)/2,width:dw,height:dh});
       }catch(err){console.error(err);}
     }else{
-      drawTextSafe(page,'Kein Foto vorhanden.',{x:cx+18,y:y0+blockH/2,size:10,font:fontR,color:K});
+      drawTextSafe(page,'Kein Foto vorhanden.',
+        {x:cx+14,y:contentBottom+colH/2,size:10,font:fontR,color:K});
     }
-    page.drawRectangle({x:cx,y:y0+mm(20),width:colW,height:mm(14),color:GREY,borderColor:K,borderWidth:0.8});
-    drawTextSafe(page,`${defs[i].valueLabel}: ${defs[i].data?.menge||'—'}`,{x:cx+4,y:y0+mm(24),size:10,font:fontB,color:K});
+
+    // Wert-Balken unten
+    const valBarH=mm(12);
+    page.drawRectangle({x:cx,y:contentBottom,width:colW,height:valBarH,color:GREY,borderColor:K,borderWidth:0.8});
+    drawTextSafe(page,`${defs[i].valueLabel}: ${defs[i].data?.menge||'—'}`,
+      {x:cx+5,y:contentBottom+mm(3),size:10,font:fontB,color:K});
   }
+
   if(snap.restsand?.bemerkung){
-    drawTextSafe(page,`Bemerkung: ${snap.restsand.bemerkung}`,{x:x0+4,y:y0+7,size:8,font:fontR,color:K});
+    drawTextSafe(page,`Bemerkung: ${snap.restsand.bemerkung}`,
+      {x:x0+4,y:y0+mm(10),size:8,font:fontR,color:K});
   }
+
   drawFooter(page,ctx,'Restsandmessung');
 }
 
@@ -1078,72 +1115,183 @@ async function drawPhPage(pdf,ctx,snap){
   const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
   page.drawRectangle({x:x0,y:y0,width:W,height:H,borderColor:K,borderWidth:1.2});
   drawHeaderBar(page,ctx,'Prüfprotokoll Sulfatmessung Wasser',FIRMA.name);
-  const headerTop=y0+H-mm(20),rowH=mm(10);
-  page.drawRectangle({x:x0,y:headerTop-rowH,width:W*0.48,height:rowH,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`Datum: ${dateDE(snap.ph?.datum)||dateDE(snap.meta?.geprueftAm)||todayDE()}`,{x:x0+4,y:headerTop-rowH+4,size:9,font:fontR,color:K});
-  page.drawRectangle({x:x0+W*0.52,y:headerTop-rowH,width:W*0.48,height:rowH,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`Bauherr: ${snap.ph?.bauherr||snap.meta?.auftraggeber||'—'}`,{x:x0+W*0.52+4,y:headerTop-rowH+4,size:9,font:fontR,color:K});
-  page.drawRectangle({x:x0,y:headerTop-rowH*2-mm(2),width:W,height:rowH,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`Baustelle: ${snap.ph?.baustelle||snap.meta?.objekt||'—'}`,{x:x0+4,y:headerTop-rowH*2-mm(2)+4,size:9,font:fontR,color:K});
-  page.drawRectangle({x:x0,y:headerTop-rowH*3-mm(4),width:W,height:rowH,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`Gewässername / Entnahmestelle: ${snap.ph?.gewaessername||'—'}`,{x:x0+4,y:headerTop-rowH*3-mm(4)+4,size:9,font:fontR,color:K});
-  const sectionY=headerTop-rowH*4-mm(10);
-  page.drawRectangle({x:x0,y:sectionY,width:W,height:mm(9),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,'Messung mittels Teststäbchen "Quantofix" – Ergebnis nach 120 sec',{x:x0+4,y:sectionY+3.5,size:9,font:fontB,color:K});
-  const topBlockY=sectionY-mm(95),leftW=W*0.38,rightW=W-leftW-mm(6);
-  page.drawRectangle({x:x0,y:topBlockY,width:leftW,height:mm(88),borderColor:K,borderWidth:0.8});
-  page.drawRectangle({x:x0+leftW+mm(6),y:topBlockY,width:rightW,height:mm(88),borderColor:K,borderWidth:0.8});
+
+  const rowH=mm(10);
+
+  // ── Meta-Zeilen ──
+  const row1top=y0+H-mm(13)-mm(3);
+  page.drawRectangle({x:x0,          y:row1top-rowH,width:W*0.48,height:rowH,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Datum: ${dateDE(snap.ph?.datum)||dateDE(snap.meta?.geprueftAm)||todayDE()}`,
+    {x:x0+4,y:row1top-rowH+mm(2.5),size:9,font:fontR,color:K});
+  page.drawRectangle({x:x0+W*0.52,  y:row1top-rowH,width:W*0.48,height:rowH,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Bauherr: ${snap.ph?.bauherr||snap.meta?.auftraggeber||'—'}`,
+    {x:x0+W*0.52+4,y:row1top-rowH+mm(2.5),size:9,font:fontR,color:K});
+
+  const row2top=row1top-rowH-mm(2);
+  page.drawRectangle({x:x0,y:row2top-rowH,width:W,height:rowH,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Baustelle: ${snap.ph?.baustelle||snap.meta?.objekt||'—'}`,
+    {x:x0+4,y:row2top-rowH+mm(2.5),size:9,font:fontR,color:K});
+
+  const row3top=row2top-rowH-mm(2);
+  page.drawRectangle({x:x0,y:row3top-rowH,width:W,height:rowH,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Gewässername / Entnahmestelle: ${snap.ph?.gewaessername||'—'}`,
+    {x:x0+4,y:row3top-rowH+mm(2.5),size:9,font:fontR,color:K});
+
+  // ── Abstand (wird für alle Sektionen gleich verwendet) ──
+  const sectionGap=mm(6);
+
+  // ── Messung mittels Teststäbchen ──
+  const secBarH=mm(9);
+  const secBarTop=row3top-rowH-sectionGap;
+  page.drawRectangle({x:x0,y:secBarTop-secBarH,width:W,height:secBarH,color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'Messung mittels Teststäbchen "Quantofix" – Ergebnis nach 120 sec',
+    {x:x0+4,y:secBarTop-secBarH+mm(2),size:9,font:fontB,color:K});
+
+  // ── Hauptblock Sulfat ──
+  const leftW=W*0.38,rightW=W-leftW-mm(6);
+  const blockTop=secBarTop-secBarH-mm(3);
+  const blockH=mm(90);
+  const blockBottom=blockTop-blockH;
+
+  // Linke Spalte – Foto
+  page.drawRectangle({x:x0,y:blockBottom,width:leftW,height:blockH,borderColor:K,borderWidth:0.8});
   if(snap.ph?.sulfat?.photoDataUrl){
     try{
       const img=await embedDataUrlImage(pdf,snap.ph.sulfat.photoDataUrl);
-      const areaX=x0+4,areaY=topBlockY+mm(12),areaW=leftW-8,areaH=mm(70);
-      const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
+      const areaX=x0+4,areaY=blockBottom+mm(12),areaW=leftW-8,areaH=blockH-mm(24);
+      const ratio=img.width/img.height;
+      let dw=areaW,dh=dw/ratio;
       if(dh>areaH){dh=areaH;dw=dh*ratio;}
       page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaY+(areaH-dh)/2,width:dw,height:dh});
     }catch(err){console.error(err);}
   }
-  page.drawRectangle({x:x0,y:topBlockY,width:leftW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`${snap.ph?.sulfat?.wert||'—'} mg/l SO4²-`,{x:x0+4,y:topBlockY+3.2,size:10,font:fontB,color:K});
+  page.drawRectangle({x:x0,y:blockBottom,width:leftW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`${snap.ph?.sulfat?.wert||'—'} mg/l SO4(2-)`,
+    {x:x0+4,y:blockBottom+mm(2.5),size:10,font:fontB,color:K});
+
+  // ── Rechte Spalte – Grenzwerttabelle ──
   const rx=x0+leftW+mm(6);
-  drawTextSafe(page,'Gültig für erhärteten Beton / Suspension:',{x:rx+4,y:topBlockY+mm(74),size:9,font:fontB,color:K});
-  page.drawRectangle({x:rx+4,y:topBlockY+mm(42),width:rightW-8,height:mm(26),borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,'Grenzwerte Expositionsklassen',{x:rx+10,y:topBlockY+mm(62),size:8.5,font:fontB,color:K});
-  drawTextSafe(page,'SO4²- [mg/l]  XA1: ≥200 ≤600   XA2: >600 ≤3000   XA3: >3000 ≤6000',{x:rx+10,y:topBlockY+mm(52),size:7.2,font:fontR,color:K});
-  drawTextSafe(page,'Gültig für Anmachwasser (ÖNORM EN 1008)',{x:rx+4,y:topBlockY+mm(34),size:9,font:fontB,color:K});
-  drawTextSafe(page,'Schwefelgehalt als SO4²- darf 2 000 mg/l nicht überschreiten.',{x:rx+8,y:topBlockY+mm(24),size:7.2,font:fontR,color:K});
-  const bottomY=y0+mm(16),blockH=mm(70),blockW=(W-mm(8))/2;
-  page.drawRectangle({x:x0,y:bottomY,width:blockW,height:blockH,borderColor:K,borderWidth:0.8});
-  page.drawRectangle({x:x0,y:bottomY+blockH-mm(10),width:blockW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,'Temperatur Messung',{x:x0+4,y:bottomY+blockH-mm(7),size:10,font:fontB,color:K});
+  page.drawRectangle({x:rx,y:blockBottom,width:rightW,height:blockH,borderColor:K,borderWidth:0.8});
+
+  // Tabellentitel
+  let tY=blockTop-mm(4);
+  drawTextSafe(page,'Grenzwerte – Expositionsklassen bei chemischem Angriff',
+    {x:rx+4,y:tY,size:7.8,font:fontB,color:K});
+  tY-=mm(4);
+  drawTextSafe(page,'durch natuerliche Boeden und Grundwasser',
+    {x:rx+4,y:tY,size:7.2,font:fontR,color:K});
+  tY-=mm(5);
+
+  // Tabelle (5 Spalten)
+  const tX=rx+mm(2), tW=rightW-mm(4);
+  const cRatios=[0.24,0.20,0.19,0.20,0.17];
+  const cXs=[tX];
+  cRatios.forEach(r=>cXs.push(cXs[cXs.length-1]+tW*r));
+
+  const hH=mm(14),subH=mm(8),dH=mm(16);
+
+  // Header-Zeile (grau)
+  page.drawRectangle({x:tX,y:tY-hH,width:tW,height:hH,color:GREY,borderColor:K,borderWidth:0.5});
+  for(let i=1;i<cXs.length-1;i++)
+    page.drawLine({start:{x:cXs[i],y:tY-hH},end:{x:cXs[i],y:tY},thickness:0.5,color:K});
+
+  const hdrTxts=[['Chemisches','Merkmal'],['Referenz-','pruefverf.'],['XA1'],['XA2'],['XA3']];
+  hdrTxts.forEach((lines,i)=>{
+    if(lines.length===2){
+      drawTextSafe(page,lines[0],{x:cXs[i]+2,y:tY-mm(5),  size:6.2,font:fontB,color:K});
+      drawTextSafe(page,lines[1],{x:cXs[i]+2,y:tY-mm(9.5),size:6.2,font:fontB,color:K});
+    }else{
+      drawTextSafe(page,lines[0],{x:cXs[i]+2,y:tY-hH/2-2, size:6.5,font:fontB,color:K});
+    }
+  });
+
+  // Sub-Zeile "Grundwasser" – letzte 3 Spalten gemergt
+  const subY=tY-hH;
+  page.drawRectangle({x:tX,y:subY-subH,width:tW,height:subH,borderColor:K,borderWidth:0.5});
+  page.drawLine({start:{x:cXs[1],y:subY-subH},end:{x:cXs[1],y:subY},thickness:0.5,color:K});
+  const gwX=cXs[2], gwW=cXs[5]-cXs[2];
+  drawTextSafe(page,'Grundwasser',
+    {x:gwX+gwW/2-14,y:subY-subH+mm(1.8),size:7,font:fontB,color:K});
+
+  // Daten-Zeile
+  const dataY=subY-subH;
+  page.drawRectangle({x:tX,y:dataY-dH,width:tW,height:dH,borderColor:K,borderWidth:0.5});
+  for(let i=1;i<cXs.length-1;i++)
+    page.drawLine({start:{x:cXs[i],y:dataY-dH},end:{x:cXs[i],y:dataY},thickness:0.5,color:K});
+
+  const dataTxts=[
+    ['SO4(2-)','mg/l'],
+    ['EN 196-2'],
+    ['>= 200 und','<= 600'],
+    ['> 600 und','<= 3 000'],
+    ['> 3 000 und','<= 6 000']
+  ];
+  dataTxts.forEach((lines,i)=>{
+    if(lines.length===2){
+      drawTextSafe(page,lines[0],{x:cXs[i]+2,y:dataY-mm(5),  size:6.2,font:fontR,color:K});
+      drawTextSafe(page,lines[1],{x:cXs[i]+2,y:dataY-mm(9.5),size:6.2,font:fontR,color:K});
+    }else{
+      drawTextSafe(page,lines[0],{x:cXs[i]+2,y:dataY-dH/2-2, size:6.5,font:fontR,color:K});
+    }
+  });
+
+  // Untertext
+  let uY=dataY-dH-mm(5);
+  drawTextSafe(page,'Gueltig fuer Anmachwasser (OENORM EN 1008):',
+    {x:rx+4,y:uY,size:7.5,font:fontB,color:K});
+  uY-=mm(5);
+  drawTextSafe(page,'SO4(2-) darf 2 000 mg/l nicht ueberschreiten.',
+    {x:rx+4,y:uY,size:7,font:fontR,color:K});
+
+  // ── Temperatur + pH Blöcke ──
+  // Gleicher Abstand (sectionGap) wie zwischen Meta-Zeile und Teststäbchen-Balken
+  const btmBlockGap=sectionGap;
+  const btmTop=blockBottom-btmBlockGap;         // Oberkante der Blöcke
+  const btmBottom=y0+mm(14);                    // Unterkante (innerhalb Rahmen, Platz f. Footer)
+  const btmH=btmTop-btmBottom;
+  const bW=(W-mm(8))/2;
+
+  // Temperatur
+  page.drawRectangle({x:x0,y:btmBottom,width:bW,height:btmH,borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:x0,y:btmTop-mm(11),width:bW,height:mm(11),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'Temperatur Messung',
+    {x:x0+4,y:btmTop-mm(8),size:10,font:fontB,color:K});
   if(snap.ph?.temperatur?.photoDataUrl){
     try{
       const img=await embedDataUrlImage(pdf,snap.ph.temperatur.photoDataUrl);
-      const areaX=x0+4,areaY=bottomY+mm(10),areaW=blockW-8,areaH=blockH-mm(24);
-      const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
-      if(dh>areaH){dh=areaH;dw=dh*ratio;}
-      page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaY+(areaH-dh)/2,width:dw,height:dh});
+      const aX=x0+4,aY=btmBottom+mm(12),aW=bW-8,aH=btmH-mm(25);
+      const ratio=img.width/img.height;
+      let dw=aW,dh=dw/ratio;
+      if(dh>aH){dh=aH;dw=dh*ratio;}
+      page.drawImage(img,{x:aX+(aW-dw)/2,y:aY+(aH-dh)/2,width:dw,height:dh});
     }catch(err){console.error(err);}
   }
-  page.drawRectangle({x:x0,y:bottomY,width:blockW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`${snap.ph?.temperatur?.wert||'—'} °C`,{x:x0+4,y:bottomY+3.2,size:10,font:fontB,color:K});
-  const px2=x0+blockW+mm(8);
-  page.drawRectangle({x:px2,y:bottomY,width:blockW,height:blockH,borderColor:K,borderWidth:0.8});
-  page.drawRectangle({x:px2,y:bottomY+blockH-mm(10),width:blockW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,'pH Messung',{x:px2+4,y:bottomY+blockH-mm(7),size:10,font:fontB,color:K});
+  page.drawRectangle({x:x0,y:btmBottom,width:bW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`${snap.ph?.temperatur?.wert||'—'} °C`,
+    {x:x0+4,y:btmBottom+mm(2.5),size:10,font:fontB,color:K});
+
+  // pH
+  const px2=x0+bW+mm(8);
+  page.drawRectangle({x:px2,y:btmBottom,width:bW,height:btmH,borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:px2,y:btmTop-mm(11),width:bW,height:mm(11),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'pH Messung',
+    {x:px2+4,y:btmTop-mm(8),size:10,font:fontB,color:K});
   if(snap.ph?.ph?.photoDataUrl){
     try{
       const img=await embedDataUrlImage(pdf,snap.ph.ph.photoDataUrl);
-      const areaX=px2+4,areaY=bottomY+mm(10),areaW=blockW-8,areaH=blockH-mm(24);
-      const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
-      if(dh>areaH){dh=areaH;dw=dh*ratio;}
-      page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaY+(areaH-dh)/2,width:dw,height:dh});
+      const aX=px2+4,aY=btmBottom+mm(12),aW=bW-8,aH=btmH-mm(25);
+      const ratio=img.width/img.height;
+      let dw=aW,dh=dw/ratio;
+      if(dh>aH){dh=aH;dw=dh*ratio;}
+      page.drawImage(img,{x:aX+(aW-dw)/2,y:aY+(aH-dh)/2,width:dw,height:dh});
     }catch(err){console.error(err);}
   }
-  page.drawRectangle({x:px2,y:bottomY,width:blockW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`${snap.ph?.ph?.wert||'—'} pH`,{x:px2+4,y:bottomY+3.2,size:10,font:fontB,color:K});
+  page.drawRectangle({x:px2,y:btmBottom,width:bW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`${snap.ph?.ph?.wert||'—'} pH`,
+    {x:px2+4,y:btmBottom+mm(2.5),size:10,font:fontB,color:K});
+
   drawFooter(page,ctx,'Sulfatmessung Wasser');
 }
-
 /* ── PDF EXPORTS ── */
 async function exportPdf(snapshot=null,type='protokoll'){
   const snap=snapshot||collectSnapshot();
