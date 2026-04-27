@@ -28,7 +28,8 @@ const timerMap={};
 let _saveT=null,_liveT=null,_audioCtx=null,_alarmGain=null,_timeAdjustVid=null,_floatingRaf=null;
 
 /* ── HELPERS ── */
-const uid=()=>crypto?.randomUUID?..()||('id_'+Date.now()+'_'+Math.random().toString(16).slice(2));
+// FIX: war crypto?.randomUUID?..(){ — doppelter Punkt war Syntaxfehler
+const uid=()=>{try{return crypto.randomUUID();}catch{return 'id_'+Date.now()+'_'+Math.random().toString(16).slice(2);}};
 const clone=v=>JSON.parse(JSON.stringify(v));
 function h(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function pdfSafe(v){return String(v??'').replace(/[–—]/g,'-').replace(/[•→]/g,'-').replace(/[\u0000-\u001F\u007F]/g,'');}
@@ -54,7 +55,7 @@ function sortMessungen(v){v.messungen.sort((a,b)=>{const av=Number(a.min),bv=Num
 function getContinueStep(v){const rows=(v.messungen||[]).slice().sort((a,b)=>Number(a.min)-Number(b.min));if(rows.length>=2){const step=Number(rows[rows.length-1].min)-Number(rows[rows.length-2].min);if(Number.isFinite(step)&&step>0)return step;}return 15;}
 function getRowsForExport(v){return clone(v.messungen||[]).sort((a,b)=>{const av=Number(a.min),bv=Number(b.min);if(Number.isFinite(av)&&Number.isFinite(bv))return av-bv;return Number.isFinite(av)?-1:1;});}
 function scheduleLiveRender(){clearTimeout(_liveT);_liveT=setTimeout(()=>renderLiveTab(),90);}
-const camSvg=(w=18,h=15)=>`<svg viewBox="0 0 24 20" width="${w}" height="${h}" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/><circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/><path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/><rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/></svg>`;
+const camSvg=(w=18,ht=15)=>`<svg viewBox="0 0 24 20" width="${w}" height="${ht}" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="1" y="4" width="22" height="15" rx="2" stroke="white" stroke-width="1.8"/><circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="1.8"/><path d="M8.5 4 L10.2 1.5 L13.8 1.5 L15.5 4" stroke="white" stroke-width="1.8" fill="none" stroke-linejoin="round"/><rect x="18.5" y="6" width="2.5" height="1.8" rx="0.9" fill="white"/></svg>`;
 
 /* ── RATE / Kf ── */
 function getManualRateM3hNumber(v){const n=Number(v?.manualRateM3h);return Number.isFinite(n)?n:NaN;}
@@ -153,7 +154,7 @@ function collectSelectionFromUi(){
 }
 function updateMainPdfButtonLabel(){const btn=$('btnPdf');if(btn)btn.textContent=state.settings.pdfExportType==='vollstaendig'?'PDF Vollständig':'PDF Protokoll';}
 function syncSettingsToUi(){
-  $('settings-alarmDuration').value=state.settings.alarmDurationSec??4;
+  if($('settings-alarmDuration'))$('settings-alarmDuration').value=state.settings.alarmDurationSec??4;
   const a=$('pdfType-protokoll'),b=$('pdfType-vollstaendig');
   if(a)a.checked=state.settings.pdfExportType!=='vollstaendig';
   if(b)b.checked=state.settings.pdfExportType==='vollstaendig';
@@ -188,9 +189,9 @@ function renderPhPhotoAreas(){
       ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}`;
   });
 }
-function syncRestsandToUi(){$('restsand-imhoff-menge').value=state.restsand.imhoff.menge||'';$('restsand-sieb-menge').value=state.restsand.sieb.menge||'';$('restsand-bemerkung').value=state.restsand.bemerkung||'';renderRestsandPhotoAreas();}
+function syncRestsandToUi(){if($('restsand-imhoff-menge'))$('restsand-imhoff-menge').value=state.restsand.imhoff.menge||'';if($('restsand-sieb-menge'))$('restsand-sieb-menge').value=state.restsand.sieb.menge||'';if($('restsand-bemerkung'))$('restsand-bemerkung').value=state.restsand.bemerkung||'';renderRestsandPhotoAreas();}
 function collectRestsandFromUi(){state.restsand.imhoff.menge=$('restsand-imhoff-menge')?.value||'';state.restsand.sieb.menge=$('restsand-sieb-menge')?.value||'';state.restsand.bemerkung=$('restsand-bemerkung')?.value||'';}
-function syncPhToUi(){$('ph-datum').value=state.ph.datum||'';$('ph-bauherr').value=state.ph.bauherr||'';$('ph-baustelle').value=state.ph.baustelle||'';$('ph-gewaessername').value=state.ph.gewaessername||'';$('ph-sulfat-wert').value=state.ph.sulfat.wert||'';$('ph-temp-wert').value=state.ph.temperatur.wert||'';$('ph-ph-wert').value=state.ph.ph.wert||'';renderPhPhotoAreas();}
+function syncPhToUi(){if($('ph-datum'))$('ph-datum').value=state.ph.datum||'';if($('ph-bauherr'))$('ph-bauherr').value=state.ph.bauherr||'';if($('ph-baustelle'))$('ph-baustelle').value=state.ph.baustelle||'';if($('ph-gewaessername'))$('ph-gewaessername').value=state.ph.gewaessername||'';if($('ph-sulfat-wert'))$('ph-sulfat-wert').value=state.ph.sulfat.wert||'';if($('ph-temp-wert'))$('ph-temp-wert').value=state.ph.temperatur.wert||'';if($('ph-ph-wert'))$('ph-ph-wert').value=state.ph.ph.wert||'';renderPhPhotoAreas();}
 function collectPhFromUi(){state.ph.datum=$('ph-datum')?.value||'';state.ph.bauherr=$('ph-bauherr')?.value||'';state.ph.baustelle=$('ph-baustelle')?.value||'';state.ph.gewaessername=$('ph-gewaessername')?.value||'';state.ph.sulfat.wert=$('ph-sulfat-wert')?.value||'';state.ph.temperatur.wert=$('ph-temp-wert')?.value||'';state.ph.ph.wert=$('ph-ph-wert')?.value||'';}
 
 /* ── SNAPSHOT / STORAGE ── */
@@ -249,7 +250,7 @@ function scheduleBeep(ctx,start,duration=0.10,freq=2350,volume=0.52){
   [freq,freq*1.015].forEach(f=>{const osc=ctx.createOscillator(),g=ctx.createGain();osc.type='square';osc.frequency.setValueAtTime(f,start);g.gain.setValueAtTime(0.0001,start);g.gain.exponentialRampToValueAtTime(Math.max(0.0001,volume),start+0.005);g.gain.setValueAtTime(Math.max(0.0001,volume),start+Math.max(0.03,duration-0.02));g.gain.exponentialRampToValueAtTime(0.0001,start+duration);osc.connect(g);g.connect(out);osc.start(start);osc.stop(start+duration+0.02);});
 }
 function playIntervalBeep(){
-  try{const p=[120,90,120,90,120,360];const tot=Math.max(1,Math.round(Number(state.settings.alarmDurationSec||4)/0.9));const vib=[];for(let i=0;i<tot;i++)vib.push(...p);navigator.vibrate?.(vib);}catch{}
+  try{const p=[120,90,120,90,120,360];const tot=Math.max(1,Math.round(Number(state.settings.alarmDurationSec||4)/0.9));const vib=[];for(let i=0;i<tot;i++)vib.push(...p);if(navigator.vibrate)navigator.vibrate(vib);}catch{}
   const ctx=getAlarmAudioContext();if(!ctx)return false;
   try{if(ctx.state==='suspended')ctx.resume();}catch{}
   if(ctx.state==='suspended')return false;
@@ -275,7 +276,7 @@ function hookGlobalPhotoDelegation(){
   document.addEventListener('click',async e=>{
     const btn=e.target.closest('button');if(!btn)return;
     if(btn.id==='overviewPhotoBtnTrigger'){$('overviewPhotoInput')?.click();return;}
-    if(btn.dataset.rsPhoto){$(`${btn.dataset.rsPhoto}PhotoInput`)?.click();return;}
+    if(btn.dataset.rsPhoto){document.getElementById(`${btn.dataset.rsPhoto}PhotoInput`)?.click();return;}
     if(btn.dataset.phPhoto){const map={sulfat:'sulfatPhotoInput',temperatur:'tempPhotoInput',ph:'phPhotoInput'};$(map[btn.dataset.phPhoto])?.click();return;}
     if(btn.dataset.photoDel){
       const what=btn.dataset.photoDel;
@@ -285,7 +286,7 @@ function hookGlobalPhotoDelegation(){
     }
   });
   document.addEventListener('change',async e=>{
-    const input=e.target;if(!(input instanceof HTMLInputElement)||!input.files?.[0])return;
+    const input=e.target;if(!(input instanceof HTMLInputElement)||!input.files||!input.files[0])return;
     const file=input.files[0];
     try{
       const dataUrl=await handlePhotoSelected(file);
@@ -331,18 +332,18 @@ function updateTimerUi(card,versuch){
   const passed=mins.filter(iv=>eMin>=iv);
   const lastPassed=passed.length?passed[passed.length-1]:mins[0];
   const rowIdx=versuch.messungen.findIndex(m=>Number(m.min)===Number(lastPassed));
-  if(rowIdx>=0)card.querySelector(`tr[data-row="${rowIdx}"]`)?.classList.add('row-active');
+  if(rowIdx>=0){const row=card.querySelector(`tr[data-row="${rowIdx}"]`);if(row)row.classList.add('row-active');}
 }
 
 function triggerIntervalAlarm(vid){
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   const display=card?.querySelector('[data-role="elapsed"]');
   document.body.classList.remove('screen-flash');void document.body.offsetWidth;document.body.classList.add('screen-flash');
-  card?.classList.remove('versuch-card--alarm');void card?.offsetWidth;card?.classList.add('versuch-card--alarm');
-  display?.classList.remove('timer-display--alarm');void display?.offsetWidth;display?.classList.add('timer-display--alarm');
+  if(card){card.classList.remove('versuch-card--alarm');void card.offsetWidth;card.classList.add('versuch-card--alarm');}
+  if(display){display.classList.remove('timer-display--alarm');void display.offsetWidth;display.classList.add('timer-display--alarm');}
   playIntervalBeep();
   setTimeout(()=>document.body.classList.remove('screen-flash'),1800);
-  setTimeout(()=>{card?.classList.remove('versuch-card--alarm');display?.classList.remove('timer-display--alarm');},Math.max(2400,Number(state.settings.alarmDurationSec||4)*1000+600));
+  setTimeout(()=>{if(card)card.classList.remove('versuch-card--alarm');if(display)display.classList.remove('timer-display--alarm');},Math.max(2400,Number(state.settings.alarmDurationSec||4)*1000+600));
 }
 function tickTimer(vid){
   const versuch=getVersuchById(vid);const t=timerMap[vid];if(!versuch||!t||!t.running)return;
@@ -376,7 +377,8 @@ function stopTimer(vid){
 function resetTimer(vid){
   const versuch=getVersuchById(vid);if(!versuch)return;
   const t=ensureTimer(vid,versuch);if(t.raf)cancelAnimationFrame(t.raf);
-  t.running=false;t.startMs=0;t.accumulatedMs=0;t.raf=null;t.alarmCount=0;versuch.elapsedMs=0;versuch.startzeit='';
+  t.running=false;t.startMs=0;t.accumulatedMs=0;t.raf=null;t.alarmCount=0;
+  versuch.elapsedMs=0;versuch.startzeit='';
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   updateTimerUi(card,versuch);updateFloatingTimerWidget();stopFloatingLoopIfIdle();saveDraftDebounced();
 }
@@ -388,7 +390,13 @@ function hardStopTimer(vid){
 
 /* ── FLOATING TIMER ── */
 function getFirstRunningStage(){return state.versuche.find(v=>timerMap[v.id]?.running)||null;}
-function isElementVisible(el){if(!el)return false;const r=el.getBoundingClientRect();if(r.width===0&&r.height===0)return false;if(getComputedStyle(el).display==='none')return false;return r.top>=0&&r.bottom<=window.innerHeight&&r.left>=0&&r.right<=window.innerWidth;}
+function isElementVisible(el){
+  if(!el)return false;
+  const r=el.getBoundingClientRect();
+  if(r.width===0&&r.height===0)return false;
+  if(getComputedStyle(el).display==='none')return false;
+  return r.top>=0&&r.bottom<=window.innerHeight&&r.left>=0&&r.right<=window.innerWidth;
+}
 function updateFloatingTimerWidget(){
   const wrap=$('floatingTimer'),label=$('floatingTimerLabel'),display=$('floatingTimerDisplay');
   if(!wrap||!label||!display)return;
@@ -401,14 +409,26 @@ function updateFloatingTimerWidget(){
   display.textContent=formatElapsed(getElapsedMs(stage.id,stage));
   wrap.hidden=isElementVisible(timerBox);
 }
-function startFloatingLoop(){if(_floatingRaf)return;const loop=()=>{updateFloatingTimerWidget();if(Object.values(timerMap).some(t=>t.running))_floatingRaf=requestAnimationFrame(loop);else{cancelAnimationFrame(_floatingRaf);_floatingRaf=null;}};_floatingRaf=requestAnimationFrame(loop);}
+function startFloatingLoop(){
+  if(_floatingRaf)return;
+  const loop=()=>{updateFloatingTimerWidget();if(Object.values(timerMap).some(t=>t.running))_floatingRaf=requestAnimationFrame(loop);else{_floatingRaf=null;}};
+  _floatingRaf=requestAnimationFrame(loop);
+}
 function stopFloatingLoopIfIdle(){if(!Object.values(timerMap).some(t=>t.running)&&_floatingRaf){cancelAnimationFrame(_floatingRaf);_floatingRaf=null;}}
-function initFloatingTimer(){$('floatingTimer')?.addEventListener('click',()=>{const stage=getFirstRunningStage();if(stage)openTimeAdjustModal(stage.id);});window.addEventListener('scroll',updateFloatingTimerWidget,{passive:true});window.addEventListener('resize',updateFloatingTimerWidget);}
+function initFloatingTimer(){
+  $('floatingTimer')?.addEventListener('click',()=>{const stage=getFirstRunningStage();if(stage)openTimeAdjustModal(stage.id);});
+  window.addEventListener('scroll',updateFloatingTimerWidget,{passive:true});
+  window.addEventListener('resize',updateFloatingTimerWidget);
+}
 
 /* ── TIME ADJUST MODAL ── */
 function openTimeAdjustModal(vid){_timeAdjustVid=vid;$('timeAdjustInput').value='0';updateTimeAdjustPreview();$('timeAdjustModal').hidden=false;}
 function closeTimeAdjustModal(){$('timeAdjustModal').hidden=true;_timeAdjustVid=null;}
-function updateTimeAdjustPreview(){const v=getVersuchById(_timeAdjustVid);if(!v)return;const next=Math.max(0,getElapsedMs(v.id,v)+Number($('timeAdjustInput')?.value||0)*1000);$('timeAdjustPreview').textContent=`Neue Zeit: ${formatElapsed(next)}`;}
+function updateTimeAdjustPreview(){
+  const v=getVersuchById(_timeAdjustVid);if(!v)return;
+  const next=Math.max(0,getElapsedMs(v.id,v)+Number($('timeAdjustInput')?.value||0)*1000);
+  $('timeAdjustPreview').textContent=`Neue Zeit: ${formatElapsed(next)}`;
+}
 function applyTimeAdjustment(){
   const v=getVersuchById(_timeAdjustVid);if(!v)return;
   const offset=Number($('timeAdjustInput')?.value||0);
@@ -421,7 +441,10 @@ function applyTimeAdjustment(){
 }
 function initTimeAdjustModal(){
   $('timeAdjustInput')?.addEventListener('input',updateTimeAdjustPreview);
-  document.querySelectorAll('.modal-adj-btn').forEach(btn=>btn.addEventListener('click',()=>{$('timeAdjustInput').value=String(Number($('timeAdjustInput').value||0)+Number(btn.dataset.adj||0));updateTimeAdjustPreview();}));
+  document.querySelectorAll('.modal-adj-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    $('timeAdjustInput').value=String(Number($('timeAdjustInput').value||0)+Number(btn.dataset.adj||0));
+    updateTimeAdjustPreview();
+  }));
   $('timeAdjustApply')?.addEventListener('click',applyTimeAdjustment);
   $('timeAdjustCancel')?.addEventListener('click',closeTimeAdjustModal);
   $('timeAdjustModal')?.addEventListener('click',e=>{if(e.target.id==='timeAdjustModal')closeTimeAdjustModal();});
@@ -463,25 +486,21 @@ function buildVersuchHtml(v,idx){
   </summary>
   <div class="card__body versuch-body">
     ${hasPhoto?`<div class="photo-thumb-wrap"><img class="photo-thumb" src="${h(v.photoDataUrl)}" alt="Beweisfoto"><div class="photo-thumb-caption">Beweisfoto Durchflussmesser</div></div>`:''}
-
     <div class="versuch-row">
       <span class="rate-label">Förderrate [l/s]</span>
       <input class="rate-input" data-role="manual-rate-ls" type="number" step="0.001" inputmode="decimal" value="${h(effLs)}">
       <span class="rate-unit">=</span>
       <span class="rate-conv" data-role="head-rate-m3h">${effM3h?`${h(effM3h)} m³/h`:'—'}</span>
     </div>
-
     <div class="versuch-row versuch-row--avg">
       <span class="rate-label">Ø Fördermenge [m³/h]</span>
       <input class="rate-input rate-input--readonly" data-role="avg-foerder-menge" type="text" value="${h(avg||'—')}" readonly>
       <span class="rate-hint">Ø aus Messwerten</span>
     </div>
-
     <div class="versuch-row">
       <span class="interval-label">Intervalle [min]</span>
       <input class="interval-input" data-role="intervalle" type="text" value="${h(v.intervalleStr)}">
     </div>
-
     <div class="timer-box">
       <div class="timer-row">
         <div class="timer-display" data-role="elapsed" title="Tippen zum Anpassen">${formatElapsed(v.elapsedMs||0)}</div>
@@ -495,14 +514,12 @@ function buildVersuchHtml(v,idx){
       <div class="timer-info" data-role="startzeit">${v.startzeit?`Startzeit: ${h(v.startzeit)}`:'Noch nicht gestartet'}</div>
       <div class="timer-info timer-next" data-role="naechstes"></div>
     </div>
-
     <div class="table-wrap">
       <table class="mess-table">
         <thead>${buildTableHeadHtml()}</thead>
         <tbody>${v.messungen.map((row,rowIdx)=>buildTableRowHtml(v,row,rowIdx)).join('')}</tbody>
       </table>
     </div>
-
     <div class="versuch-tools">
       <button class="del-btn" data-role="del" type="button">Stufe löschen</button>
     </div>
@@ -529,7 +546,6 @@ function hookVersuchDelegation(){
   const host=$('versucheContainer');
   if(!host||host.dataset.bound==='1')return;
   host.dataset.bound='1';
-
   host.addEventListener('input',e=>{
     const el=e.target.closest('[data-role]');if(!el)return;
     const card=el.closest('.versuch-card');if(!card)return;
@@ -541,14 +557,13 @@ function hookVersuchDelegation(){
     if(role==='schluck-m'){if(versuch.messungen[idx])versuch.messungen[idx].schluck_m=el.value;saveDraftDebounced();scheduleLiveRender();return;}
     if(role==='foerder-menge'){if(versuch.messungen[idx])versuch.messungen[idx].foerder_menge=el.value;updateStageRateDisplay(card,versuch);saveDraftDebounced();scheduleLiveRender();return;}
   });
-
   host.addEventListener('change',async e=>{
     const el=e.target.closest('[data-role]');if(!el)return;
     const card=el.closest('.versuch-card');if(!card)return;
     const versuch=getVersuchById(card.dataset.vid);if(!versuch)return;
     const role=el.dataset.role;
     if(role==='photo-input'){
-      const file=el.files?.[0];
+      const file=el.files&&el.files[0];
       if(file){try{versuch.photoDataUrl=await handlePhotoSelected(file);renderVersuche();saveDraftDebounced();}catch(err){console.error(err);alert('Foto konnte nicht verarbeitet werden.');}finally{el.value='';}}
       return;
     }
@@ -562,7 +577,6 @@ function hookVersuchDelegation(){
     }
     if(role==='min'){sortMessungen(versuch);hardStopTimer(versuch.id);renderVersuche();renderLiveTab();saveDraftDebounced();}
   });
-
   host.addEventListener('click',e=>{
     const card=e.target.closest('.versuch-card');if(!card)return;
     const versuch=getVersuchById(card.dataset.vid);if(!versuch)return;
@@ -623,8 +637,8 @@ function buildTemplateSnapshot(){
 }
 function exportTemplateJson(){const snap=buildTemplateSnapshot();const obj=(snap.meta.objekt||'Vorlage').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');downloadJson(snap,`${dateTag()}_HTB_Vorlage_${obj||'Pumpversuch'}.htbpump.json`);}
 function exportFullJson(){const snap=collectSnapshot();const obj=(snap.meta.objekt||'Export').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');downloadJson(snap,`${dateTag()}_HTB_Pumpversuch_${obj||'Export'}.json`);}
-async function handleTemplateImport(e){const file=e.target.files?.[0];if(!file)return;try{const raw=await file.text();applySnapshot(JSON.parse(raw),true);saveDraftDebounced();alert('Vorlage importiert.');}catch(err){console.error(err);alert('Vorlage konnte nicht importiert werden.');}finally{e.target.value='';}}
-async function handleFullImport(e){const file=e.target.files?.[0];if(!file)return;try{const raw=await file.text();applySnapshot(JSON.parse(raw),true);saveDraftDebounced();alert('Vollständiger Import erfolgreich.');}catch(err){console.error(err);alert('Datei konnte nicht importiert werden.');}finally{e.target.value='';}}
+async function handleTemplateImport(e){const file=e.target.files&&e.target.files[0];if(!file)return;try{const raw=await file.text();applySnapshot(JSON.parse(raw),true);saveDraftDebounced();alert('Vorlage importiert.');}catch(err){console.error(err);alert('Vorlage konnte nicht importiert werden.');}finally{e.target.value='';}}
+async function handleFullImport(e){const file=e.target.files&&e.target.files[0];if(!file)return;try{const raw=await file.text();applySnapshot(JSON.parse(raw),true);saveDraftDebounced();alert('Vollständiger Import erfolgreich.');}catch(err){console.error(err);alert('Datei konnte nicht importiert werden.');}finally{e.target.value='';}}
 
 /* ── LIVE TAB ── */
 function buildLiveChartSvg(points,key){
@@ -656,9 +670,7 @@ function buildLiveWellPanelHtml(versuch,key,brunnen){
   const points=getWellChartPoints(versuch,key,brunnen);
   const qClass=est.quality?`kf-quality kf-quality--${est.quality}`:'';
   const qText=est.quality==='gut'?'stabil':est.quality==='mittel'?'mittel':'vorläufig';
-
-  return `
-<section class="live-well ${key==='foerder'?'live-well--foerder':'live-well--schluck'}">
+  return `<section class="live-well ${key==='foerder'?'live-well--foerder':'live-well--schluck'}">
   <div class="live-well__head">
     <div>
       <div class="live-well__title">${h(getWellLabel(key))}</div>
@@ -674,28 +686,18 @@ function buildLiveWellPanelHtml(versuch,key,brunnen){
   <div class="live-chart">${buildLiveChartSvg(points,key)}</div>
 </section>`;
 }
-
 function renderLiveTab(){
-  const host=$('liveContainer');
-  if(!host) return;
-
-  if(!state.versuche.length){
-    host.innerHTML=`<section class="card"><div class="empty-state">Noch keine Pumpstufe vorhanden.</div></section>`;
-    return;
-  }
-
+  const host=$('liveContainer');if(!host)return;
+  if(!state.versuche.length){host.innerHTML=`<section class="card"><div class="empty-state">Noch keine Pumpstufe vorhanden.</div></section>`;return;}
   const sel=getSelectedWells();
   const single=(sel.foerder?1:0)+(sel.schluck?1:0)===1;
-
   host.innerHTML=state.versuche.map((v,idx)=>{
-    const rateM3h=getCalcRateM3h(v);
-    const rateLs=getCalcRateLs(v);
-    const rateSource=getCalcRateSource(v);
+    const rateM3h=getCalcRateM3h(v),rateLs=getCalcRateLs(v),rateSource=getCalcRateSource(v);
     return `<section class="card live-stage">
       <div class="live-stage__head">
         <div>
           <div class="live-stage__title">${h(getStageTitle(idx))}</div>
-          <div class="live-stage__meta">Rate für Auswertung: <b>${h(rateM3h||'—')} m³/h</b> · <b>${h(rateLs||'—')} l/s</b>${rateSource?` · Quelle: ${h(rateSource)}`:''}</div>
+          <div class="live-stage__meta">Rate: <b>${h(rateM3h||'—')} m³/h</b> · <b>${h(rateLs||'—')} l/s</b>${rateSource?` · ${h(rateSource)}`:''}</div>
         </div>
       </div>
       <div class="live-grid ${single?'live-grid--single':''}">
@@ -706,95 +708,49 @@ function renderLiveTab(){
   }).join('');
 }
 
-/* ── HISTORY + FOTOEXPORT ── */
+/* ── HISTORY ── */
 function buildHistoryKfHtml(snapshot){
-  const versuche=Array.isArray(snapshot?.versuche)?snapshot.versuche:[];
-  if(!versuche.length) return '';
+  const versuche=Array.isArray(snapshot?.versuche)?snapshot.versuche:[];if(!versuche.length)return'';
   const lines=versuche.map((raw,idx)=>{
-    const v=hydrateVersuch(raw);
-    const parts=[];
-    if(snapshot.selection?.foerder){
-      const e=getStageKfEstimate(v,'foerder',snapshot.foerder||{});
-      parts.push(`Förderbrunnen: ${Number.isFinite(e.kf)?fmtKf(e.kf):'—'}`);
-    }
-    if(snapshot.selection?.schluck){
-      const e=getStageKfEstimate(v,'schluck',snapshot.schluck||{});
-      parts.push(`Rückgabe: ${Number.isFinite(e.kf)?fmtKf(e.kf):'—'}`);
-    }
+    const v=hydrateVersuch(raw);const parts=[];
+    if(snapshot.selection?.foerder){const e=getStageKfEstimate(v,'foerder',snapshot.foerder||{});parts.push(`Förderbrunnen: ${Number.isFinite(e.kf)?fmtKf(e.kf):'—'}`);}
+    if(snapshot.selection?.schluck){const e=getStageKfEstimate(v,'schluck',snapshot.schluck||{});parts.push(`Rückgabe: ${Number.isFinite(e.kf)?fmtKf(e.kf):'—'}`);}
     return `<div class="historyKf__line">${h(`${getStageTitle(idx)} · ${parts.join(' · ')}`)}</div>`;
   });
   return `<div class="historyKf"><div class="historyKf__title">Kf-Abschätzung</div>${lines.join('')}</div>`;
 }
-
 function collectSnapshotPhotos(snapshot){
-  const photos=[];
-  const obj=(snapshot.meta?.objekt||'Pumpversuch').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_') || 'Pumpversuch';
-
-  if(snapshot.overviewPhotoDataUrl) photos.push({ name:`${obj}_Uebersicht`, dataUrl:snapshot.overviewPhotoDataUrl });
-  (snapshot.versuche||[]).forEach((v,i)=>{ if(v.photoDataUrl) photos.push({ name:`${obj}_Stufe_${i+1}_Durchflussmesser`, dataUrl:v.photoDataUrl }); });
-  if(snapshot.restsand?.imhoff?.photoDataUrl) photos.push({ name:`${obj}_Restsand_Imhoff`, dataUrl:snapshot.restsand.imhoff.photoDataUrl });
-  if(snapshot.restsand?.sieb?.photoDataUrl) photos.push({ name:`${obj}_Restsand_Sieb`, dataUrl:snapshot.restsand.sieb.photoDataUrl });
-  if(snapshot.ph?.sulfat?.photoDataUrl) photos.push({ name:`${obj}_Sulfat`, dataUrl:snapshot.ph.sulfat.photoDataUrl });
-  if(snapshot.ph?.temperatur?.photoDataUrl) photos.push({ name:`${obj}_Temperatur`, dataUrl:snapshot.ph.temperatur.photoDataUrl });
-  if(snapshot.ph?.ph?.photoDataUrl) photos.push({ name:`${obj}_pH`, dataUrl:snapshot.ph.ph.photoDataUrl });
+  const photos=[];const obj=(snapshot.meta?.objekt||'Pumpversuch').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_')||'Pumpversuch';
+  if(snapshot.overviewPhotoDataUrl)photos.push({name:`${obj}_Uebersicht`,dataUrl:snapshot.overviewPhotoDataUrl});
+  (snapshot.versuche||[]).forEach((v,i)=>{if(v.photoDataUrl)photos.push({name:`${obj}_Stufe_${i+1}`,dataUrl:v.photoDataUrl});});
+  if(snapshot.restsand?.imhoff?.photoDataUrl)photos.push({name:`${obj}_Restsand_Imhoff`,dataUrl:snapshot.restsand.imhoff.photoDataUrl});
+  if(snapshot.restsand?.sieb?.photoDataUrl)photos.push({name:`${obj}_Restsand_Sieb`,dataUrl:snapshot.restsand.sieb.photoDataUrl});
+  if(snapshot.ph?.sulfat?.photoDataUrl)photos.push({name:`${obj}_Sulfat`,dataUrl:snapshot.ph.sulfat.photoDataUrl});
+  if(snapshot.ph?.temperatur?.photoDataUrl)photos.push({name:`${obj}_Temperatur`,dataUrl:snapshot.ph.temperatur.photoDataUrl});
+  if(snapshot.ph?.ph?.photoDataUrl)photos.push({name:`${obj}_pH`,dataUrl:snapshot.ph.ph.photoDataUrl});
   return photos;
 }
-
-function guessExtFromDataUrl(dataUrl){
-  if(/^data:image\/png/i.test(dataUrl)) return 'png';
-  if(/^data:image\/webp/i.test(dataUrl)) return 'webp';
-  return 'jpg';
-}
-
-function downloadDataUrl(dataUrl,filename){
-  const a=document.createElement('a');
-  a.href=dataUrl;
-  a.download=filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
+function guessExtFromDataUrl(dataUrl){if(/^data:image\/png/i.test(dataUrl))return'png';if(/^data:image\/webp/i.test(dataUrl))return'webp';return'jpg';}
+function downloadDataUrl(dataUrl,filename){const a=document.createElement('a');a.href=dataUrl;a.download=filename;document.body.appendChild(a);a.click();a.remove();}
 async function exportPhotosFromSnapshot(snapshot){
   const photos=collectSnapshotPhotos(snapshot);
-  if(!photos.length){
-    alert('Keine Fotos in dieser Messung vorhanden.');
-    return;
-  }
-  for(let i=0;i<photos.length;i++){
-    const p=photos[i];
-    downloadDataUrl(p.dataUrl,`${p.name}.${guessExtFromDataUrl(p.dataUrl)}`);
-    await new Promise(r=>setTimeout(r,250));
-  }
-  alert(`${photos.length} Foto(s) wurden exportiert.`);
+  if(!photos.length){alert('Keine Fotos vorhanden.');return;}
+  for(let i=0;i<photos.length;i++){downloadDataUrl(photos[i].dataUrl,`${photos[i].name}.${guessExtFromDataUrl(photos[i].dataUrl)}`);await new Promise(r=>setTimeout(r,250));}
+  alert(`${photos.length} Foto(s) exportiert.`);
 }
-
 function renderHistoryList(){
-  const host=$('historyList');
-  if(!host) return;
+  const host=$('historyList');if(!host)return;
   const list=readHistory();
-
-  if(!list.length){
-    host.innerHTML=`<div class="text"><p>Noch keine Protokolle gespeichert.</p></div>`;
-    return;
-  }
-
+  if(!list.length){host.innerHTML=`<div class="text"><p>Noch keine Protokolle gespeichert.</p></div>`;return;}
   host.innerHTML=list.map(entry=>{
     const snap=entry.snapshot||{};
     const count=Array.isArray(snap.versuche)?snap.versuche.length:0;
-    const rsImhoff=snap.restsand?.imhoff?.menge || '—';
-    const rsSieb=snap.restsand?.sieb?.menge || '—';
-    const sulfat=snap.ph?.sulfat?.wert || '—';
-    const temp=snap.ph?.temperatur?.wert || '—';
-    const phv=snap.ph?.ph?.wert || '—';
-
     return `<details class="historyItem" data-hid="${h(entry.id)}">
       <summary class="historyItem__head">
         <span class="historyItem__chevron">▸</span>
         <span class="historyItem__title">${h(entry.title)}</span>
         <span class="historyItem__date">${h(new Date(entry.savedAt).toLocaleString('de-DE'))}</span>
       </summary>
-
       <div class="historyItem__body">
         <div class="historySections">
           <details class="historySection" open>
@@ -806,28 +762,23 @@ function renderHistoryList(){
               Beweisfotos: <b>${(snap.versuche||[]).filter(v=>!!v.photoDataUrl).length}</b>
             </div>
           </details>
-
           <details class="historySection">
             <summary>Restsandmessung</summary>
             <div class="historySection__body">
-              Imhoff: <b>${h(String(rsImhoff))}</b><br>
-              Sieb/Gewicht: <b>${h(String(rsSieb))}</b><br>
-              Fotos: <b>${(snap.restsand?.imhoff?.photoDataUrl?1:0)+(snap.restsand?.sieb?.photoDataUrl?1:0)}</b>
+              Imhoff: <b>${h(String(snap.restsand?.imhoff?.menge||'—'))}</b><br>
+              Sieb/Gewicht: <b>${h(String(snap.restsand?.sieb?.menge||'—'))}</b>
             </div>
           </details>
-
           <details class="historySection">
             <summary>pH / Sulfat</summary>
             <div class="historySection__body">
-              Sulfat: <b>${h(String(sulfat))}</b><br>
-              Temperatur: <b>${h(String(temp))}</b><br>
-              pH: <b>${h(String(phv))}</b>
+              Sulfat: <b>${h(String(snap.ph?.sulfat?.wert||'—'))}</b><br>
+              Temperatur: <b>${h(String(snap.ph?.temperatur?.wert||'—'))}</b><br>
+              pH: <b>${h(String(snap.ph?.ph?.wert||'—'))}</b>
             </div>
           </details>
         </div>
-
         ${buildHistoryKfHtml(snap)}
-
         <div class="historyBtns">
           <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
           <button type="button" data-hact="pdf-protokoll" data-id="${h(entry.id)}">PDF Protokoll</button>
@@ -841,139 +792,70 @@ function renderHistoryList(){
     </details>`;
   }).join('');
 }
-
 function hookHistoryDelegation(){
-  const host=$('historyList');
-  if(!host||host.dataset.bound==='1') return;
+  const host=$('historyList');if(!host||host.dataset.bound==='1')return;
   host.dataset.bound='1';
-
   host.addEventListener('click',async e=>{
-    const btn=e.target.closest('[data-hact]');
-    if(!btn) return;
-    const id=btn.dataset.id;
-    const act=btn.dataset.hact;
-    const list=readHistory();
-    const entry=list.find(x=>x.id===id);
-
-    if(act==='del'){
-      writeHistory(list.filter(x=>x.id!==id));
-      renderHistoryList();
-      return;
-    }
-    if(!entry) return;
-
-    if(act==='load'){
-      applySnapshot(entry.snapshot,true);
-      saveDraftDebounced();
-      document.querySelector('.tab[data-tab="protokoll"]')?.click();
-      return;
-    }
-    if(act==='pdf-protokoll'){
-      try{ await exportPdf(entry.snapshot,'protokoll'); }catch(err){ console.error(err); alert('PDF-Fehler'); }
-      return;
-    }
-    if(act==='pdf-voll'){
-      try{ await exportPdf(entry.snapshot,'vollstaendig'); }catch(err){ console.error(err); alert('PDF-Fehler'); }
-      return;
-    }
-    if(act==='pdf-restsand'){
-      try{ await exportRestsandPdf(entry.snapshot); }catch(err){ console.error(err); alert('Restsand-PDF Fehler'); }
-      return;
-    }
-    if(act==='pdf-ph'){
-      try{ await exportPhPdf(entry.snapshot); }catch(err){ console.error(err); alert('Sulfat-PDF Fehler'); }
-      return;
-    }
-    if(act==='photos'){
-      try{ await exportPhotosFromSnapshot(entry.snapshot); }catch(err){ console.error(err); alert('Fotoexport fehlgeschlagen.'); }
-    }
+    const btn=e.target.closest('[data-hact]');if(!btn)return;
+    const id=btn.dataset.id,act=btn.dataset.hact;
+    const list=readHistory();const entry=list.find(x=>x.id===id);
+    if(act==='del'){writeHistory(list.filter(x=>x.id!==id));renderHistoryList();return;}
+    if(!entry)return;
+    if(act==='load'){applySnapshot(entry.snapshot,true);saveDraftDebounced();document.querySelector('.tab[data-tab="protokoll"]')?.click();return;}
+    if(act==='pdf-protokoll'){try{await exportPdf(entry.snapshot,'protokoll');}catch(err){console.error(err);alert('PDF-Fehler');}return;}
+    if(act==='pdf-voll'){try{await exportPdf(entry.snapshot,'vollstaendig');}catch(err){console.error(err);alert('PDF-Fehler');}return;}
+    if(act==='pdf-restsand'){try{await exportRestsandPdf(entry.snapshot);}catch(err){console.error(err);alert('Restsand-PDF Fehler');}return;}
+    if(act==='pdf-ph'){try{await exportPhPdf(entry.snapshot);}catch(err){console.error(err);alert('Sulfat-PDF Fehler');}return;}
+    if(act==='photos'){try{await exportPhotosFromSnapshot(entry.snapshot);}catch(err){console.error(err);alert('Fotoexport fehlgeschlagen.');}}
   });
 }
 
 /* ── PDF HELPERS ── */
-function drawTextSafe(page,text,options){
-  page.drawText(pdfSafe(text),options);
-}
+function drawTextSafe(page,text,options){page.drawText(pdfSafe(text),options);}
 
 async function loadPdfAssets(pdf){
-  const fontkit=window.fontkit || window.PDFLibFontkit;
-  if(!fontkit) throw new Error('fontkit nicht geladen');
+  const fontkit=window.fontkit||window.PDFLibFontkit;
+  if(!fontkit)throw new Error('fontkit nicht geladen');
   pdf.registerFontkit(fontkit);
-
   const fontBytesR=await fetch(`${BASE}fonts/arial.ttf?v=60`).then(r=>r.arrayBuffer());
-  let fontBytesB=null;
-  try{ fontBytesB=await fetch(`${BASE}fonts/arialbd.ttf?v=60`).then(r=>r.arrayBuffer()); }catch{}
-  const fontR=await pdf.embedFont(fontBytesR,{ subset:true });
-  const fontB=fontBytesB ? await pdf.embedFont(fontBytesB,{ subset:true }) : fontR;
-
-  let logo=null;
-  try{
-    const bytes=await fetch(`${BASE}logo.png?v=30`).then(r=>r.arrayBuffer());
-    logo=await pdf.embedPng(bytes);
-  }catch{}
-
-  return { fontR,fontB,logo };
+  let fontBytesB=null;try{fontBytesB=await fetch(`${BASE}fonts/arialbd.ttf?v=60`).then(r=>r.arrayBuffer());}catch{}
+  const fontR=await pdf.embedFont(fontBytesR,{subset:true});
+  const fontB=fontBytesB?await pdf.embedFont(fontBytesB,{subset:true}):fontR;
+  let logo=null;try{const bytes=await fetch(`${BASE}logo.png?v=30`).then(r=>r.arrayBuffer());logo=await pdf.embedPng(bytes);}catch{}
+  return{fontR,fontB,logo};
 }
-
 function getPdfCtx(PDFLib,assets){
-  const { rgb,degrees } = PDFLib;
-  const PAGE_W=595.28, PAGE_H=841.89;
-  const mm=v=>v*72/25.4;
-  const K=rgb(0,0,0);
-  const GREY=rgb(0.90,0.90,0.90);
-  return { PAGE_W,PAGE_H,mm,K,GREY,rgb,degrees,...assets };
+  const{rgb,degrees}=PDFLib;
+  const PAGE_W=595.28,PAGE_H=841.89,mm=v=>v*72/25.4,K=rgb(0,0,0),GREY=rgb(0.90,0.90,0.90);
+  return{PAGE_W,PAGE_H,mm,K,GREY,rgb,degrees,...assets};
 }
-
-function getPdfRateM3hNumber(v){
-  const m=Number(v?.manualRateM3h);
-  if(Number.isFinite(m)&&m>0) return m;
-  const a=getAverageFoerderMengeNumber(v);
-  if(Number.isFinite(a)&&a>0) return a;
-  return NaN;
-}
-function getPdfRateM3h(v){
-  const n=getPdfRateM3hNumber(v);
-  return Number.isFinite(n)?n.toFixed(3):'—';
-}
-function getPdfRateLs(v){
-  const n=getPdfRateM3hNumber(v);
-  return Number.isFinite(n)?(n/3.6).toFixed(3):'—';
-}
-
+function getPdfRateM3hNumber(v){const m=Number(v?.manualRateM3h);if(Number.isFinite(m)&&m>0)return m;const a=getAverageFoerderMengeNumber(v);if(Number.isFinite(a)&&a>0)return a;return NaN;}
+function getPdfRateM3h(v){const n=getPdfRateM3hNumber(v);return Number.isFinite(n)?n.toFixed(3):'—';}
+function getPdfRateLs(v){const n=getPdfRateM3hNumber(v);return Number.isFinite(n)?(n/3.6).toFixed(3):'—';}
 function getWellRowsForPdf(versuch,key,ruhe){
-  const field=key==='foerder'?'foerder_m':'schluck_m';
-  const ruheNum=Number(ruhe);
+  const field=key==='foerder'?'foerder_m':'schluck_m';const ruheNum=Number(ruhe);
   return getRowsForExport(versuch).map(r=>{
-    const min=Number(r.min), raw=r[field];
-    const hasValue=String(raw??'').trim()!=='' && Number.isFinite(Number(raw));
-    const valueNum=hasValue ? Number(raw) : null;
-    const deltaM=(hasValue&&Number.isFinite(ruheNum)) ? Math.abs(valueNum-ruheNum) : null;
-    const deltaCm=deltaM!==null ? deltaM*100 : null;
-    return { min:Number.isFinite(min)?min:null, valueNum, deltaM, deltaCm };
+    const min=Number(r.min),raw=r[field];
+    const hasValue=String(raw??'').trim()!==''&&Number.isFinite(Number(raw));
+    const valueNum=hasValue?Number(raw):null;
+    const deltaM=(hasValue&&Number.isFinite(ruheNum))?Math.abs(valueNum-ruheNum):null;
+    const deltaCm=deltaM!==null?deltaM*100:null;
+    return{min:Number.isFinite(min)?min:null,valueNum,deltaM,deltaCm};
   });
 }
-
 function drawFooter(page,ctx,subtitle=''){
-  const { mm,fontR,K }=ctx;
-  const y=mm(8);
-  drawTextSafe(page,`${FIRMA.name} ${FIRMA.adresse} ${FIRMA.tel}`,{ x:mm(12), y, size:7.8, font:fontR, color:K });
-  drawTextSafe(page,`${FIRMA.email} · ${FIRMA.web}${subtitle ? ' · '+subtitle : ''}`,{ x:mm(12), y:mm(4), size:7.8, font:fontR, color:K });
+  const{mm,fontR,K}=ctx;
+  drawTextSafe(page,`${FIRMA.name} ${FIRMA.adresse} ${FIRMA.tel}`,{x:mm(12),y:mm(8),size:7.8,font:fontR,color:K});
+  drawTextSafe(page,`${FIRMA.email} · ${FIRMA.web}${subtitle?' · '+subtitle:''}`,{x:mm(12),y:mm(4),size:7.8,font:fontR,color:K});
 }
-
 function drawHeaderBar(page,ctx,title,sub=''){
-  const { mm,fontR,fontB,K,GREY,logo,PAGE_W,PAGE_H }=ctx;
-  const margin=mm(8), W=PAGE_W-2*margin, H=PAGE_H-2*margin;
-  const hdrH=mm(13);
-  page.drawRectangle({ x:margin, y:margin+H-hdrH, width:W, height:hdrH, color:GREY, borderColor:K, borderWidth:0.8 });
-  if(logo){
-    const lh=hdrH*0.75;
-    const scale=lh/logo.height;
-    page.drawImage(logo,{ x:margin+mm(2), y:margin+H-hdrH+(hdrH-lh)/2, width:logo.width*scale, height:lh });
-  }
-  drawTextSafe(page,title,{ x:margin+mm(32), y:margin+H-hdrH+mm(4.2), size:13, font:fontB, color:K });
-  if(sub) drawTextSafe(page,sub,{ x:margin+mm(32), y:margin+H-hdrH+mm(1.5), size:8, font:fontR, color:K });
+  const{mm,fontR,fontB,K,GREY,logo,PAGE_W,PAGE_H}=ctx;
+  const margin=mm(8),W=PAGE_W-2*margin,H=PAGE_H-2*margin,hdrH=mm(13);
+  page.drawRectangle({x:margin,y:margin+H-hdrH,width:W,height:hdrH,color:GREY,borderColor:K,borderWidth:0.8});
+  if(logo){const lh=hdrH*0.75,scale=lh/logo.height;page.drawImage(logo,{x:margin+mm(2),y:margin+H-hdrH+(hdrH-lh)/2,width:logo.width*scale,height:lh});}
+  drawTextSafe(page,title,{x:margin+mm(32),y:margin+H-hdrH+mm(4.2),size:13,font:fontB,color:K});
+  if(sub)drawTextSafe(page,sub,{x:margin+mm(32),y:margin+H-hdrH+mm(1.5),size:8,font:fontR,color:K});
 }
-
 function drawMetaGrid(page,x,yTop,w,rowH,meta,fontR,fontB,K){
   const rows=[
     [['Objekt',meta.objekt||''],['Geprüft durch',meta.geprueftDurch||''],['Straße',meta.grundstueck||''],['Geprüft am',dateDE(meta.geprueftAm)||'']],
@@ -982,169 +864,312 @@ function drawMetaGrid(page,x,yTop,w,rowH,meta,fontR,fontB,K){
   ];
   rows.forEach((row,rIdx)=>{
     const y=yTop-rowH*(rIdx+1);
-    page.drawRectangle({ x, y, width:w, height:rowH, borderColor:K, borderWidth:0.7 });
+    page.drawRectangle({x,y,width:w,height:rowH,borderColor:K,borderWidth:0.7});
     const cw=w/4;
-    for(let i=1;i<4;i++) page.drawLine({ start:{x:x+i*cw,y}, end:{x:x+i*cw,y:y+rowH}, thickness:0.7, color:K });
-    row.forEach((cell,i)=>{
-      const cx=x+i*cw+4;
-      if(cell[0]) drawTextSafe(page,cell[0],{ x:cx, y:y+rowH-10, size:7, font:fontB, color:K });
-      if(cell[1]) drawTextSafe(page,cell[1],{ x:cx, y:y+4, size:8, font:fontR, color:K });
-    });
+    for(let i=1;i<4;i++)page.drawLine({start:{x:x+i*cw,y},end:{x:x+i*cw,y:y+rowH},thickness:0.7,color:K});
+    row.forEach((cell,i)=>{const cx=x+i*cw+4;if(cell[0])drawTextSafe(page,cell[0],{x:cx,y:y+rowH-10,size:7,font:fontB,color:K});if(cell[1])drawTextSafe(page,cell[1],{x:cx,y:y+4,size:8,font:fontR,color:K});});
   });
 }
-
 function drawWellTable(page,opt){
-  const { x,yTop,w,key,rows,fontR,fontB,K,grey }=opt;
-  const title=getWellLabel(key);
-  const titleH=13, headH=15, rowH=8.2;
-  const totalH=titleH+headH+rows.length*rowH;
-
-  page.drawRectangle({ x, y:yTop-titleH, width:w, height:titleH, color:grey, borderColor:K, borderWidth:0.7 });
-  drawTextSafe(page,title,{ x:x+4, y:yTop-titleH+3.8, size:7.8, font:fontB, color:K });
-
+  const{x,yTop,w,key,rows,fontR,fontB,K,grey}=opt;
+  const titleH=13,headH=15,rowH=8.2,totalH=titleH+headH+rows.length*rowH;
+  page.drawRectangle({x,y:yTop-titleH,width:w,height:titleH,color:grey,borderColor:K,borderWidth:0.7});
+  drawTextSafe(page,getWellLabel(key),{x:x+4,y:yTop-titleH+3.8,size:7.8,font:fontB,color:K});
   const yHead=yTop-titleH-headH;
-  page.drawRectangle({ x, y:yHead, width:w, height:headH, borderColor:K, borderWidth:0.7 });
-
-  const colWidths=[0.18,0.42,0.40];
-  const xs=[x]; colWidths.forEach(cw=>xs.push(xs[xs.length-1]+w*cw));
-  for(let i=1;i<xs.length-1;i++) page.drawLine({ start:{x:xs[i],y:yTop-totalH}, end:{x:xs[i],y:yTop-titleH}, thickness:0.6, color:K });
-
-  drawTextSafe(page,'Min',{ x:xs[0]+3, y:yHead+5, size:6.8, font:fontB, color:K });
-  drawTextSafe(page,'m ab OK Brunnen',{ x:xs[1]+3, y:yHead+5, size:6.8, font:fontB, color:K });
-  drawTextSafe(page,'Δ Ruhewasser [m]',{ x:xs[2]+3, y:yHead+5, size:6.8, font:fontB, color:K });
-
+  page.drawRectangle({x,y:yHead,width:w,height:headH,borderColor:K,borderWidth:0.7});
+  const colWidths=[0.18,0.42,0.40];const xs=[x];colWidths.forEach(cw=>xs.push(xs[xs.length-1]+w*cw));
+  for(let i=1;i<xs.length-1;i++)page.drawLine({start:{x:xs[i],y:yTop-totalH},end:{x:xs[i],y:yTop-titleH},thickness:0.6,color:K});
+  drawTextSafe(page,'Min',{x:xs[0]+3,y:yHead+5,size:6.8,font:fontB,color:K});
+  drawTextSafe(page,'m ab OK Brunnen',{x:xs[1]+3,y:yHead+5,size:6.8,font:fontB,color:K});
+  drawTextSafe(page,'Δ Ruhewasser [m]',{x:xs[2]+3,y:yHead+5,size:6.8,font:fontB,color:K});
   let y=yHead;
   rows.forEach(r=>{
     const nextY=y-rowH;
-    page.drawLine({ start:{x,y:nextY}, end:{x:x+w,y:nextY}, thickness:0.6, color:K });
-    drawTextSafe(page, Number.isFinite(r.min)?String(r.min):'—', { x:xs[0]+3, y:nextY+2.4, size:6.7, font:fontR, color:K });
-    drawTextSafe(page, r.valueNum!==null?fmtComma(r.valueNum,3):'—', { x:xs[1]+3, y:nextY+2.4, size:6.7, font:fontR, color:K });
-    drawTextSafe(page, r.deltaM!==null?fmtComma(r.deltaM,3):'—', { x:xs[2]+3, y:nextY+2.4, size:6.7, font:fontR, color:K });
+    page.drawLine({start:{x,y:nextY},end:{x:x+w,y:nextY},thickness:0.6,color:K});
+    drawTextSafe(page,Number.isFinite(r.min)?String(r.min):'—',{x:xs[0]+3,y:nextY+2.4,size:6.7,font:fontR,color:K});
+    drawTextSafe(page,r.valueNum!==null?fmtComma(r.valueNum,3):'—',{x:xs[1]+3,y:nextY+2.4,size:6.7,font:fontR,color:K});
+    drawTextSafe(page,r.deltaM!==null?fmtComma(r.deltaM,3):'—',{x:xs[2]+3,y:nextY+2.4,size:6.7,font:fontR,color:K});
     y=nextY;
   });
-
-  page.drawRectangle({ x, y:yTop-totalH, width:w, height:totalH, borderColor:K, borderWidth:0.7 });
+  page.drawRectangle({x,y:yTop-totalH,width:w,height:totalH,borderColor:K,borderWidth:0.7});
   return totalH;
 }
-
 function drawWellChart(page,opt){
-  const { x,y,w,h,key,rows,fontR,fontB,K,grey,degrees,gridColor,lineColor }=opt;
-  page.drawRectangle({ x, y, width:w, height:h, borderColor:K, borderWidth:0.7 });
-  page.drawRectangle({ x, y:y+h-13, width:w, height:13, color:grey, borderColor:K, borderWidth:0.7 });
-  drawTextSafe(page,`Diagramm ${getWellLabel(key)}`,{ x:x+4, y:y+h-9, size:7.6, font:fontB, color:K });
-
-  const plotPadL=42, plotPadR=10, plotPadT=40, plotPadB=12;
-  const px=x+plotPadL, py=y+plotPadB;
-  const pw=w-plotPadL-plotPadR, ph=h-plotPadT-plotPadB;
-  const plotTop=py+ph;
+  const{x,y,w,h,key,rows,fontR,fontB,K,grey,degrees,gridColor,lineColor}=opt;
+  page.drawRectangle({x,y,width:w,height:h,borderColor:K,borderWidth:0.7});
+  page.drawRectangle({x,y:y+h-13,width:w,height:13,color:grey,borderColor:K,borderWidth:0.7});
+  drawTextSafe(page,`Diagramm ${getWellLabel(key)}`,{x:x+4,y:y+h-9,size:7.6,font:fontB,color:K});
+  const plotPadL=42,plotPadR=10,plotPadT=40,plotPadB=12;
+  const px=x+plotPadL,py=y+plotPadB,pw=w-plotPadL-plotPadR,ph=h-plotPadT-plotPadB,plotTop=py+ph;
   const valid=rows.filter(r=>Number.isFinite(r.min)&&Number.isFinite(r.deltaCm));
   const maxX=valid.length?Math.max(...valid.map(p=>p.min)):10;
   const maxY=valid.length?Math.max(...valid.map(p=>p.deltaCm)):10;
-  const xAxis=getNiceAxis(0,maxX>0?maxX:10,6);
-  const yAxis=getNiceAxis(0,maxY>0?maxY:10,6);
-  const xTicks=buildTicks(xAxis), yTicks=buildTicks(yAxis);
+  const xAxis=getNiceAxis(0,maxX>0?maxX:10,6),yAxis=getNiceAxis(0,maxY>0?maxY:10,6);
+  const xTicks=buildTicks(xAxis),yTicks=buildTicks(yAxis);
   const tx=v=>px+((v-xAxis.min)/(xAxis.max-xAxis.min||1))*pw;
   const ty=v=>py+((v-yAxis.min)/(yAxis.max-yAxis.min||1))*ph;
-
-  yTicks.forEach(v=>{
-    const yy=ty(v);
-    page.drawLine({ start:{x:px,y:yy}, end:{x:px+pw,y:yy}, thickness:0.5, color:gridColor });
-    drawTextSafe(page, fmtTick(v,0), { x:px-22, y:yy-2, size:6.2, font:fontR, color:K });
-  });
-  xTicks.forEach(v=>{
-    const xx=tx(v);
-    page.drawLine({ start:{x:xx,y:py}, end:{x:xx,y:py+ph}, thickness:0.5, color:gridColor });
-    drawTextSafe(page, fmtTick(v,0), { x:xx-6, y:plotTop+4, size:6.2, font:fontR, color:K });
-  });
-
-  page.drawRectangle({ x:px, y:py, width:pw, height:ph, borderColor:K, borderWidth:0.7 });
-  drawTextSafe(page,'Zeit [min]',{ x:px+pw/2-18, y:plotTop+16, size:6.8, font:fontB, color:K });
-  drawTextSafe(page,'Absenkung [cm]',{ x:x+10, y:py+ph/2-22, size:6.8, font:fontB, color:K, rotate:degrees(90) });
-
-  if(!valid.length){
-    drawTextSafe(page,'Noch keine Messwerte',{ x:px+pw/2-28, y:py+ph/2, size:7, font:fontR, color:K });
-    return;
-  }
-
-  for(let i=0;i<valid.length-1;i++){
-    const a=valid[i], b=valid[i+1];
-    page.drawLine({ start:{x:tx(a.min),y:ty(a.deltaCm)}, end:{x:tx(b.min),y:ty(b.deltaCm)}, thickness:1.3, color:lineColor });
-  }
-  valid.forEach(p=>{
-    page.drawCircle({ x:tx(p.min), y:ty(p.deltaCm), size:2.1, color:lineColor, borderColor:K, borderWidth:0.3 });
-  });
+  yTicks.forEach(v=>{const yy=ty(v);page.drawLine({start:{x:px,y:yy},end:{x:px+pw,y:yy},thickness:0.5,color:gridColor});drawTextSafe(page,fmtTick(v,0),{x:px-22,y:yy-2,size:6.2,font:fontR,color:K});});
+  xTicks.forEach(v=>{const xx=tx(v);page.drawLine({start:{x:xx,y:py},end:{x:xx,y:py+ph},thickness:0.5,color:gridColor});drawTextSafe(page,fmtTick(v,0),{x:xx-6,y:plotTop+4,size:6.2,font:fontR,color:K});});
+  page.drawRectangle({x:px,y:py,width:pw,height:ph,borderColor:K,borderWidth:0.7});
+  drawTextSafe(page,'Zeit [min]',{x:px+pw/2-18,y:plotTop+16,size:6.8,font:fontB,color:K});
+  drawTextSafe(page,'Absenkung [cm]',{x:x+10,y:py+ph/2-22,size:6.8,font:fontB,color:K,rotate:degrees(90)});
+  if(!valid.length){drawTextSafe(page,'Noch keine Messwerte',{x:px+pw/2-28,y:py+ph/2,size:7,font:fontR,color:K});return;}
+  for(let i=0;i<valid.length-1;i++){const a=valid[i],b=valid[i+1];page.drawLine({start:{x:tx(a.min),y:ty(a.deltaCm)},end:{x:tx(b.min),y:ty(b.deltaCm)},thickness:1.3,color:lineColor});}
+  valid.forEach(p=>page.drawCircle({x:tx(p.min),y:ty(p.deltaCm),size:2.1,color:lineColor,borderColor:K,borderWidth:0.3}));
 }
-
 function drawStageSplitLayout(page,opt){
-  const { x,yTop,yBottom,w,versuch,foerder,schluck,fontR,fontB,K,grey,degrees,rgb,selection }=opt;
+  const{x,yTop,yBottom,w,versuch,foerder,schluck,fontR,fontB,K,grey,degrees,rgb,selection}=opt;
   const stageH=22;
-  page.drawRectangle({ x, y:yTop-stageH, width:w, height:stageH, color:grey, borderColor:K, borderWidth:0.8 });
-  drawTextSafe(page, `Pumpversuch   ${versuch._stageTitle||'Stufe'}   ${getPdfRateLs(versuch)} [l/s]`, { x:x+4, y:yTop-stageH+11, size:8.5, font:fontB, color:K });
-  drawTextSafe(page, `${getPdfRateM3h(versuch)} [m³/h]`, { x:x+4, y:yTop-stageH+4, size:7.5, font:fontR, color:K });
-
-  const keys=['foerder','schluck'].filter(k=>selection[k]);
-  if(!keys.length) return;
-
-  const gap=10;
-  const colW=keys.length>1 ? (w-gap)/2 : w;
-  const contentTop=yTop-stageH-6;
-
+  page.drawRectangle({x,y:yTop-stageH,width:w,height:stageH,color:grey,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Pumpversuch   ${versuch._stageTitle||'Stufe'}   ${getPdfRateLs(versuch)} [l/s]`,{x:x+4,y:yTop-stageH+11,size:8.5,font:fontB,color:K});
+  drawTextSafe(page,`${getPdfRateM3h(versuch)} [m³/h]`,{x:x+4,y:yTop-stageH+4,size:7.5,font:fontR,color:K});
+  const keys=['foerder','schluck'].filter(k=>selection[k]);if(!keys.length)return;
+  const gap=10,colW=keys.length>1?(w-gap)/2:w,contentTop=yTop-stageH-6;
   keys.forEach((key,i)=>{
     const well=key==='foerder'?foerder:schluck;
     const rows=getWellRowsForPdf(versuch,key,well?.ruhe);
-    const colX=x+i*(colW+gap);
-    const tableTop=contentTop;
-    const tableH=drawWellTable(page,{ x:colX, yTop:tableTop, w:colW, key, rows, fontR, fontB, K, grey });
-    const chartTop=tableTop-tableH-6;
-    const chartY=yBottom;
-    const chartH=Math.max(95, chartTop-chartY);
-
-    drawWellChart(page,{
-      x:colX, y:chartY, w:colW, h:chartH, key, rows,
-      fontR, fontB, K, grey, degrees,
-      gridColor: rgb(0.82,0.82,0.82),
-      lineColor: key==='foerder' ? rgb(0.16,0.46,0.84) : rgb(0.90,0.56,0.16)
-    });
+    const colX=x+i*(colW+gap),tableTop=contentTop;
+    const tableH=drawWellTable(page,{x:colX,yTop:tableTop,w:colW,key,rows,fontR,fontB,K,grey});
+    const chartY=yBottom,chartH=Math.max(95,tableTop-tableH-6-chartY);
+    drawWellChart(page,{x:colX,y:chartY,w:colW,h:chartH,key,rows,fontR,fontB,K,grey,degrees,gridColor:rgb(0.82,0.82,0.82),lineColor:key==='foerder'?rgb(0.16,0.46,0.84):rgb(0.90,0.56,0.16)});
   });
+}
+
+async function drawImagePage(pdf,ctx,title,subtitle,dataUrl){
+  const{PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY,logo}=ctx;
+  const page=pdf.addPage([PAGE_W,PAGE_H]);
+  const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
+  page.drawRectangle({x:x0,y:y0,width:W,height:H,borderColor:K,borderWidth:1.2});
+  const hdrH=mm(13);
+  page.drawRectangle({x:x0,y:y0+H-hdrH,width:W,height:hdrH,color:GREY,borderColor:K,borderWidth:0.8});
+  if(logo){const lh=hdrH*0.75,scale=lh/logo.height;page.drawImage(logo,{x:x0+mm(2),y:y0+H-hdrH+(hdrH-lh)/2,width:logo.width*scale,height:lh});}
+  drawTextSafe(page,title,{x:x0+mm(32),y:y0+H-hdrH+mm(4.2),size:13,font:fontB,color:K});
+  if(subtitle)drawTextSafe(page,subtitle,{x:x0+mm(32),y:y0+H-hdrH+mm(1.5),size:8,font:fontR,color:K});
+  if(dataUrl){
+    try{
+      const img=await embedDataUrlImage(pdf,dataUrl);
+      const areaX=x0+mm(8),areaY=y0+mm(12),areaW=W-mm(16),areaH=H-hdrH-mm(18);
+      const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
+      if(dh>areaH){dh=areaH;dw=dh*ratio;}
+      const dx=areaX+(areaW-dw)/2,dy=areaY+(areaH-dh)/2;
+      page.drawImage(img,{x:dx,y:dy,width:dw,height:dh});
+    }catch(err){console.error(err);drawTextSafe(page,'Bild konnte nicht eingebettet werden.',{x:x0+20,y:y0+H/2,size:10,font:fontR,color:K});}
+  }else{
+    page.drawRectangle({x:x0+mm(15),y:y0+mm(20),width:W-mm(30),height:H-hdrH-mm(35),borderColor:K,borderWidth:0.8});
+    drawTextSafe(page,'Kein Bild vorhanden.',{x:x0+35,y:y0+H/2,size:10,font:fontR,color:K});
+  }
+  drawFooter(page,ctx,title);
+}
+
+async function drawCoverPage(pdf,ctx,snap){
+  const{PAGE_W,PAGE_H,mm,fontR,fontB,K,logo}=ctx;
+  const page=pdf.addPage([PAGE_W,PAGE_H]);
+  const margin=mm(14),W=PAGE_W-2*margin,H=PAGE_H-2*margin;
+  page.drawRectangle({x:margin,y:margin,width:W,height:H,borderColor:K,borderWidth:1.2});
+  if(logo){const w=mm(55),lh=logo.height*(w/logo.width);page.drawImage(logo,{x:margin+mm(4),y:PAGE_H-margin-lh-mm(2),width:w,height:lh});}
+  drawTextSafe(page,FIRMA.name,{x:margin+mm(4),y:PAGE_H-margin-mm(18),size:11,font:fontB,color:K});
+  drawTextSafe(page,FIRMA.slogan,{x:margin+mm(4),y:PAGE_H-margin-mm(25),size:8.5,font:fontR,color:K});
+  drawTextSafe(page,'Pumpversuch',{x:margin+mm(4),y:PAGE_H-margin-mm(38),size:24,font:fontB,color:K});
+  drawTextSafe(page,'BAUVORHABEN',{x:margin+mm(4),y:PAGE_H-margin-mm(53),size:10,font:fontB,color:K});
+  drawTextSafe(page,snap.meta?.objekt||'—',{x:margin+mm(4),y:PAGE_H-margin-mm(62),size:18,font:fontR,color:K});
+  drawTextSafe(page,'AUFTRAGGEBER',{x:margin+mm(4),y:PAGE_H-margin-mm(78),size:10,font:fontB,color:K});
+  drawTextSafe(page,snap.meta?.auftraggeber||'—',{x:margin+mm(4),y:PAGE_H-margin-mm(87),size:16,font:fontR,color:K});
+  drawTextSafe(page,`Arzl, am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,{x:margin+mm(4),y:PAGE_H-margin-mm(104),size:12,font:fontR,color:K});
+  const photo=snap.overviewPhotoDataUrl||snap.versuche?.find(v=>v.photoDataUrl)?.photoDataUrl||'';
+  if(photo){try{const img=await embedDataUrlImage(pdf,photo);const areaX=margin+mm(4),areaY=margin+mm(20),areaW=W-mm(8),areaH=mm(110);const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;if(dh>areaH){dh=areaH;dw=dh*ratio;}page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaY+(areaH-dh)/2,width:dw,height:dh});}catch(err){console.error(err);}}
+  drawFooter(page,ctx,'Pumpversuch');
+}
+
+async function drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh){
+  const{PAGE_W,PAGE_H,mm,fontR,fontB,K,logo}=ctx;
+  const page=pdf.addPage([PAGE_W,PAGE_H]);
+  const margin=mm(14),W=PAGE_W-2*margin,H=PAGE_H-2*margin;
+  page.drawRectangle({x:margin,y:margin,width:W,height:H,borderColor:K,borderWidth:1.2});
+  if(logo){const w=mm(52),lh=logo.height*(w/logo.width);page.drawImage(logo,{x:margin+mm(4),y:PAGE_H-margin-lh-mm(2),width:w,height:lh});}
+  drawTextSafe(page,'Inhaltsverzeichnis',{x:margin+mm(4),y:PAGE_H-margin-mm(32),size:22,font:fontB,color:K});
+  const lines=['1. Protokoll Pumpversuch'];let n=2;
+  if(hasOverview)lines.push(`${n++}. Übersichtsfoto`);
+  if(hasRestsand)lines.push(`${n++}. Restsandmessung`);
+  if(hasPh)lines.push(`${n++}. pH / Sulfat`);
+  let y=PAGE_H-margin-mm(50);
+  lines.forEach(line=>{drawTextSafe(page,line,{x:margin+mm(8),y,size:14,font:fontR,color:K});y-=mm(10);});
+  drawFooter(page,ctx,'Pumpversuch');
+}
+
+async function drawProtocolStagePage(pdf,ctx,snap,versuch,index){
+  const{PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY,rgb,degrees}=ctx;
+  const page=pdf.addPage([PAGE_W,PAGE_H]);
+  const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
+  page.drawRectangle({x:x0,y:y0,width:W,height:H,borderColor:K,borderWidth:1.2});
+  drawHeaderBar(page,ctx,'Pumpversuch',FIRMA.name);
+  let cy=y0+H-mm(13)-mm(2);
+  const metaRowH=mm(9);
+  drawMetaGrid(page,x0,cy,W,metaRowH,snap.meta||{},fontR,fontB,K);
+  cy-=metaRowH*3;
+  const ruheHdrH=10,ruheRowH=13;
+  page.drawRectangle({x:x0,y:cy-ruheHdrH,width:W,height:ruheHdrH,color:GREY,borderColor:K,borderWidth:0.7});
+  drawTextSafe(page,'Ruhewasserspiegel [m]',{x:x0+4,y:cy-ruheHdrH+2.5,size:7.5,font:fontB,color:K});
+  cy-=ruheHdrH;
+  const selection=snap.selection||{foerder:true,schluck:false};
+  const wellsRW=[];
+  if(selection.foerder)wellsRW.push({label:'Förderbrunnen ab OK',value:snap.foerder?.ruhe?fmtComma(snap.foerder.ruhe,3):'—'});
+  if(selection.schluck)wellsRW.push({label:'Rückgabebrunnen ab OK',value:snap.schluck?.ruhe?fmtComma(snap.schluck.ruhe,3):'—'});
+  page.drawRectangle({x:x0,y:cy-ruheRowH,width:W,height:ruheRowH,borderColor:K,borderWidth:0.7});
+  if(wellsRW.length>=1){
+    const colW=W/Math.max(wellsRW.length,1);
+    wellsRW.forEach((wr,i)=>{
+      if(i>0)page.drawLine({start:{x:x0+i*colW,y:cy-ruheRowH},end:{x:x0+i*colW,y:cy},thickness:0.7,color:K});
+      drawTextSafe(page,wr.label,{x:x0+i*colW+3,y:cy-ruheRowH+4,size:6.2,font:fontR,color:K});
+      drawTextSafe(page,wr.value,{x:x0+i*colW+3+colW*0.6,y:cy-ruheRowH+4,size:7.2,font:fontR,color:K});
+    });
+  }
+  cy-=ruheRowH;
+  page.drawRectangle({x:x0,y:cy-metaRowH,width:W,height:metaRowH,color:GREY,borderColor:K,borderWidth:0.7});
+  const wellTexts=[];
+  if(selection.foerder)wellTexts.push(`Förderbrunnen: Ø ${snap.foerder?.dm||'—'} mm · ET ${snap.foerder?.endteufe||'—'} m`);
+  if(selection.schluck)wellTexts.push(`Rückgabebrunnen: Ø ${snap.schluck?.dm||'—'} mm · ET ${snap.schluck?.endteufe||'—'} m`);
+  drawTextSafe(page,wellTexts.join('   |   '),{x:x0+4,y:cy-metaRowH+6,size:7.1,font:fontR,color:K});
+  cy-=metaRowH+mm(3);
+  versuch._stageTitle=getStageTitle(index);
+  drawStageSplitLayout(page,{x:x0,yTop:cy,yBottom:y0+mm(9),w:W,versuch,foerder:snap.foerder||{},schluck:snap.schluck||{},fontR,fontB,K,grey:GREY,degrees,rgb,selection});
+  drawFooter(page,ctx,'Pumpversuch');
+}
+
+async function drawRestsandPage(pdf,ctx,snap){
+  const{PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY}=ctx;
+  const page=pdf.addPage([PAGE_W,PAGE_H]);
+  const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
+  page.drawRectangle({x:x0,y:y0,width:W,height:H,borderColor:K,borderWidth:1.2});
+  drawHeaderBar(page,ctx,'Restsandmessung',FIRMA.name);
+  const titleY=y0+H-mm(24);
+  page.drawRectangle({x:x0,y:titleY-mm(10),width:W,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Objekt: ${snap.meta?.objekt||'—'} · Datum: ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,{x:x0+4,y:titleY-mm(7),size:8.8,font:fontB,color:K});
+  const colGap=mm(6),colW=(W-colGap)/2,topY=titleY-mm(6),blockH=H-mm(46);
+  const defs=[{title:'Imhoff-Trichter',data:snap.restsand?.imhoff,valueLabel:'Menge [ml/l]'},{title:'Sieb / Gewicht',data:snap.restsand?.sieb,valueLabel:'Menge [g]'}];
+  for(let i=0;i<defs.length;i++){
+    const cx=x0+i*(colW+colGap);
+    page.drawRectangle({x:cx,y:y0+mm(20),width:colW,height:blockH,borderColor:K,borderWidth:0.8});
+    page.drawRectangle({x:cx,y:topY-mm(10),width:colW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+    drawTextSafe(page,defs[i].title,{x:cx+4,y:topY-mm(7),size:10,font:fontB,color:K});
+    const photoUrl=defs[i].data?.photoDataUrl||'';
+    if(photoUrl){
+      try{
+        const img=await embedDataUrlImage(pdf,photoUrl);
+        const areaX=cx+mm(4),areaW=colW-mm(8),areaTop=topY-mm(16),areaBottom=y0+mm(45),areaH=areaTop-areaBottom;
+        const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
+        if(dh>areaH){dh=areaH;dw=dh*ratio;}
+        page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaBottom+(areaH-dh)/2,width:dw,height:dh});
+      }catch(err){console.error(err);}
+    }else{
+      drawTextSafe(page,'Kein Foto vorhanden.',{x:cx+18,y:y0+blockH/2,size:10,font:fontR,color:K});
+    }
+    page.drawRectangle({x:cx,y:y0+mm(20),width:colW,height:mm(14),color:GREY,borderColor:K,borderWidth:0.8});
+    drawTextSafe(page,`${defs[i].valueLabel}: ${defs[i].data?.menge||'—'}`,{x:cx+4,y:y0+mm(24),size:10,font:fontB,color:K});
+  }
+  if(snap.restsand?.bemerkung){
+    drawTextSafe(page,`Bemerkung: ${snap.restsand.bemerkung}`,{x:x0+4,y:y0+7,size:8,font:fontR,color:K});
+  }
+  drawFooter(page,ctx,'Restsandmessung');
+}
+
+async function drawPhPage(pdf,ctx,snap){
+  const{PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY}=ctx;
+  const page=pdf.addPage([PAGE_W,PAGE_H]);
+  const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
+  page.drawRectangle({x:x0,y:y0,width:W,height:H,borderColor:K,borderWidth:1.2});
+  drawHeaderBar(page,ctx,'Prüfprotokoll Sulfatmessung Wasser',FIRMA.name);
+  const headerTop=y0+H-mm(20),rowH=mm(10);
+  page.drawRectangle({x:x0,y:headerTop-rowH,width:W*0.48,height:rowH,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Datum: ${dateDE(snap.ph?.datum)||dateDE(snap.meta?.geprueftAm)||todayDE()}`,{x:x0+4,y:headerTop-rowH+4,size:9,font:fontR,color:K});
+  page.drawRectangle({x:x0+W*0.52,y:headerTop-rowH,width:W*0.48,height:rowH,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Bauherr: ${snap.ph?.bauherr||snap.meta?.auftraggeber||'—'}`,{x:x0+W*0.52+4,y:headerTop-rowH+4,size:9,font:fontR,color:K});
+  page.drawRectangle({x:x0,y:headerTop-rowH*2-mm(2),width:W,height:rowH,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Baustelle: ${snap.ph?.baustelle||snap.meta?.objekt||'—'}`,{x:x0+4,y:headerTop-rowH*2-mm(2)+4,size:9,font:fontR,color:K});
+  page.drawRectangle({x:x0,y:headerTop-rowH*3-mm(4),width:W,height:rowH,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Gewässername / Entnahmestelle: ${snap.ph?.gewaessername||'—'}`,{x:x0+4,y:headerTop-rowH*3-mm(4)+4,size:9,font:fontR,color:K});
+  const sectionY=headerTop-rowH*4-mm(10);
+  page.drawRectangle({x:x0,y:sectionY,width:W,height:mm(9),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'Messung mittels Teststäbchen "Quantofix" – Ergebnis nach 120 sec',{x:x0+4,y:sectionY+3.5,size:9,font:fontB,color:K});
+  const topBlockY=sectionY-mm(95),leftW=W*0.38,rightW=W-leftW-mm(6);
+  page.drawRectangle({x:x0,y:topBlockY,width:leftW,height:mm(88),borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:x0+leftW+mm(6),y:topBlockY,width:rightW,height:mm(88),borderColor:K,borderWidth:0.8});
+  if(snap.ph?.sulfat?.photoDataUrl){
+    try{
+      const img=await embedDataUrlImage(pdf,snap.ph.sulfat.photoDataUrl);
+      const areaX=x0+4,areaY=topBlockY+mm(12),areaW=leftW-8,areaH=mm(70);
+      const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
+      if(dh>areaH){dh=areaH;dw=dh*ratio;}
+      page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaY+(areaH-dh)/2,width:dw,height:dh});
+    }catch(err){console.error(err);}
+  }
+  page.drawRectangle({x:x0,y:topBlockY,width:leftW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`${snap.ph?.sulfat?.wert||'—'} mg/l SO4²-`,{x:x0+4,y:topBlockY+3.2,size:10,font:fontB,color:K});
+  const rx=x0+leftW+mm(6);
+  drawTextSafe(page,'Gültig für erhärteten Beton / Suspension:',{x:rx+4,y:topBlockY+mm(74),size:9,font:fontB,color:K});
+  page.drawRectangle({x:rx+4,y:topBlockY+mm(42),width:rightW-8,height:mm(26),borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'Grenzwerte Expositionsklassen',{x:rx+10,y:topBlockY+mm(62),size:8.5,font:fontB,color:K});
+  drawTextSafe(page,'SO4²- [mg/l]  XA1: ≥200 ≤600   XA2: >600 ≤3000   XA3: >3000 ≤6000',{x:rx+10,y:topBlockY+mm(52),size:7.2,font:fontR,color:K});
+  drawTextSafe(page,'Gültig für Anmachwasser (ÖNORM EN 1008)',{x:rx+4,y:topBlockY+mm(34),size:9,font:fontB,color:K});
+  drawTextSafe(page,'Schwefelgehalt als SO4²- darf 2 000 mg/l nicht überschreiten.',{x:rx+8,y:topBlockY+mm(24),size:7.2,font:fontR,color:K});
+  const bottomY=y0+mm(16),blockH=mm(70),blockW=(W-mm(8))/2;
+  page.drawRectangle({x:x0,y:bottomY,width:blockW,height:blockH,borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:x0,y:bottomY+blockH-mm(10),width:blockW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'Temperatur Messung',{x:x0+4,y:bottomY+blockH-mm(7),size:10,font:fontB,color:K});
+  if(snap.ph?.temperatur?.photoDataUrl){
+    try{
+      const img=await embedDataUrlImage(pdf,snap.ph.temperatur.photoDataUrl);
+      const areaX=x0+4,areaY=bottomY+mm(10),areaW=blockW-8,areaH=blockH-mm(24);
+      const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
+      if(dh>areaH){dh=areaH;dw=dh*ratio;}
+      page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaY+(areaH-dh)/2,width:dw,height:dh});
+    }catch(err){console.error(err);}
+  }
+  page.drawRectangle({x:x0,y:bottomY,width:blockW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`${snap.ph?.temperatur?.wert||'—'} °C`,{x:x0+4,y:bottomY+3.2,size:10,font:fontB,color:K});
+  const px2=x0+blockW+mm(8);
+  page.drawRectangle({x:px2,y:bottomY,width:blockW,height:blockH,borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:px2,y:bottomY+blockH-mm(10),width:blockW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'pH Messung',{x:px2+4,y:bottomY+blockH-mm(7),size:10,font:fontB,color:K});
+  if(snap.ph?.ph?.photoDataUrl){
+    try{
+      const img=await embedDataUrlImage(pdf,snap.ph.ph.photoDataUrl);
+      const areaX=px2+4,areaY=bottomY+mm(10),areaW=blockW-8,areaH=blockH-mm(24);
+      const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;
+      if(dh>areaH){dh=areaH;dw=dh*ratio;}
+      page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaY+(areaH-dh)/2,width:dw,height:dh});
+    }catch(err){console.error(err);}
+  }
+  page.drawRectangle({x:px2,y:bottomY,width:blockW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`${snap.ph?.ph?.wert||'—'} pH`,{x:px2+4,y:bottomY+3.2,size:10,font:fontB,color:K});
+  drawFooter(page,ctx,'Sulfatmessung Wasser');
 }
 
 /* ── PDF EXPORTS ── */
 async function exportPdf(snapshot=null,type='protokoll'){
   const snap=snapshot||collectSnapshot();
-  if(!window.PDFLib){ alert('PDF-Library noch nicht geladen.'); return; }
+  if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
   const versuche=(snap.versuche||[]).map(v=>hydrateVersuch(v));
-  if(!versuche.length){ alert('Es ist noch keine Pumpstufe vorhanden.'); return; }
-
-  const { PDFDocument }=window.PDFLib;
+  if(!versuche.length){alert('Es ist noch keine Pumpstufe vorhanden.');return;}
+  const{PDFDocument}=window.PDFLib;
   const pdf=await PDFDocument.create();
   const assets=await loadPdfAssets(pdf);
   const ctx=getPdfCtx(window.PDFLib,assets);
-
   if(type==='vollstaendig'){
     const hasOverview=!!snap.overviewPhotoDataUrl;
     const hasRestsand=!!(snap.restsand?.imhoff?.photoDataUrl||snap.restsand?.sieb?.photoDataUrl||snap.restsand?.imhoff?.menge||snap.restsand?.sieb?.menge||snap.restsand?.bemerkung);
     const hasPh=!!(snap.ph?.sulfat?.wert||snap.ph?.temperatur?.wert||snap.ph?.ph?.wert||snap.ph?.sulfat?.photoDataUrl||snap.ph?.temperatur?.photoDataUrl||snap.ph?.ph?.photoDataUrl);
-
     await drawCoverPage(pdf,ctx,snap);
     await drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh);
-
     for(let i=0;i<versuche.length;i++){
       await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
-      if(versuche[i].photoDataUrl){
-        await drawImagePage(pdf,ctx,`Foto Durchflussmesser ${getStageTitle(i)}`,`${snap.meta?.objekt||''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,versuche[i].photoDataUrl);
-      }
+      if(versuche[i].photoDataUrl)await drawImagePage(pdf,ctx,`Foto Durchflussmesser ${getStageTitle(i)}`,`${snap.meta?.objekt||''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,versuche[i].photoDataUrl);
     }
-
-    if(hasOverview){
-      const title=`Übersicht Pumpversuch ${snap.meta?.objekt || ''} ${snap.meta?.ort ? snap.meta.ort+' ' : ''}am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`.replace(/\s+/g,' ').trim();
-      await drawImagePage(pdf,ctx,title,'Übersichtsfoto',snap.overviewPhotoDataUrl);
-    }
-    if(hasRestsand) await drawRestsandPage(pdf,ctx,snap);
-    if(hasPh) await drawPhPage(pdf,ctx,snap);
+    if(hasOverview){const title=`Übersicht ${snap.meta?.objekt||''} am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`.replace(/\s+/g,' ').trim();await drawImagePage(pdf,ctx,title,'Übersichtsfoto',snap.overviewPhotoDataUrl);}
+    if(hasRestsand)await drawRestsandPage(pdf,ctx,snap);
+    if(hasPh)await drawPhPage(pdf,ctx,snap);
   }else{
-    for(let i=0;i<versuche.length;i++) await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
+    for(let i=0;i<versuche.length;i++)await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
   }
-
   const bytes=await pdf.save();
   const blob=new Blob([bytes],{type:'application/pdf'});
   const url=URL.createObjectURL(blob);
@@ -1155,10 +1180,11 @@ async function exportPdf(snapshot=null,type='protokoll'){
   if(!w){const a=document.createElement('a');a.href=url;a.download=fileName;a.click();}
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
+
 async function exportRestsandPdf(snapshot=null){
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
-  const { PDFDocument }=window.PDFLib;
+  const{PDFDocument}=window.PDFLib;
   const pdf=await PDFDocument.create();
   const assets=await loadPdfAssets(pdf);
   const ctx=getPdfCtx(window.PDFLib,assets);
@@ -1167,15 +1193,15 @@ async function exportRestsandPdf(snapshot=null){
   const blob=new Blob([bytes],{type:'application/pdf'});
   const url=URL.createObjectURL(blob);
   const obj=(snap.meta?.objekt||'Restsand').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');
-  const fileName=`${dateTag()}_HTB_Restsandprotokoll_${obj||'Dokument'}.pdf`;
   const w=window.open(url,'_blank');
-  if(!w){const a=document.createElement('a');a.href=url;a.download=fileName;a.click();}
+  if(!w){const a=document.createElement('a');a.href=url;a.download=`${dateTag()}_HTB_Restsandprotokoll_${obj||'Dokument'}.pdf`;a.click();}
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
+
 async function exportPhPdf(snapshot=null){
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
-  const { PDFDocument }=window.PDFLib;
+  const{PDFDocument}=window.PDFLib;
   const pdf=await PDFDocument.create();
   const assets=await loadPdfAssets(pdf);
   const ctx=getPdfCtx(window.PDFLib,assets);
@@ -1184,9 +1210,8 @@ async function exportPhPdf(snapshot=null){
   const blob=new Blob([bytes],{type:'application/pdf'});
   const url=URL.createObjectURL(blob);
   const obj=(snap.meta?.objekt||'Sulfatmessung').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');
-  const fileName=`${dateTag()}_HTB_Sulfatprotokoll_${obj||'Dokument'}.pdf`;
   const w=window.open(url,'_blank');
-  if(!w){const a=document.createElement('a');a.href=url;a.download=fileName;a.click();}
+  if(!w){const a=document.createElement('a');a.href=url;a.download=`${dateTag()}_HTB_Sulfatprotokoll_${obj||'Dokument'}.pdf`;a.click();}
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 
@@ -1195,10 +1220,14 @@ function resetAll(){
   if(!confirm('Alle Eingaben wirklich zurücksetzen?'))return;
   Object.keys(timerMap).forEach(hardStopTimer);
   const base=getInitialState();
-  state.meta=clone(base.meta);state.selection=clone(base.selection);state.foerder=clone(base.foerder);state.schluck=clone(base.schluck);
-  state.overviewPhotoDataUrl='';state.versuche=[];state.restsand=clone(base.restsand);state.ph=clone(base.ph);state.settings=clone(base.settings);
-  syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();syncRestsandToUi();syncPhToUi();syncSettingsToUi();renderVersuche();renderLiveTab();saveDraftDebounced();
+  state.meta=clone(base.meta);state.selection=clone(base.selection);
+  state.foerder=clone(base.foerder);state.schluck=clone(base.schluck);
+  state.overviewPhotoDataUrl='';state.versuche=[];
+  state.restsand=clone(base.restsand);state.ph=clone(base.ph);state.settings=clone(base.settings);
+  syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();
+  syncRestsandToUi();syncPhToUi();syncSettingsToUi();renderVersuche();renderLiveTab();saveDraftDebounced();
 }
+
 function initInstallButton(){
   let installPrompt=null;
   const btn=$('btnInstall');
