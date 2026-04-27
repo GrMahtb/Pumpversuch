@@ -846,7 +846,6 @@ function getWellRowsForPdf(versuch,key,ruhe){
 function drawFooter(page,ctx,subtitle=''){
   const{mm,fontR,K}=ctx;
   const margin=mm(8);
-  // Fußzeile INNERHALB des Rahmens (margin = Rahmenboden)
   drawTextSafe(page,`${FIRMA.name}  ·  ${FIRMA.adresse}  ·  ${FIRMA.tel}`,
     {x:mm(12),y:margin+mm(4.5),size:7.5,font:fontR,color:K});
   drawTextSafe(page,`${FIRMA.email}  ·  ${FIRMA.web}${subtitle?' · '+subtitle:''}`,
