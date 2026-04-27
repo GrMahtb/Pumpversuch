@@ -841,7 +841,7 @@ async function loadPdfAssets(pdf){
 
   let coverPhoto = null;
   try{
-    const photoBytes = await fetch(`${BASE}assets/cover-photo.jpg?v=1`).then(r=>r.arrayBuffer());
+    const photoBytes = await fetch(`${BASE}cover-photo.jpg?v=1`).then(r=>r.arrayBuffer());
     coverPhoto = await pdf.embedJpg(photoBytes);
   }catch{}
 
