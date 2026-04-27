@@ -1025,306 +1025,255 @@ async function drawCoverPage(pdf, ctx, snap) {
   const page = pdf.addPage([PAGE_W, PAGE_H]);
 
   // ── Fußzeile ──
-  const footerH = drawNewFooterFull(page, ctx);   // Gesamthöhe der Fußzone
-  const contentBottom = footerH;                  // Content darf nicht tiefer gehen
+  const footerH       = drawNewFooterFull(page, ctx);
+  const contentBottom = footerH;
 
   // ── Layout-Maße ──
-  const margin   = mm(10);
-  const leftW    = PAGE_W * 0.52;                 // linke Spalte ~52 %
-  const rightX   = leftW + mm(6);                 // rechte Spalte ab hier
-  const rightW   = PAGE_W - rightX - margin;      // rechte Spaltenbreite
+  const margin  = mm(10);
+  const leftW   = PAGE_W * 0.52;
+  const rightX  = leftW + mm(6);
+  const rightW  = PAGE_W - rightX - margin;
 
   // ════════════════════════════════════════
-  // KOPFBEREICH – Logo links, Titel rechts
+  // KOPFBEREICH – grauer Balken
   // ════════════════════════════════════════
-  const headerTop  = PAGE_H - margin;
-  const headerH    = mm(42);                      // Höhe des Kopfbands
-  const headerBotY = headerTop - headerH;
+  const headerH    = mm(38);
+  const headerBotY = PAGE_H - margin - headerH;
 
-  // Hintergrund-Balken oben (dunkel)
+  // Grauer Hintergrund
   page.drawRectangle({
     x: 0, y: headerBotY,
     width: PAGE_W, height: headerH,
-    color: rgb(0.05, 0.18, 0.31)                  // HTB-Dunkelblau
+    color: rgb(0.82, 0.82, 0.82)
   });
 
-  // Logo groß links oben
-  if(logo){
-    const maxLogoH = headerH - mm(8);
+  // Logo links
+  let logoY = headerBotY + mm(10);
+  if (logo) {
+    const maxLogoH = headerH - mm(14);
     const scale    = maxLogoH / logo.height;
     const lw       = logo.width  * scale;
     const lh       = logo.height * scale;
+    logoY = headerBotY + mm(10);
     page.drawImage(logo, {
       x: margin,
-      y: headerBotY + (headerH - lh) / 2,
+      y: logoY,
       width: lw, height: lh
+    });
+    // HTB-Name unter Logo
+    drawTextSafe(page, 'HTB Baugesellschaft m.b.H.', {
+      x: margin,
+      y: logoY - mm(5),
+      size: 7.5, font: fontR, color: K
     });
   }
 
-  // "Pumpversuch" groß rechts oben – zweizeilig
-  const titleX = rightX;
-  const titleY = headerBotY + mm(22);
-  page.drawText('Pump-', {
-    x: titleX, y: titleY,
-    size: 32, font: fontB,
-    color: rgb(1, 0.929, 0)                       // HTB-Gelb
-  });
-  page.drawText('versuch', {
-    x: titleX, y: titleY - mm(12),
-    size: 32, font: fontB,
-    color: rgb(1, 0.929, 0)
+  // "Pumpversuch" rechts, einzeilig, schwarz
+  drawTextSafe(page, 'Pumpversuch', {
+    x: rightX,
+    y: headerBotY + (headerH / 2) - mm(4),
+    size: 30, font: fontB,
+    color: K
   });
 
-  // Trennlinie unter Header
+  // Trennlinie unter Kopfbereich
   page.drawLine({
     start: { x: 0,      y: headerBotY },
     end:   { x: PAGE_W, y: headerBotY },
-    thickness: 2, color: rgb(1, 0.929, 0)
+    thickness: 1.5, color: K
   });
 
   // ════════════════════════════════════════
-  // RECHTE SPALTE – Cover-Photo
+  // RECHTE SPALTE – Cover-Photo (bis Fußzeile)
   // ════════════════════════════════════════
-  const photoTop    = headerBotY - mm(4);
-  const photoBottom = contentBottom;
-  const photoAreaH  = photoTop - photoBottom;
+  const photoTop   = headerBotY;
+  const photoAreaH = photoTop - contentBottom;
 
-  if(coverPhoto && photoAreaH > 0){
+  if (coverPhoto && photoAreaH > 0) {
     const ratio = coverPhoto.width / coverPhoto.height;
     let dw = rightW, dh = dw / ratio;
-    if(dh > photoAreaH){ dh = photoAreaH; dw = dh * ratio; }
-    // linksbündig in der rechten Spalte, unten ausrichten
+    if (dh > photoAreaH) { dh = photoAreaH; dw = dh * ratio; }
     page.drawImage(coverPhoto, {
       x: rightX + (rightW - dw) / 2,
-      y: photoBottom,
+      y: contentBottom,
       width: dw, height: dh
     });
   }
 
   // ════════════════════════════════════════
-  // LINKE SPALTE – Projektdaten
+  // LINKE SPALTE – 5 Felder gleichmäßig verteilt
   // ════════════════════════════════════════
-  const accentColor = rgb(0.05, 0.18, 0.31);
-  let y = headerBotY - mm(14);
 
-  // Trennlinie links
-  const lineX = margin;
-  const lineH  = y - contentBottom - mm(4);
-  page.drawRectangle({
-    x: lineX, y: contentBottom + mm(4),
-    width: 3, height: lineH,
-    color: rgb(1, 0.929, 0)
-  });
+  // Gleicher Abstand links (vom Seitenrand) und rechts (zum Foto)
+  const lineLeft  = margin + mm(6);
+  const lineRight = rightX - mm(6);
+  const lineW     = lineRight - lineLeft;
 
-  const textX = margin + mm(6);
-  const labelSize = 7.5;
-  const valueSize = 13;
-  const smallValueSize = 10;
+  const areaTop    = headerBotY - mm(4);
+  const areaBottom = contentBottom + mm(4);
+  const areaH      = areaTop - areaBottom;
 
-  function drawField(label, value, yPos, vSize = valueSize) {
-    drawTextSafe(page, label.toUpperCase(), {
-      x: textX, y: yPos + mm(7.5),
-      size: labelSize, font: fontR, color: rgb(0.45, 0.45, 0.45)
+  // Nur diese 5 Felder – Rest entfernt
+  const fields = [
+    { label: 'Bauvorhaben / Objekt', value: snap.meta?.objekt        || '—', big: false },
+    { label: 'Auftraggeber',         value: snap.meta?.auftraggeber   || '—', big: false },
+    { label: '',                     value: 'Pumpversuch',                    big: true  },
+    { label: 'Geprüft durch',        value: snap.meta?.geprueftDurch  || '—', big: false },
+    { label: 'Arzl, am',             value: dateDE(snap.meta?.geprueftAm) || todayDE(), big: false },
+  ];
+
+  const slotH = areaH / fields.length;
+
+  fields.forEach((field, i) => {
+    const slotTop    = areaTop - i * slotH;
+    const slotBottom = slotTop - slotH;
+
+    // Vertikale Mitte des Slots für den Text
+    const textY = slotBottom + slotH / 2;
+
+    if (field.label) {
+      // Kleines Label oben im Slot
+      drawTextSafe(page, field.label.toUpperCase(), {
+        x: lineLeft,
+        y: textY + mm(5),
+        size: 7, font: fontR, color: rgb(0.45, 0.45, 0.45)
+      });
+    }
+
+    // Wert
+    drawTextSafe(page, field.value, {
+      x: lineLeft,
+      y: textY - mm(2),
+      size: field.big ? 20 : 12,
+      font: fontB, color: K
     });
-    drawTextSafe(page, value || '—', {
-      x: textX, y: yPos,
-      size: vSize, font: fontB, color: accentColor
-    });
-  }
 
-  drawField('Bauvorhaben / Objekt', snap.meta?.objekt || '—', y, 15);
-  y -= mm(22);
-
-  drawField('Auftraggeber / Bauherr', snap.meta?.auftraggeber || '—', y, smallValueSize);
-  y -= mm(18);
-
-  drawField('Baustelle', `${snap.meta?.grundstueck || ''} ${snap.meta?.ort || ''}`.trim() || '—', y, smallValueSize);
-  y -= mm(18);
-
-  drawField('Geologie', snap.meta?.geologie || '—', y, smallValueSize);
-  y -= mm(18);
-
-  drawField('Auftragsnummer', snap.meta?.auftragsnummer || '—', y, smallValueSize);
-  y -= mm(18);
-
-  // Trennlinie
-  page.drawLine({
-    start: { x: textX,        y: y },
-    end:   { x: leftW - mm(6), y: y },
-    thickness: 0.6, color: rgb(0.8, 0.8, 0.8)
+    // Schwarze Trennlinie unter dem Slot (außer nach dem letzten)
+    if (i < fields.length - 1) {
+      page.drawLine({
+        start: { x: lineLeft,  y: slotBottom },
+        end:   { x: lineRight, y: slotBottom },
+        thickness: 0.7, color: K
+      });
+    }
   });
-  y -= mm(10);
-
-  drawField('Geprüft durch', snap.meta?.geprueftDurch || '—', y, smallValueSize);
-  y -= mm(18);
-
-  drawField('Geprüft am', dateDE(snap.meta?.geprueftAm) || todayDE(), y, smallValueSize);
-  y -= mm(18);
-
-  if(snap.versuche?.length){
-    drawField('Pumpstufen', String(snap.versuche.length), y, smallValueSize);
-  }
 }
-async function drawTocPage(pdf, ctx, snap, hasOverview, hasRestsand, hasPh){
+async function drawTocPage(pdf, ctx, snap, hasOverview, hasRestsand, hasPh) {
   const { PAGE_W, PAGE_H, mm, fontR, fontB, K, logo, rgb } = ctx;
   const page = pdf.addPage([PAGE_W, PAGE_H]);
 
   // ── Fußzeile ──
-  const footerH     = drawNewFooterFull(page, ctx);
+  const footerH       = drawNewFooterFull(page, ctx);
   const contentBottom = footerH;
 
-  const margin  = mm(10);
-  const rightX  = PAGE_W * 0.52 + mm(6);
-  const rightW  = PAGE_W - rightX - margin;
+  const margin = mm(10);
+  const rightX = PAGE_W * 0.52 + mm(6);   // nur für "Pumpversuch"-Position
 
   // ════════════════════════════════════════
   // KOPFBEREICH – identisch mit Deckblatt
   // ════════════════════════════════════════
-  const headerH    = mm(42);
+  const headerH    = mm(38);
   const headerBotY = PAGE_H - margin - headerH;
 
   page.drawRectangle({
     x: 0, y: headerBotY,
     width: PAGE_W, height: headerH,
-    color: rgb(0.05, 0.18, 0.31)
+    color: rgb(0.82, 0.82, 0.82)
   });
 
-  if(logo){
-    const maxLogoH = headerH - mm(8);
+  if (logo) {
+    const maxLogoH = headerH - mm(14);
     const scale    = maxLogoH / logo.height;
+    const lw       = logo.width  * scale;
+    const lh       = logo.height * scale;
+    const logoY    = headerBotY + mm(10);
     page.drawImage(logo, {
+      x: margin, y: logoY,
+      width: lw, height: lh
+    });
+    drawTextSafe(page, 'HTB Baugesellschaft m.b.H.', {
       x: margin,
-      y: headerBotY + (headerH - logo.height * scale) / 2,
-      width:  logo.width  * scale,
-      height: logo.height * scale
+      y: logoY - mm(5),
+      size: 7.5, font: fontR, color: K
     });
   }
 
-  page.drawText('Pump-', {
-    x: rightX, y: headerBotY + mm(22),
-    size: 32, font: fontB,
-    color: rgb(1, 0.929, 0)
-  });
-  page.drawText('versuch', {
-    x: rightX, y: headerBotY + mm(10),
-    size: 32, font: fontB,
-    color: rgb(1, 0.929, 0)
+  drawTextSafe(page, 'Pumpversuch', {
+    x: rightX,
+    y: headerBotY + (headerH / 2) - mm(4),
+    size: 30, font: fontB, color: K
   });
 
   page.drawLine({
     start: { x: 0,      y: headerBotY },
     end:   { x: PAGE_W, y: headerBotY },
-    thickness: 2, color: rgb(1, 0.929, 0)
+    thickness: 1.5, color: K
   });
 
   // ════════════════════════════════════════
-  // INHALTSVERZEICHNIS
+  // INHALTSVERZEICHNIS – volle Seitenbreite, Text schwarz
   // ════════════════════════════════════════
-  const accentBlue = rgb(0.05, 0.18, 0.31);
 
   // Titel
   drawTextSafe(page, 'Inhaltsverzeichnis', {
-    x: margin, y: headerBotY - mm(18),
-    size: 22, font: fontB, color: accentBlue
+    x: margin,
+    y: headerBotY - mm(18),
+    size: 22, font: fontB, color: K
   });
 
-  // Gelber Akzentbalken unter Titel
-  page.drawRectangle({
-    x: margin, y: headerBotY - mm(22),
-    width: mm(60), height: 3,
-    color: rgb(1, 0.929, 0)
+  // Akzentlinie unter Titel
+  page.drawLine({
+    start: { x: margin,         y: headerBotY - mm(23) },
+    end:   { x: margin + mm(75), y: headerBotY - mm(23) },
+    thickness: 1.5, color: K
   });
 
   // TOC-Einträge aufbauen
   const entries = [];
   let nr = 1;
-  entries.push({ nr: String(nr++), title: 'Protokoll Pumpversuch' });
-  if(snap.versuche?.length > 1){
+  entries.push({ nr: String(nr++), title: 'Protokoll Pumpversuch', main: true });
+  if (snap.versuche?.length > 1) {
     snap.versuche.forEach((_, i) => {
-      entries.push({ nr: `1.${i+1}`, title: `Stufe ${i+1}` });
+      entries.push({ nr: `1.${i + 1}`, title: `Stufe ${i + 1}`, main: false });
     });
   }
-  if(hasOverview)  entries.push({ nr: String(nr++), title: 'Übersichtsfoto' });
-  if(hasRestsand)  entries.push({ nr: String(nr++), title: 'Restsandmessung' });
-  if(hasPh)        entries.push({ nr: String(nr++), title: 'Prüfprotokoll Sulfatmessung / pH' });
+  if (hasOverview)  entries.push({ nr: String(nr++), title: 'Übersichtsfoto',                    main: true });
+  if (hasRestsand)  entries.push({ nr: String(nr++), title: 'Restsandmessung',                   main: true });
+  if (hasPh)        entries.push({ nr: String(nr++), title: 'Prüfprotokoll Sulfatmessung / pH',  main: true });
 
-  let y = headerBotY - mm(34);
-  const rowH      = mm(10);
-  const tocW      = PAGE_W * 0.65;
-  const nrX       = margin + mm(4);
-  const titleXToc = margin + mm(18);
+  const tocLeft  = margin + mm(4);
+  const nrX      = tocLeft;
+  const titleX   = tocLeft + mm(14);
+  const tocRight = PAGE_W - margin;
+  const rowH     = mm(11);
+  let y          = headerBotY - mm(34);
 
-  entries.forEach((entry, i) => {
-    const isMain = !entry.nr.includes('.');
-
-    // Hintergrundzeile für Hauptpunkte
-    if(isMain){
-      page.drawRectangle({
-        x: margin, y: y - mm(1),
-        width: tocW - margin, height: rowH,
-        color: rgb(0.95, 0.96, 0.98)
-      });
-    }
-
+  entries.forEach((entry) => {
+    // Nummer
     drawTextSafe(page, entry.nr + '.', {
       x: nrX, y: y + mm(2.5),
-      size: isMain ? 11 : 9,
-      font: isMain ? fontB : fontR,
-      color: accentBlue
+      size: entry.main ? 12 : 10,
+      font: entry.main ? fontB : fontR,
+      color: K
     });
+    // Titel – schwarz
     drawTextSafe(page, entry.title, {
-      x: titleXToc, y: y + mm(2.5),
-      size: isMain ? 11 : 9,
-      font: isMain ? fontB : fontR,
-      color: isMain ? accentBlue : rgb(0.3, 0.3, 0.3)
+      x: titleX, y: y + mm(2.5),
+      size: entry.main ? 12 : 10,
+      font: entry.main ? fontB : fontR,
+      color: K
     });
 
-    // Punktlinie
+    // Helle Trennlinie
     page.drawLine({
-      start: { x: margin,          y: y - mm(1) },
-      end:   { x: margin + tocW,   y: y - mm(1) },
-      thickness: 0.4,
-      color: rgb(0.85, 0.85, 0.85)
+      start: { x: margin,    y: y - mm(1) },
+      end:   { x: tocRight,  y: y - mm(1) },
+      thickness: 0.5,
+      color: rgb(0.75, 0.75, 0.75)
     });
 
-    y -= rowH + (isMain ? mm(2) : 0);
+    y -= rowH + (entry.main ? mm(1.5) : 0);
   });
-
-  // Rechte Seite: Projektinfo-Box
-  const boxTop    = headerBotY - mm(26);
-  const boxBottom = contentBottom + mm(4);
-  const boxH      = boxTop - boxBottom;
-
-  page.drawRectangle({
-    x: rightX - mm(2), y: boxBottom,
-    width: rightW + mm(2), height: boxH,
-    color: rgb(0.05, 0.18, 0.31)
-  });
-
-  let infoY = boxTop - mm(12);
-  const infoX = rightX + mm(4);
-
-  function drawInfoField(label, value) {
-    if(infoY < boxBottom + mm(16)) return;
-    drawTextSafe(page, label, {
-      x: infoX, y: infoY,
-      size: 7, font: fontR,
-      color: rgb(0.7, 0.8, 0.9)
-    });
-    drawTextSafe(page, value || '—', {
-      x: infoX, y: infoY - mm(5),
-      size: 9, font: fontB,
-      color: rgb(1, 1, 1)
-    });
-    infoY -= mm(16);
-  }
-
-  drawInfoField('OBJEKT', snap.meta?.objekt);
-  drawInfoField('AUFTRAGGEBER', snap.meta?.auftraggeber);
-  drawInfoField('ORT', snap.meta?.ort);
-  drawInfoField('GEPRÜFT DURCH', snap.meta?.geprueftDurch);
-  drawInfoField('GEPRÜFT AM', dateDE(snap.meta?.geprueftAm) || todayDE());
-  drawInfoField('AUFTRAGSNUMMER', snap.meta?.auftragsnummer);
 }
 
 async function drawProtocolStagePage(pdf,ctx,snap,versuch,index){
