@@ -1,5 +1,5 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v57 loaded');
+console.log('HTB Pumpversuch app.js v85 loaded');
 
 const BASE='/Pumpversuch/';
 const STORAGE_DRAFT='htb-pumpversuch-draft-v18';
@@ -29,7 +29,13 @@ let _saveT=null,_liveT=null,_audioCtx=null,_alarmGain=null,_timeAdjustVid=null,_
 
 /* ── HELPERS ── */
 // FIX: war crypto?.randomUUID?..(){ — doppelter Punkt war Syntaxfehler
-const uid=()=>{try{return crypto.randomUUID();}catch{return 'id_'+Date.now()+'_'+Math.random().toString(16).slice(2);}};
+const uid = () => {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return 'id_' + Date.now() + '_' + Math.random().toString(16).slice(2);
+  }
+};
 const clone=v=>JSON.parse(JSON.stringify(v));
 function h(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function pdfSafe(v){return String(v??'').replace(/[–—]/g,'-').replace(/[•→]/g,'-').replace(/[\u0000-\u001F\u007F]/g,'');}
@@ -1409,6 +1415,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   initInstallButton();
 
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register(`${BASE}sw.js?v=57`).catch(err=>console.error('SW:',err));
+    navigator.serviceWorker.register(`${BASE}sw.js?v=85`).catch(err=>console.error('SW:',err));
   }
 });
