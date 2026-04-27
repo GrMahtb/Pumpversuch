@@ -820,15 +820,32 @@ function hookHistoryDelegation(){
 function drawTextSafe(page,text,options){page.drawText(pdfSafe(text),options);}
 
 async function loadPdfAssets(pdf){
-  const fontkit=window.fontkit||window.PDFLibFontkit;
-  if(!fontkit)throw new Error('fontkit nicht geladen');
+  const fontkit = window.fontkit || window.PDFLibFontkit;
+  if(!fontkit) throw new Error('fontkit nicht geladen');
   pdf.registerFontkit(fontkit);
-  const fontBytesR=await fetch(`${BASE}fonts/arial.ttf?v=60`).then(r=>r.arrayBuffer());
-  let fontBytesB=null;try{fontBytesB=await fetch(`${BASE}fonts/arialbd.ttf?v=60`).then(r=>r.arrayBuffer());}catch{}
-  const fontR=await pdf.embedFont(fontBytesR,{subset:true});
-  const fontB=fontBytesB?await pdf.embedFont(fontBytesB,{subset:true}):fontR;
-  let logo=null;try{const bytes=await fetch(`${BASE}logo.png?v=30`).then(r=>r.arrayBuffer());logo=await pdf.embedPng(bytes);}catch{}
-  return{fontR,fontB,logo};
+
+  const fontBytesR = await fetch(`${BASE}fonts/arial.ttf?v=60`).then(r=>r.arrayBuffer());
+  let fontBytesB = null;
+  try{
+    fontBytesB = await fetch(`${BASE}fonts/arialbd.ttf?v=60`).then(r=>r.arrayBuffer());
+  }catch{}
+
+  const fontR = await pdf.embedFont(fontBytesR,{subset:true});
+  const fontB = fontBytesB ? await pdf.embedFont(fontBytesB,{subset:true}) : fontR;
+
+  let logo = null;
+  try{
+    const logoBytes = await fetch(`${BASE}logo.png?v=60`).then(r=>r.arrayBuffer());
+    logo = await pdf.embedPng(logoBytes);
+  }catch{}
+
+  let coverPhoto = null;
+  try{
+    const photoBytes = await fetch(`${BASE}assets/cover-photo.jpg?v=1`).then(r=>r.arrayBuffer());
+    coverPhoto = await pdf.embedJpg(photoBytes);
+  }catch{}
+
+  return { fontR, fontB, logo, coverPhoto };
 }
 function getPdfCtx(PDFLib,assets){
   const{rgb,degrees}=PDFLib;
@@ -970,23 +987,128 @@ async function drawImagePage(pdf,ctx,title,subtitle,dataUrl){
   drawFooter(page,ctx,title);
 }
 
-async function drawCoverPage(pdf,ctx,snap){
-  const{PAGE_W,PAGE_H,mm,fontR,fontB,K,logo}=ctx;
-  const page=pdf.addPage([PAGE_W,PAGE_H]);
-  const margin=mm(14),W=PAGE_W-2*margin,H=PAGE_H-2*margin;
-  page.drawRectangle({x:margin,y:margin,width:W,height:H,borderColor:K,borderWidth:1.2});
-  if(logo){const w=mm(55),lh=logo.height*(w/logo.width);page.drawImage(logo,{x:margin+mm(4),y:PAGE_H-margin-lh-mm(2),width:w,height:lh});}
-  drawTextSafe(page,FIRMA.name,{x:margin+mm(4),y:PAGE_H-margin-mm(18),size:11,font:fontB,color:K});
-  drawTextSafe(page,FIRMA.slogan,{x:margin+mm(4),y:PAGE_H-margin-mm(25),size:8.5,font:fontR,color:K});
-  drawTextSafe(page,'Pumpversuch',{x:margin+mm(4),y:PAGE_H-margin-mm(38),size:24,font:fontB,color:K});
-  drawTextSafe(page,'BAUVORHABEN',{x:margin+mm(4),y:PAGE_H-margin-mm(53),size:10,font:fontB,color:K});
-  drawTextSafe(page,snap.meta?.objekt||'—',{x:margin+mm(4),y:PAGE_H-margin-mm(62),size:18,font:fontR,color:K});
-  drawTextSafe(page,'AUFTRAGGEBER',{x:margin+mm(4),y:PAGE_H-margin-mm(78),size:10,font:fontB,color:K});
-  drawTextSafe(page,snap.meta?.auftraggeber||'—',{x:margin+mm(4),y:PAGE_H-margin-mm(87),size:16,font:fontR,color:K});
-  drawTextSafe(page,`Arzl, am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,{x:margin+mm(4),y:PAGE_H-margin-mm(104),size:12,font:fontR,color:K});
-  const photo=snap.overviewPhotoDataUrl||snap.versuche?.find(v=>v.photoDataUrl)?.photoDataUrl||'';
-  if(photo){try{const img=await embedDataUrlImage(pdf,photo);const areaX=margin+mm(4),areaY=margin+mm(20),areaW=W-mm(8),areaH=mm(110);const ratio=img.width/img.height;let dw=areaW,dh=dw/ratio;if(dh>areaH){dh=areaH;dw=dh*ratio;}page.drawImage(img,{x:areaX+(areaW-dw)/2,y:areaY+(areaH-dh)/2,width:dw,height:dh});}catch(err){console.error(err);}}
-  drawFooter(page,ctx,'Pumpversuch');
+async function drawCoverPage(pdf, ctx, snap) {
+  const { PAGE_W, PAGE_H, mm, fontR, fontB, K, logo, coverPhoto, rgb } = ctx;
+  const page = pdf.addPage([PAGE_W, PAGE_H]);
+
+  const margin = mm(14);
+  const W = PAGE_W - 2 * margin;
+  const H = PAGE_H - 2 * margin;
+
+  // Außenrahmen
+  page.drawRectangle({
+    x: margin,
+    y: margin,
+    width: W,
+    height: H,
+    borderColor: K,
+    borderWidth: 1.2
+  });
+
+  const leftW  = W * 0.58;
+  const rightW = W - leftW;
+  const leftX  = margin;
+  const rightX = margin + leftW;
+
+  // ─────────────────────────────────────────
+  // RECHTE SEITE – FOTO
+  // ─────────────────────────────────────────
+  if (coverPhoto) {
+    const r = coverPhoto.width / coverPhoto.height;
+    let dw = rightW;
+    let dh = dw / r;
+    if (dh < H) { dh = H; dw = dh * r; }
+
+    page.drawImage(coverPhoto, {
+      x: rightX + (rightW - dw) / 2,
+      y: margin + (H - dh) / 2,
+      width: dw,
+      height: dh
+    });
+  }
+
+  // Gelber Balken rechts
+  const yellow = rgb(1, 0.92, 0);
+  const barH = mm(24);
+  page.drawRectangle({
+    x: rightX,
+    y: margin + H - barH,
+    width: rightW,
+    height: barH,
+    color: yellow
+  });
+  page.drawText('Pumpversuch', {
+    x: rightX + mm(8),
+    y: margin + H - barH + mm(7),
+    size: 16,
+    font: fontB,
+    color: K
+  });
+
+  // ─────────────────────────────────────────
+  // LINKE SEITE – INHALT
+  // ─────────────────────────────────────────
+  let y = margin + H - mm(20);
+
+  // Logo
+  if (logo) {
+    const lw = mm(38);
+    const lh = logo.height * (lw / logo.width);
+    page.drawImage(logo, {
+      x: leftX + mm(6),
+      y: y - lh,
+      width: lw,
+      height: lh
+    });
+  }
+
+  // Claim
+  y -= mm(20);
+  page.drawText('BAUEN MIT',        { x:leftX+mm(60), y, size:12, font:fontB });
+  y -= mm(7);
+  page.drawText('SPEZIALISTEN',     { x:leftX+mm(60), y, size:12, font:fontB });
+  y -= mm(7);
+  page.drawText('ALS PARTNER',      { x:leftX+mm(60), y, size:12, font:fontR });
+
+  // Linie
+  y -= mm(12);
+  page.drawLine({
+    start:{x:leftX+mm(6), y}, end:{x:leftX+leftW-mm(6), y}, thickness:1
+  });
+
+  // Bauvorhaben
+  y -= mm(20);
+  page.drawText('BAUVORHABEN', { x:leftX+mm(6), y, size:9, font:fontR });
+  y -= mm(8);
+  page.drawText(snap.meta?.objekt || '—', {
+    x:leftX+mm(6), y, size:14, font:fontB
+  });
+
+  // Auftraggeber
+  y -= mm(22);
+  page.drawText('AUFTRAGGEBER', { x:leftX+mm(6), y, size:9, font:fontR });
+  y -= mm(8);
+  page.drawText(snap.meta?.auftraggeber || '—', {
+    x:leftX+mm(6), y, size:12, font:fontB
+  });
+
+  // Titel
+  y -= mm(28);
+  page.drawText('Pumpversuch', {
+    x:leftX+mm(6), y, size:13, font:fontB
+  });
+
+  // Name + Datum
+  y -= mm(26);
+  page.drawText(snap.meta?.geprueftDurch || '', {
+    x:leftX+mm(6), y, size:10, font:fontR
+  });
+  y -= mm(8);
+  page.drawText(`Arzl, am ${dateDE(snap.meta?.geprueftAm) || todayDE()}`, {
+    x:leftX+mm(6), y, size:9, font:fontR
+  });
+
+  drawFooter(page, ctx, 'Pumpversuch');
 }
 
 async function drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh){
