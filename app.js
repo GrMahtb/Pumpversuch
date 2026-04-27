@@ -857,7 +857,6 @@ function drawFooter(page,ctx,subtitle=''){
   drawTextSafe(page,`${FIRMA.email}  ·  ${FIRMA.web}${subtitle?' · '+subtitle:''}`,
     {x:mm(12),y:margin+mm(1.5),size:7.5,font:fontR,color:K});
 }
-}
 function drawHeaderBar(page,ctx,title,sub=''){
   const{mm,fontR,fontB,K,GREY,logo,PAGE_W,PAGE_H}=ctx;
   const margin=mm(8),W=PAGE_W-2*margin,H=PAGE_H-2*margin,hdrH=mm(13);
