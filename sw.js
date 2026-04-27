@@ -1,5 +1,5 @@
 const BASE  = '/Pumpversuch/';
-const CACHE = 'htb-pumpversuch-v83';
+const CACHE = 'htb-pumpversuch-v84';
 
 const ASSETS = [
   BASE,
