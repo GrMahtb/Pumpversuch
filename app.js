@@ -1,5 +1,5 @@
 'use strict';
-console.log('HTB Pumpversuch app.js v85 loaded');
+console.log('HTB Pumpversuch app.js v86 loaded');
 
 const BASE='/Pumpversuch/';
 const STORAGE_DRAFT='htb-pumpversuch-draft-v18';
@@ -221,9 +221,107 @@ function applySnapshot(snap,render=true){
 }
 function saveDraftDebounced(){clearTimeout(_saveT);_saveT=setTimeout(()=>{try{localStorage.setItem(STORAGE_DRAFT,JSON.stringify(collectSnapshot()));}catch{}},250);}
 function loadDraft(){try{const raw=localStorage.getItem(STORAGE_DRAFT);if(raw)applySnapshot(JSON.parse(raw),true);}catch(e){console.warn('Draft load failed',e);}}
-function readHistory(){try{return JSON.parse(localStorage.getItem(STORAGE_HISTORY)||'[]');}catch{return[];}}
-function writeHistory(list){try{localStorage.setItem(STORAGE_HISTORY,JSON.stringify(list.slice(0,HISTORY_MAX)));}catch{}}
+function stripSnapshotPhotos(snap){
+  const s = clone(snap || {});
+
+  s.overviewPhotoDataUrl = '';
+
+  s.versuche = Array.isArray(s.versuche)
+    ? s.versuche.map(v => ({ ...v, photoDataUrl: '' }))
+    : [];
+
+  s.restsand = s.restsand || {};
+  s.restsand.imhoff = s.restsand.imhoff || {};
+  s.restsand.sieb = s.restsand.sieb || {};
+  s.restsand.imhoff.photoDataUrl = '';
+  s.restsand.sieb.photoDataUrl = '';
+
+  s.ph = s.ph || {};
+  s.ph.sulfat = s.ph.sulfat || {};
+  s.ph.temperatur = s.ph.temperatur || {};
+  s.ph.ph = s.ph.ph || {};
+  s.ph.sulfat.photoDataUrl = '';
+  s.ph.temperatur.photoDataUrl = '';
+  s.ph.ph.photoDataUrl = '';
+
+  return s;
+}
+
+function readHistory(){
+  try{
+    const raw = localStorage.getItem(STORAGE_HISTORY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  }catch(err){
+    console.warn('History load failed:', err);
+    return [];
+  }
+}
+
+function writeHistory(list){
+  const next = Array.isArray(list) ? list.slice(0, HISTORY_MAX) : [];
+  try{
+    localStorage.setItem(STORAGE_HISTORY, JSON.stringify(next));
+    return true;
+  }catch(err){
+    console.warn('History write failed:', err);
+    return false;
+  }
+}
+
+function tryWriteHistory(list){
+  let next = Array.isArray(list) ? list.slice(0, HISTORY_MAX) : [];
+
+  while(next.length){
+    if(writeHistory(next)) return true;
+    next = next.slice(0, -1); // älteste Einträge schrittweise entfernen
+  }
+  return false;
+}
+
 function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
+  const snap = collectSnapshot();
+  const current = readHistory();
+
+  const baseEntry = {
+    id: uid(),
+    savedAt: Date.now(),
+    title: `${snap.meta?.objekt || '—'} · ${snap.meta?.ort || '—'}`
+  };
+
+  // 1) Zuerst vollständig inkl. Fotos versuchen
+  const fullEntry = {
+    ...baseEntry,
+    snapshot: snap,
+    photoMode: 'full'
+  };
+
+  if(tryWriteHistory([fullEntry, ...current])){
+    renderHistoryList();
+    if(msg) alert(msg);
+    return true;
+  }
+
+  // 2) Fallback: ohne Fotos speichern
+  const strippedEntry = {
+    ...baseEntry,
+    id: uid(),
+    snapshot: stripSnapshotPhotos(snap),
+    photoMode: 'stripped'
+  };
+
+  if(tryWriteHistory([strippedEntry, ...current])){
+    renderHistoryList();
+    alert(
+      (msg || 'Im Verlauf gespeichert.') +
+      '\n\nHinweis: Der Verlaufseintrag wurde ohne Fotos gespeichert, weil der lokale Speicher voll war.'
+    );
+    return true;
+  }
+
+  alert('Speichern im Verlauf fehlgeschlagen. Lokaler Browser-Speicher ist voll.');
+  return false;
+}
   const snap=collectSnapshot();
   const entry={id:uid(),savedAt:Date.now(),title:`${snap.meta.objekt||'—'} · ${snap.meta.ort||'—'}`,snapshot:snap};
   const list=readHistory();list.unshift(entry);writeHistory(list);renderHistoryList();
@@ -876,13 +974,26 @@ function getWellRowsForPdf(versuch,key,ruhe){
     return{min:Number.isFinite(min)?min:null,valueNum,deltaM,deltaCm};
   });
 }
-function drawFooter(page,ctx,subtitle=''){
-  const{mm,fontR,K}=ctx;
-  const margin=mm(8);
-  drawTextSafe(page,`${FIRMA.name}  ·  ${FIRMA.adresse}  ·  ${FIRMA.tel}`,
-    {x:mm(12),y:margin+mm(4.5),size:7.5,font:fontR,color:K});
-  drawTextSafe(page,`${FIRMA.email}  ·  ${FIRMA.web}${subtitle?' · '+subtitle:''}`,
-    {x:mm(12),y:margin+mm(1.5),size:7.5,font:fontR,color:K});
+function getFooterTextSingleLine(subtitle=''){
+  return `${FIRMA.name} · ${FIRMA.tel} · ${FIRMA.email} · ${FIRMA.web} · ${FIRMA.adresse}${subtitle ? ' · ' + subtitle : ''}`;
+}
+
+function getFooterFontSize(font, text, maxW, startSize = 6.4, minSize = 4.6){
+  let size = startSize;
+  const safeText = pdfSafe(text);
+  while(size > minSize && font.widthOfTextAtSize(safeText, size) > maxW){
+    size -= 0.2;
+  }
+  return size;
+}
+
+function drawFooter(page, ctx, subtitle=''){
+  const { PAGE_W, mm, fontR, K } = ctx;
+  const x = mm(12);
+  const maxW = PAGE_W - x - mm(12);
+  const text = getFooterTextSingleLine(subtitle);
+  const size = getFooterFontSize(fontR, text, maxW, 6.4, 4.6);
+  drawTextSafe(page, text, { x, y: mm(8.8), size, font: fontR, color: K });
 }
 function drawHeaderBar(page,ctx,title,sub=''){
   const{mm,fontR,fontB,K,GREY,logo,PAGE_W,PAGE_H}=ctx;
@@ -997,10 +1108,9 @@ async function drawImagePage(pdf,ctx,title,subtitle,dataUrl){
   drawFooter(page,ctx,title);
 }
 /* ── NEU: Fußzeile mit Bild + Text ── */
-function drawNewFooterFull(page, ctx) {
+function drawNewFooterFull(page, ctx, subtitle='') {
   const { PAGE_W, mm, fontR, K, fusszeile } = ctx;
 
-  // Fußzeile.png vollbreit am unteren Seitenrand
   let imgH = 0;
   if(fusszeile){
     const scale = PAGE_W / fusszeile.width;
@@ -1008,17 +1118,20 @@ function drawNewFooterFull(page, ctx) {
     page.drawImage(fusszeile, { x: 0, y: 0, width: PAGE_W, height: imgH });
   }
 
-  // Kontakttext knapp über dem Bild, ohne Überschneidung
-  const textBase = imgH + mm(2.5);
-  drawTextSafe(page,
-    `${FIRMA.name}  ·  ${FIRMA.adresse}  ·  ${FIRMA.tel}`,
-    { x: mm(8), y: textBase + mm(4.5), size: 7, font: fontR, color: K });
-  drawTextSafe(page,
-    `${FIRMA.email}  ·  ${FIRMA.web}`,
-    { x: mm(8), y: textBase, size: 7, font: fontR, color: K });
+  const x = mm(8);
+  const maxW = PAGE_W - x - mm(8);
+  const text = getFooterTextSingleLine(subtitle);
+  const size = getFooterFontSize(fontR, text, maxW, 6.0, 4.4);
 
-  // Rückgabe: Gesamthöhe der Fußzone (damit Content nicht überlappt)
-  return imgH + mm(14);
+  drawTextSafe(page, text, {
+    x,
+    y: imgH + mm(3.4),
+    size,
+    font: fontR,
+    color: K
+  });
+
+  return imgH + mm(9.5);
 }
 async function drawCoverPage(pdf, ctx, snap) {
   const { PAGE_W, PAGE_H, mm, fontR, fontB, K, logo, coverPhoto, rgb } = ctx;
@@ -1041,11 +1154,19 @@ async function drawCoverPage(pdf, ctx, snap) {
   const headerBotY = PAGE_H - margin - headerH;
 
   // Grauer Hintergrund
-  page.drawRectangle({
-    x: 0, y: headerBotY,
-    width: PAGE_W, height: headerH,
-    color: rgb(0.82, 0.82, 0.82)
-  });
+page.drawRectangle({
+  x: 0, y: headerBotY,
+  width: PAGE_W, height: headerH,
+  color: rgb(0.82, 0.82, 0.82)
+});
+
+// schwarze Linie oberhalb des Headers
+page.drawLine({
+  start: { x: 0, y: headerBotY + headerH },
+  end:   { x: PAGE_W, y: headerBotY + headerH },
+  thickness: 1.5,
+  color: K
+});
 
   // Logo links
   let logoY = headerBotY + mm(10);
@@ -1175,11 +1296,19 @@ async function drawTocPage(pdf, ctx, snap, hasOverview, hasRestsand, hasPh) {
   const headerH    = mm(38);
   const headerBotY = PAGE_H - margin - headerH;
 
-  page.drawRectangle({
-    x: 0, y: headerBotY,
-    width: PAGE_W, height: headerH,
-    color: rgb(0.82, 0.82, 0.82)
-  });
+ page.drawRectangle({
+  x: 0, y: headerBotY,
+  width: PAGE_W, height: headerH,
+  color: rgb(0.82, 0.82, 0.82)
+});
+
+// schwarze Linie oberhalb des Headers
+page.drawLine({
+  start: { x: 0, y: headerBotY + headerH },
+  end:   { x: PAGE_W, y: headerBotY + headerH },
+  thickness: 1.5,
+  color: K
+});
 
   if (logo) {
     const maxLogoH = headerH - mm(14);
@@ -1568,6 +1697,27 @@ async function drawPhPage(pdf,ctx,snap){
   drawFooter(page,ctx,'Sulfatmessung Wasser');
 }
 /* ── PDF EXPORTS ── */
+function addFullPdfPageNumbers(pdf, ctx){
+  const { PAGE_W, mm, fontB, K } = ctx;
+  const pages = pdf.getPages();
+
+  // physische Seiten 1-2 = ohne Nummer
+  // ab physischer Seite 3 beginnt Nummerierung mit 1
+  for(let i = 2; i < pages.length; i++){
+    const page = pages[i];
+    const label = String(i - 1);
+    const size = 8.5;
+    const w = fontB.widthOfTextAtSize(label, size);
+
+    drawTextSafe(page, label, {
+      x: PAGE_W - mm(12) - w,
+      y: mm(13.2),
+      size,
+      font: fontB,
+      color: K
+    });
+  }
+}
 async function exportPdf(snapshot=null,type='protokoll'){
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
@@ -1577,20 +1727,38 @@ async function exportPdf(snapshot=null,type='protokoll'){
   const pdf=await PDFDocument.create();
   const assets=await loadPdfAssets(pdf);
   const ctx=getPdfCtx(window.PDFLib,assets);
-  if(type==='vollstaendig'){
-    const hasOverview=!!snap.overviewPhotoDataUrl;
-    const hasRestsand=!!(snap.restsand?.imhoff?.photoDataUrl||snap.restsand?.sieb?.photoDataUrl||snap.restsand?.imhoff?.menge||snap.restsand?.sieb?.menge||snap.restsand?.bemerkung);
-    const hasPh=!!(snap.ph?.sulfat?.wert||snap.ph?.temperatur?.wert||snap.ph?.ph?.wert||snap.ph?.sulfat?.photoDataUrl||snap.ph?.temperatur?.photoDataUrl||snap.ph?.ph?.photoDataUrl);
-    await drawCoverPage(pdf,ctx,snap);
-    await drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh);
-    for(let i=0;i<versuche.length;i++){
-      await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
-      if(versuche[i].photoDataUrl)await drawImagePage(pdf,ctx,`Foto Durchflussmesser ${getStageTitle(i)}`,`${snap.meta?.objekt||''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,versuche[i].photoDataUrl);
+if(type==='vollstaendig'){
+  const hasOverview=!!snap.overviewPhotoDataUrl;
+  const hasRestsand=!!(snap.restsand?.imhoff?.photoDataUrl||snap.restsand?.sieb?.photoDataUrl||snap.restsand?.imhoff?.menge||snap.restsand?.sieb?.menge||snap.restsand?.bemerkung);
+  const hasPh=!!(snap.ph?.sulfat?.wert||snap.ph?.temperatur?.wert||snap.ph?.ph?.wert||snap.ph?.sulfat?.photoDataUrl||snap.ph?.temperatur?.photoDataUrl||snap.ph?.ph?.photoDataUrl);
+
+  await drawCoverPage(pdf,ctx,snap);
+  await drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh);
+
+  for(let i=0;i<versuche.length;i++){
+    await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
+    if(versuche[i].photoDataUrl){
+      await drawImagePage(
+        pdf,
+        ctx,
+        `Foto Durchflussmesser ${getStageTitle(i)}`,
+        `${snap.meta?.objekt||''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,
+        versuche[i].photoDataUrl
+      );
     }
-    if(hasOverview){const title=`Übersicht ${snap.meta?.objekt||''} am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`.replace(/\s+/g,' ').trim();await drawImagePage(pdf,ctx,title,'Übersichtsfoto',snap.overviewPhotoDataUrl);}
-    if(hasRestsand)await drawRestsandPage(pdf,ctx,snap);
-    if(hasPh)await drawPhPage(pdf,ctx,snap);
-  }else{
+  }
+
+  if(hasOverview){
+    const title=`Übersicht ${snap.meta?.objekt||''} am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`.replace(/\s+/g,' ').trim();
+    await drawImagePage(pdf,ctx,title,'Übersichtsfoto',snap.overviewPhotoDataUrl);
+  }
+
+  if(hasRestsand) await drawRestsandPage(pdf,ctx,snap);
+  if(hasPh) await drawPhPage(pdf,ctx,snap);
+
+  // Seitenzahlen ab PDF-Seite 3
+  addFullPdfPageNumbers(pdf, ctx);
+}else{
     for(let i=0;i<versuche.length;i++)await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
   }
   const bytes=await pdf.save();
@@ -1685,6 +1853,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   initInstallButton();
 
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register(`${BASE}sw.js?v=85`).catch(err=>console.error('SW:',err));
+    navigator.serviceWorker.register(`${BASE}sw.js?v=86`).catch(err=>console.error('SW:',err));
   }
 });
