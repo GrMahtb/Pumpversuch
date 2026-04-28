@@ -884,17 +884,59 @@ function updateTimerUi(card,versuch){
 }
 
 function triggerIntervalAlarm(vid){
+  const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
+  const display=card?.querySelector('[data-role="elapsed"]');
+
+  document.body.classList.remove('screen-flash');
+  void document.body.offsetWidth;
+  document.body.classList.add('screen-flash');
+
+  if(card){
+    card.classList.remove('versuch-card--alarm');
+    void card.offsetWidth;
+    card.classList.add('versuch-card--alarm');
+  }
+
+  if(display){
+    display.classList.remove('timer-display--alarm');
+    void display.offsetWidth;
+    display.classList.add('timer-display--alarm');
+  }
+
+  void playIntervalBeep();
+
+  setTimeout(()=>document.body.classList.remove('screen-flash'),1800);
+  setTimeout(()=>{
+    if(card)card.classList.remove('versuch-card--alarm');
+    if(display)display.classList.remove('timer-display--alarm');
+  },Math.max(2400,Number(state.settings.alarmDurationSec||4)*1000+600));
+}
+
 function tickTimer(vid){
-  const versuch=getVersuchById(vid);const t=timerMap[vid];if(!versuch||!t||!t.running)return;
+  const versuch=getVersuchById(vid);
+  const t=timerMap[vid];
+  if(!versuch||!t||!t.running)return;
+
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
   versuch.elapsedMs=getElapsedMs(vid,versuch);
+
   if(card)updateTimerUi(card,versuch);
-  const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
+
+  const mins=(versuch.messungen||[])
+    .map(m=>Number(m.min))
+    .filter(n=>Number.isFinite(n)&&n>0)
+    .sort((a,b)=>a-b);
+
   const passed=mins.filter(iv=>versuch.elapsedMs/60000>=iv).length;
-  if(passed>t.alarmCount){t.alarmCount=passed;triggerIntervalAlarm(vid);}
+  if(passed>t.alarmCount){
+    t.alarmCount=passed;
+    triggerIntervalAlarm(vid);
+  }
+
   updateFloatingTimerWidget();
   t.raf=requestAnimationFrame(()=>tickTimer(vid));
 }
+
 function startTimer(vid){
   const versuch=getVersuchById(vid);
   if(!versuch)return;
@@ -922,14 +964,6 @@ function startTimer(vid){
   tickTimer(vid);
   startFloatingLoop();
   saveDraftDebounced();
-}
-  const t=ensureTimer(vid,versuch);if(t.running)return;
-  if(!versuch.startzeit)versuch.startzeit=formatTimeHHMMSS(new Date());
-  const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b);
-  t.alarmCount=mins.filter(iv=>iv>0&&t.accumulatedMs/60000>=iv).length;
-  t.running=true;t.startMs=Date.now();
-  const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
-  updateTimerUi(card,versuch);tickTimer(vid);startFloatingLoop();saveDraftDebounced();
 }
 function stopTimer(vid){
   const versuch=getVersuchById(vid);const t=timerMap[vid];if(!versuch||!t||!t.running)return;
