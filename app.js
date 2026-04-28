@@ -6,6 +6,12 @@ const STORAGE_DRAFT='htb-pumpversuch-draft-v18';
 const STORAGE_HISTORY='htb-pumpversuch-history-v18';
 const HISTORY_MAX=30;
 const DEFAULT_INTERVALLE=[0,1,2,3,4,5,15,30,45,60,75,90,105,120,135,150,165,180];
+const IDB_NAME='htb-pumpversuch-db-v1';
+const IDB_VERSION=1;
+const IDB_STORE_HISTORY='history';
+const IDB_STORE_PHOTOS='historyPhotos';
+const STORAGE_HISTORY_MIGRATED='htb-pumpversuch-history-migrated-v1';
+const PHOTO_STORED='__stored__';
 const FIRMA = {
   name:'HTB Baugesellschaft m.b.H.',
   slogan:'BAUEN MIT SPEZIALISTEN ALS PARTNER'
@@ -323,44 +329,299 @@ function stripSnapshotPhotos(snap){
   return s;
 }
 
-function readHistory(){
+function legacyReadHistoryFromLocalStorage(){
   try{
     const raw = localStorage.getItem(STORAGE_HISTORY);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   }catch(err){
-    console.warn('History load failed:', err);
+    console.warn('Legacy history load failed:', err);
     return [];
   }
 }
 
-function writeHistory(list){
-  const next = Array.isArray(list) ? list.slice(0, HISTORY_MAX) : [];
+function openHistoryDb(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+
+    req.onupgradeneeded = () => {
+      const db = req.result;
+
+      if(!db.objectStoreNames.contains(IDB_STORE_HISTORY)){
+        const store = db.createObjectStore(IDB_STORE_HISTORY, { keyPath: 'id' });
+        store.createIndex('savedAt', 'savedAt', { unique: false });
+      }
+
+      if(!db.objectStoreNames.contains(IDB_STORE_PHOTOS)){
+        const store = db.createObjectStore(IDB_STORE_PHOTOS, { keyPath: 'id' });
+        store.createIndex('entryId', 'entryId', { unique: false });
+      }
+    };
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('IndexedDB konnte nicht geöffnet werden.'));
+  });
+}
+
+function dataUrlToBlob(dataUrl){
+  const str = String(dataUrl || '');
+  const parts = str.split(',');
+  const meta = parts[0] || '';
+  const b64  = parts[1] || '';
+  const mimeMatch = meta.match(/data:([^;]+);base64/i);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+
+  return new Blob([bytes], { type: mime });
+}
+
+function blobToDataUrl(blob){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Blob konnte nicht gelesen werden.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function makePhotoKey(entryId, slot){
+  return `${entryId}::${slot}`;
+}
+
+function snapshotToIndexedPayload(entryId, snap){
+  const s = clone(snap || {});
+  const photos = [];
+
+  function stashPhoto(host, dataField, keyField, slot){
+    if(!host) return;
+    const dataUrl = String(host[dataField] || '');
+    if(!dataUrl.startsWith('data:image/')) return;
+
+    const photoKey = makePhotoKey(entryId, slot);
+    photos.push({
+      id: photoKey,
+      entryId,
+      slot,
+      savedAt: Date.now(),
+      blob: dataUrlToBlob(dataUrl)
+    });
+
+    host[keyField] = photoKey;
+    host[dataField] = PHOTO_STORED;
+  }
+
+  stashPhoto(s, 'overviewPhotoDataUrl', 'overviewPhotoKey', 'overview');
+
+  (s.versuche || []).forEach((v, i) => {
+    stashPhoto(v, 'photoDataUrl', 'photoKey', `versuch:${i}`);
+  });
+
+  if(s.restsand?.imhoff) stashPhoto(s.restsand.imhoff, 'photoDataUrl', 'photoKey', 'restsand:imhoff');
+  if(s.restsand?.sieb)   stashPhoto(s.restsand.sieb,   'photoDataUrl', 'photoKey', 'restsand:sieb');
+
+  if(s.ph?.sulfat)      stashPhoto(s.ph.sulfat,      'photoDataUrl', 'photoKey', 'ph:sulfat');
+  if(s.ph?.temperatur)  stashPhoto(s.ph.temperatur,  'photoDataUrl', 'photoKey', 'ph:temperatur');
+  if(s.ph?.ph)          stashPhoto(s.ph.ph,          'photoDataUrl', 'photoKey', 'ph:ph');
+
+  return { snapshot: s, photos };
+}
+
+async function dbSaveHistoryEntry(entry){
+  const payload = snapshotToIndexedPayload(entry.id, entry.snapshot);
+  const record = {
+    ...entry,
+    snapshot: payload.snapshot,
+    photoMode: 'blob'
+  };
+
+  const db = await openHistoryDb();
+
+  return await new Promise((resolve,reject)=>{
+    const tx = db.transaction([IDB_STORE_HISTORY, IDB_STORE_PHOTOS], 'readwrite');
+    const historyStore = tx.objectStore(IDB_STORE_HISTORY);
+    const photoStore = tx.objectStore(IDB_STORE_PHOTOS);
+
+    historyStore.put(record);
+    payload.photos.forEach(photo => photoStore.put(photo));
+
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error || new Error('History konnte nicht gespeichert werden.'));
+    tx.onabort = () => reject(tx.error || new Error('History-Transaktion abgebrochen.'));
+  });
+}
+
+async function readHistory(){
+  const db = await openHistoryDb();
+
+  const list = await new Promise((resolve,reject)=>{
+    const tx = db.transaction(IDB_STORE_HISTORY, 'readonly');
+    const store = tx.objectStore(IDB_STORE_HISTORY);
+    const req = store.getAll();
+
+    req.onsuccess = () => resolve(Array.isArray(req.result) ? req.result : []);
+    req.onerror = () => reject(req.error || new Error('History konnte nicht gelesen werden.'));
+  });
+
+  return list
+    .sort((a,b) => Number(b.savedAt || 0) - Number(a.savedAt || 0))
+    .slice(0, HISTORY_MAX);
+}
+
+async function getHistoryEntryById(id){
+  const db = await openHistoryDb();
+
+  return await new Promise((resolve,reject)=>{
+    const tx = db.transaction(IDB_STORE_HISTORY, 'readonly');
+    const store = tx.objectStore(IDB_STORE_HISTORY);
+    const req = store.get(id);
+
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error('History-Eintrag konnte nicht gelesen werden.'));
+  });
+}
+
+async function deleteHistoryEntryById(id){
+  const db = await openHistoryDb();
+
+  return await new Promise((resolve,reject)=>{
+    const tx = db.transaction([IDB_STORE_HISTORY, IDB_STORE_PHOTOS], 'readwrite');
+    const historyStore = tx.objectStore(IDB_STORE_HISTORY);
+    const photoStore = tx.objectStore(IDB_STORE_PHOTOS);
+    const photoIndex = photoStore.index('entryId');
+
+    historyStore.delete(id);
+
+    const cursorReq = photoIndex.openCursor(IDBKeyRange.only(id));
+    cursorReq.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if(cursor){
+        cursor.delete();
+        cursor.continue();
+      }
+    };
+    cursorReq.onerror = () => reject(cursorReq.error || new Error('Fotos konnten nicht gelöscht werden.'));
+
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error || new Error('History-Löschen fehlgeschlagen.'));
+    tx.onabort = () => reject(tx.error || new Error('History-Löschen abgebrochen.'));
+  });
+}
+
+async function getPhotoDataUrlByKey(photoKey){
+  if(!photoKey) return '';
+
+  const db = await openHistoryDb();
+
+  const record = await new Promise((resolve,reject)=>{
+    const tx = db.transaction(IDB_STORE_PHOTOS, 'readonly');
+    const store = tx.objectStore(IDB_STORE_PHOTOS);
+    const req = store.get(photoKey);
+
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error('Foto konnte nicht geladen werden.'));
+  });
+
+  if(!record?.blob) return '';
+  return blobToDataUrl(record.blob);
+}
+
+async function materializeSnapshotPhotos(snap){
+  const s = clone(snap || {});
+
+  async function restorePhoto(host, dataField, keyField){
+    if(!host) return;
+    const key = host[keyField];
+    if(!key){
+      if(host[dataField] === PHOTO_STORED) host[dataField] = '';
+      return;
+    }
+    host[dataField] = await getPhotoDataUrlByKey(key);
+  }
+
+  await restorePhoto(s, 'overviewPhotoDataUrl', 'overviewPhotoKey');
+
+  for(const v of (s.versuche || [])){
+    await restorePhoto(v, 'photoDataUrl', 'photoKey');
+  }
+
+  await restorePhoto(s.restsand?.imhoff, 'photoDataUrl', 'photoKey');
+  await restorePhoto(s.restsand?.sieb,   'photoDataUrl', 'photoKey');
+
+  await restorePhoto(s.ph?.sulfat,      'photoDataUrl', 'photoKey');
+  await restorePhoto(s.ph?.temperatur,  'photoDataUrl', 'photoKey');
+  await restorePhoto(s.ph?.ph,          'photoDataUrl', 'photoKey');
+
+  return s;
+}
+
+async function migrateLocalHistoryToIndexedDb(){
   try{
-    localStorage.setItem(STORAGE_HISTORY, JSON.stringify(next));
-    return true;
+    if(localStorage.getItem(STORAGE_HISTORY_MIGRATED) === '1') return;
+
+    const existingDbEntries = await readHistory();
+    if(existingDbEntries.length){
+      localStorage.setItem(STORAGE_HISTORY_MIGRATED, '1');
+      return;
+    }
+
+    const legacy = legacyReadHistoryFromLocalStorage();
+    if(!legacy.length){
+      localStorage.setItem(STORAGE_HISTORY_MIGRATED, '1');
+      return;
+    }
+
+    for(const entry of legacy.slice(0, HISTORY_MAX)){
+      if(!entry?.id || !entry?.snapshot) continue;
+      await dbSaveHistoryEntry({
+        id: entry.id,
+        savedAt: entry.savedAt || Date.now(),
+        title: entry.title || '—',
+        snapshot: entry.snapshot,
+        photoMode: entry.photoMode || 'migrated'
+      });
+    }
+
+    try{ localStorage.removeItem(STORAGE_HISTORY); }catch{}
+    localStorage.setItem(STORAGE_HISTORY_MIGRATED, '1');
   }catch(err){
-    console.warn('History write failed:', err);
-    return false;
+    console.warn('History migration failed:', err);
   }
 }
 
-function tryWriteHistory(list){
-  const next = Array.isArray(list) ? list.slice(0, HISTORY_MAX) : [];
-  return writeHistory(next);
-}
-
-function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
+async function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
   if(!ensureRequiredFiliale()) return false;
 
-  const snap = collectSnapshot();
-  const current = readHistory();
+  try{
+    const current = await readHistory();
 
-  const baseEntry = {
-    id: uid(),
-    savedAt: Date.now(),
-    title: `${snap.meta?.objekt || '—'} · ${snap.meta?.ort || '—'}`
-  };
+    if(current.length >= HISTORY_MAX){
+      alert(`Im Verlauf sind bereits ${HISTORY_MAX} Einträge gespeichert. Bitte zuerst alte Einträge löschen. Es wird nichts automatisch überschrieben.`);
+      return false;
+    }
+
+    const snap = collectSnapshot();
+    const entry = {
+      id: uid(),
+      savedAt: Date.now(),
+      title: `${snap.meta?.objekt || '—'} · ${snap.meta?.ort || '—'}`,
+      snapshot: snap,
+      photoMode: 'blob'
+    };
+
+    await dbSaveHistoryEntry(entry);
+    renderHistoryList();
+
+    if(msg) alert(msg);
+    return true;
+  }catch(err){
+    console.error(err);
+    alert('Speichern im Verlauf fehlgeschlagen.');
+    return false;
+  }
+}
 
   // 1) Zuerst vollständig inkl. Fotos versuchen
   const fullEntry = {
@@ -443,7 +704,7 @@ async function downscaleImageFile(file,maxDim=1600,quality=0.78){
 }
 function dataUrlToUint8Array(dataUrl){const b64=dataUrl.split(',')[1]||'',bin=atob(b64),bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes;}
 async function embedDataUrlImage(pdf,dataUrl){if(!dataUrl)return null;const bytes=dataUrlToUint8Array(dataUrl);return/^data:image\/png/i.test(dataUrl)?await pdf.embedPng(bytes):await pdf.embedJpg(bytes);}
-async function handlePhotoSelected(file){return downscaleImageFile(file,1600,0.78);}
+async function handlePhotoSelected(file){return downscaleImageFile(file,1400,0.74);}
 
 /* ── GLOBAL PHOTO DELEGATION ── */
 function hookGlobalPhotoDelegation(){
@@ -912,10 +1173,23 @@ async function exportPhotosFromSnapshot(snapshot){
   for(let i=0;i<photos.length;i++){downloadDataUrl(photos[i].dataUrl,`${photos[i].name}.${guessExtFromDataUrl(photos[i].dataUrl)}`);await new Promise(r=>setTimeout(r,250));}
   alert(`${photos.length} Foto(s) exportiert.`);
 }
-function renderHistoryList(){
+async function renderHistoryList(){
   const host=$('historyList');if(!host)return;
-  const list=readHistory();
-  if(!list.length){host.innerHTML=`<div class="text"><p>Noch keine Protokolle gespeichert.</p></div>`;return;}
+
+  let list = [];
+  try{
+    list = await readHistory();
+  }catch(err){
+    console.error(err);
+    host.innerHTML=`<div class="text"><p>Verlauf konnte nicht geladen werden.</p></div>`;
+    return;
+  }
+
+  if(!list.length){
+    host.innerHTML=`<div class="text"><p>Noch keine Protokolle gespeichert.</p></div>`;
+    return;
+  }
+
   host.innerHTML=list.map(entry=>{
     const snap=entry.snapshot||{};
     const count=Array.isArray(snap.versuche)?snap.versuche.length:0;
@@ -969,18 +1243,63 @@ function renderHistoryList(){
 function hookHistoryDelegation(){
   const host=$('historyList');if(!host||host.dataset.bound==='1')return;
   host.dataset.bound='1';
+
   host.addEventListener('click',async e=>{
     const btn=e.target.closest('[data-hact]');if(!btn)return;
     const id=btn.dataset.id,act=btn.dataset.hact;
-    const list=readHistory();const entry=list.find(x=>x.id===id);
-    if(act==='del'){writeHistory(list.filter(x=>x.id!==id));renderHistoryList();return;}
-    if(!entry)return;
-    if(act==='load'){applySnapshot(entry.snapshot,true);saveDraftDebounced();document.querySelector('.tab[data-tab="protokoll"]')?.click();return;}
-    if(act==='pdf-protokoll'){try{await exportPdf(entry.snapshot,'protokoll');}catch(err){console.error(err);alert('PDF-Fehler');}return;}
-    if(act==='pdf-voll'){try{await exportPdf(entry.snapshot,'vollstaendig');}catch(err){console.error(err);alert('PDF-Fehler');}return;}
-    if(act==='pdf-restsand'){try{await exportRestsandPdf(entry.snapshot);}catch(err){console.error(err);alert('Restsand-PDF Fehler');}return;}
-    if(act==='pdf-ph'){try{await exportPhPdf(entry.snapshot);}catch(err){console.error(err);alert('Sulfat-PDF Fehler');}return;}
-    if(act==='photos'){try{await exportPhotosFromSnapshot(entry.snapshot);}catch(err){console.error(err);alert('Fotoexport fehlgeschlagen.');}}
+
+    try{
+      if(act==='del'){
+        await deleteHistoryEntryById(id);
+        renderHistoryList();
+        return;
+      }
+
+      const entry = await getHistoryEntryById(id);
+      if(!entry) return;
+
+      const fullSnapshot = await materializeSnapshotPhotos(entry.snapshot);
+
+      if(act==='load'){
+        applySnapshot(fullSnapshot,true);
+        saveDraftDebounced();
+        document.querySelector('.tab[data-tab="protokoll"]')?.click();
+        return;
+      }
+
+      if(act==='pdf-protokoll'){
+        await exportPdf(fullSnapshot,'protokoll');
+        return;
+      }
+
+      if(act==='pdf-voll'){
+        await exportPdf(fullSnapshot,'vollstaendig');
+        return;
+      }
+
+      if(act==='pdf-restsand'){
+        await exportRestsandPdf(fullSnapshot);
+        return;
+      }
+
+      if(act==='pdf-ph'){
+        await exportPhPdf(fullSnapshot);
+        return;
+      }
+
+      if(act==='photos'){
+        await exportPhotosFromSnapshot(fullSnapshot);
+        return;
+      }
+    }catch(err){
+      console.error(err);
+
+      if(act==='pdf-restsand') alert('Restsand-PDF Fehler');
+      else if(act==='pdf-ph') alert('Sulfat-PDF Fehler');
+      else if(act==='photos') alert('Fotoexport fehlgeschlagen.');
+      else if(act?.startsWith('pdf-')) alert('PDF-Fehler');
+      else alert('Verlaufseintrag konnte nicht verarbeitet werden.');
+    }
   });
 }
 
@@ -1952,7 +2271,7 @@ function initInstallButton(){
 }
 
 /* ── INIT ── */
-window.addEventListener('DOMContentLoaded',()=>{
+window.addEventListener('DOMContentLoaded', async ()=>{
   installAudioUnlock();
   initTabs();
   hookStaticInputs();
@@ -1973,7 +2292,10 @@ window.addEventListener('DOMContentLoaded',()=>{
   syncSettingsToUi();
   renderVersuche();
   renderLiveTab();
-  renderHistoryList();
+
+  await migrateLocalHistoryToIndexedDb();
+  await renderHistoryList();
+
   initInstallButton();
 
   if('serviceWorker' in navigator){
