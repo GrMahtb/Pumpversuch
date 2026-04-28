@@ -671,12 +671,16 @@ function audioNeedsResume(ctx){
   return !ctx || ctx.state === 'suspended' || ctx.state === 'interrupted';
 }
 
-function unlockAlarmAudio(){
+async function unlockAlarmAudio(){
   const ctx = getAlarmAudioContext();
   if(!ctx) return false;
 
   try{
-    if(audioNeedsResume(ctx)) ctx.resume();
+    if(audioNeedsResume(ctx)){
+      await ctx.resume();
+      await new Promise(r => setTimeout(r, 30));
+    }
+
     if(audioNeedsResume(ctx)){
       _alarmReady = false;
       updateAlarmSoundButton();
@@ -692,7 +696,8 @@ function unlockAlarmAudio(){
     _alarmReady = true;
     updateAlarmSoundButton();
     return true;
-  }catch{
+  }catch(err){
+    console.warn('unlockAlarmAudio failed:', err);
     _alarmReady = false;
     updateAlarmSoundButton();
     return false;
@@ -702,11 +707,12 @@ function unlockAlarmAudio(){
 function installAudioUnlock(){
   const fn = () => {
     if(state.settings?.alarmSoundEnabled === false) return;
-    unlockAlarmAudio();
+    void unlockAlarmAudio();
   };
-  ['pointerdown','touchstart','touchend','keydown','click'].forEach(evt =>
-    window.addEventListener(evt, fn, { passive:true })
-  );
+
+  ['pointerdown','touchstart','touchend','keydown','click'].forEach(evt=>{
+    window.addEventListener(evt, fn, { passive:true });
+  });
 }
 
 function scheduleBeep(ctx,start,duration=0.10,freq=2350,volume=0.52){
@@ -727,10 +733,10 @@ function scheduleBeep(ctx,start,duration=0.10,freq=2350,volume=0.52){
   });
 }
 
-function armAlarmSound(playTest=true){
+async function armAlarmSound(playTest=true){
   state.settings.alarmSoundEnabled = true;
 
-  const ok = unlockAlarmAudio();
+  const ok = await unlockAlarmAudio();
   if(!ok) return false;
 
   if(playTest){
@@ -738,15 +744,15 @@ function armAlarmSound(playTest=true){
     if(!ctx) return false;
 
     const now = ctx.currentTime + 0.02;
-    scheduleBeep(ctx, now,       0.08, 2100, 0.42);
-    scheduleBeep(ctx, now + 0.18,0.10, 2550, 0.50);
+    scheduleBeep(ctx, now,        0.08, 2100, 0.42);
+    scheduleBeep(ctx, now + 0.18, 0.10, 2550, 0.50);
   }
 
   updateAlarmSoundButton();
   return true;
 }
 
-function toggleAlarmSoundByUserGesture(){
+async function toggleAlarmSoundByUserGesture(){
   const active = state.settings.alarmSoundEnabled !== false && _alarmReady;
 
   if(active){
@@ -758,7 +764,7 @@ function toggleAlarmSoundByUserGesture(){
   }
 
   state.settings.alarmSoundEnabled = true;
-  const ok = armAlarmSound(true);
+  const ok = await armAlarmSound(true);
   updateAlarmSoundButton();
   saveDraftDebounced();
 
@@ -767,14 +773,15 @@ function toggleAlarmSoundByUserGesture(){
   }
 }
 
-function playIntervalBeep(){
+async function playIntervalBeep(){
   if(state.settings?.alarmSoundEnabled === false) return false;
 
   const ctx = getAlarmAudioContext();
   if(!ctx) return false;
 
   if(audioNeedsResume(ctx)){
-    if(!unlockAlarmAudio()) return false;
+    const ok = await unlockAlarmAudio();
+    if(!ok) return false;
   }
 
   if(audioNeedsResume(ctx)) return false;
@@ -877,15 +884,6 @@ function updateTimerUi(card,versuch){
 }
 
 function triggerIntervalAlarm(vid){
-  const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
-  const display=card?.querySelector('[data-role="elapsed"]');
-  document.body.classList.remove('screen-flash');void document.body.offsetWidth;document.body.classList.add('screen-flash');
-  if(card){card.classList.remove('versuch-card--alarm');void card.offsetWidth;card.classList.add('versuch-card--alarm');}
-  if(display){display.classList.remove('timer-display--alarm');void display.offsetWidth;display.classList.add('timer-display--alarm');}
-  playIntervalBeep();
-  setTimeout(()=>document.body.classList.remove('screen-flash'),1800);
-  setTimeout(()=>{if(card)card.classList.remove('versuch-card--alarm');if(display)display.classList.remove('timer-display--alarm');},Math.max(2400,Number(state.settings.alarmDurationSec||4)*1000+600));
-}
 function tickTimer(vid){
   const versuch=getVersuchById(vid);const t=timerMap[vid];if(!versuch||!t||!t.running)return;
   const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
@@ -898,9 +896,32 @@ function tickTimer(vid){
   t.raf=requestAnimationFrame(()=>tickTimer(vid));
 }
 function startTimer(vid){
-  const versuch=getVersuchById(vid);if(!versuch)return;
- if(state.settings.alarmSoundEnabled !== false){
-  unlockAlarmAudio();
+  const versuch=getVersuchById(vid);
+  if(!versuch)return;
+
+  if(state.settings.alarmSoundEnabled !== false){
+    void unlockAlarmAudio();
+  }
+
+  const t=ensureTimer(vid,versuch);
+  if(t.running)return;
+
+  if(!versuch.startzeit)versuch.startzeit=formatTimeHHMMSS(new Date());
+
+  const mins=(versuch.messungen||[])
+    .map(m=>Number(m.min))
+    .filter(n=>Number.isFinite(n)&&n>=0)
+    .sort((a,b)=>a-b);
+
+  t.alarmCount=mins.filter(iv=>iv>0&&t.accumulatedMs/60000>=iv).length;
+  t.running=true;
+  t.startMs=Date.now();
+
+  const card=document.querySelector(`.versuch-card[data-vid="${vid}"]`);
+  updateTimerUi(card,versuch);
+  tickTimer(vid);
+  startFloatingLoop();
+  saveDraftDebounced();
 }
   const t=ensureTimer(vid,versuch);if(t.running)return;
   if(!versuch.startzeit)versuch.startzeit=formatTimeHHMMSS(new Date());
@@ -1153,7 +1174,7 @@ function hookStaticInputs(){
   $('settings-alarmDuration')?.addEventListener('input',()=>{collectSettingsFromUi();saveDraftDebounced();});
   $('pdfType-protokoll')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
   $('pdfType-vollstaendig')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
-  $('btnAlarmSoundToggle')?.addEventListener('click',toggleAlarmSoundByUserGesture);
+  $('btnAlarmSoundToggle')?.addEventListener('click',async()=>{await toggleAlarmSoundByUserGesture();});
   $('btnAddVersuch')?.addEventListener('click',()=>{const v=defaultVersuch();state.versuche.push(v);renderVersuche();renderLiveTab();saveDraftDebounced();setTimeout(()=>document.querySelector(`.versuch-card[data-vid="${v.id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'}),40);});
   $('btnSave')?.addEventListener('click',()=>saveCurrentToHistory('Pumpversuch im Verlauf gespeichert.'));
   $('btnSaveRestsand')?.addEventListener('click',()=>saveCurrentToHistory('Restsanddaten im Verlauf gespeichert.'));
