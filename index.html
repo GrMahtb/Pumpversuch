@@ -383,13 +383,22 @@
     <section class="card">
       <div class="card__title">Einstellungen</div>
 
-      <div class="settings-group">
-        <div class="settings-group__title">4.1 Alarm</div>
-        <label class="field">
-          <span class="field__label">Alarmdauer [Sekunden]</span>
-          <input id="settings-alarmDuration" class="field__input" type="number" min="1" max="30" step="1" value="4" />
-        </label>
-      </div>
+     <div class="settings-group">
+  <div class="settings-group__title">4.1 Alarm</div>
+
+  <label class="field">
+    <span class="field__label">Alarmdauer [Sekunden]</span>
+    <input id="settings-alarmDuration" class="field__input" type="number" min="1" max="30" step="1" value="4" />
+  </label>
+
+  <div class="action-row" style="justify-content:flex-start; margin-top:10px;">
+    <button id="btnAlarmSoundToggle" class="btn btn--ghost btn--small" type="button">Ton einschalten</button>
+  </div>
+
+  <div id="alarmSoundStatus" class="hint" style="text-align:left; margin-top:8px;">
+    Für iPhone: Ton einmal hier aktivieren oder vor dem Start testen.
+  </div>
+</div>
 
       <div class="settings-group">
         <div class="settings-group__title">4.2 PDF Export (Standard)</div>
