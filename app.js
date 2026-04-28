@@ -322,10 +322,25 @@ function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
   alert('Speichern im Verlauf fehlgeschlagen. Lokaler Browser-Speicher ist voll.');
   return false;
 }
-  const snap=collectSnapshot();
-  const entry={id:uid(),savedAt:Date.now(),title:`${snap.meta.objekt||'—'} · ${snap.meta.ort||'—'}`,snapshot:snap};
-  const list=readHistory();list.unshift(entry);writeHistory(list);renderHistoryList();
-  if(msg)alert(msg);
+  // 2) Fallback: ohne Fotos speichern
+  const strippedEntry = {
+    ...baseEntry,
+    id: uid(),
+    snapshot: stripSnapshotPhotos(snap),
+    photoMode: 'stripped'
+  };
+
+  if(tryWriteHistory([strippedEntry, ...current])){
+    renderHistoryList();
+    alert(
+      (msg || 'Im Verlauf gespeichert.') +
+      '\n\nHinweis: Der Verlaufseintrag wurde ohne Fotos gespeichert, weil der lokale Speicher voll war.'
+    );
+    return true;
+  }
+
+  alert('Speichern im Verlauf fehlgeschlagen. Lokaler Browser-Speicher ist voll.');
+  return false;
 }
 
 /* ── TABS ── */
