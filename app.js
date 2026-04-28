@@ -79,12 +79,12 @@ function getInitialState(){
     versuche:[],
     restsand:{imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''},
     ph:{datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}},
-    settings:{alarmDurationSec:4,pdfExportType:'protokoll'}
+    settings:{alarmDurationSec:4,pdfExportType:'protokoll',alarmSoundEnabled:true}
   };
 }
 const state=getInitialState();
 const timerMap={};
-let _saveT=null,_liveT=null,_audioCtx=null,_alarmGain=null,_timeAdjustVid=null,_floatingRaf=null;
+let _saveT=null,_liveT=null,_audioCtx=null,_alarmGain=null,_timeAdjustVid=null,_floatingRaf=null,_alarmReady=false;
 
 /* ── HELPERS ── */
 // FIX: war crypto?.randomUUID?..(){ — doppelter Punkt war Syntaxfehler
@@ -232,13 +232,39 @@ function collectSelectionFromUi(){
 }
 function updateMainPdfButtonLabel(){const btn=$('btnPdf');if(btn)btn.textContent=state.settings.pdfExportType==='vollstaendig'?'PDF Vollständig':'PDF Protokoll';}
 function syncSettingsToUi(){
-  if($('settings-alarmDuration'))$('settings-alarmDuration').value=state.settings.alarmDurationSec??4;
-  const a=$('pdfType-protokoll'),b=$('pdfType-vollstaendig');
-  if(a)a.checked=state.settings.pdfExportType!=='vollstaendig';
-  if(b)b.checked=state.settings.pdfExportType==='vollstaendig';
+  if($('settings-alarmDuration')) $('settings-alarmDuration').value = state.settings.alarmDurationSec ?? 4;
+
+  const a = $('pdfType-protokoll');
+  const b = $('pdfType-vollstaendig');
+  if(a) a.checked = state.settings.pdfExportType !== 'vollstaendig';
+  if(b) b.checked = state.settings.pdfExportType === 'vollstaendig';
+
   updateMainPdfButtonLabel();
+  updateAlarmSoundButton();
 }
 function collectSettingsFromUi(){state.settings.alarmDurationSec=clamp(Number($('settings-alarmDuration')?.value||4),1,30);state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked?'vollstaendig':'protokoll';updateMainPdfButtonLabel();}
+function updateAlarmSoundButton(){
+  const btn = $('btnAlarmSoundToggle');
+  const status = $('alarmSoundStatus');
+  if(!btn) return;
+
+  const enabledPref = state.settings.alarmSoundEnabled !== false;
+  const active = enabledPref && _alarmReady;
+
+  btn.textContent = active ? 'Ton ausschalten' : 'Ton einschalten';
+  btn.classList.toggle('btn--save', active);
+  btn.classList.toggle('btn--ghost', !active);
+
+  if(status){
+    if(active){
+      status.textContent = 'Alarmton ist aktiv.';
+    }else if(enabledPref){
+      status.textContent = 'Für iPhone: einmal hier oder vor dem Start direkt antippen, damit der Ton sicher freigegeben wird.';
+    }else{
+      status.textContent = 'Alarmton ist ausgeschaltet.';
+    }
+  }
+}
 function ensureRequiredFiliale(){
   collectMetaFromUi();
   const filiale = String(state.meta.filiale || '').trim();
@@ -641,19 +667,136 @@ function getAlarmAudioContext(){
   if(!_audioCtx){try{_audioCtx=new AC();_alarmGain=_audioCtx.createGain();_alarmGain.gain.value=1.0;_alarmGain.connect(_audioCtx.destination);}catch{return null;}}
   return _audioCtx;
 }
-function unlockAlarmAudio(){const ctx=getAlarmAudioContext();if(!ctx)return false;try{if(ctx.state==='suspended')ctx.resume();const buf=ctx.createBuffer(1,1,22050);const src=ctx.createBufferSource();src.buffer=buf;src.connect(ctx.destination);src.start(0);return true;}catch{return false;}}
-function installAudioUnlock(){const fn=()=>unlockAlarmAudio();['pointerdown','touchstart','touchend','keydown','click'].forEach(evt=>window.addEventListener(evt,fn,{passive:true}));}
-function scheduleBeep(ctx,start,duration=0.10,freq=2350,volume=0.52){
-  const out=_alarmGain||ctx.destination;
-  [freq,freq*1.015].forEach(f=>{const osc=ctx.createOscillator(),g=ctx.createGain();osc.type='square';osc.frequency.setValueAtTime(f,start);g.gain.setValueAtTime(0.0001,start);g.gain.exponentialRampToValueAtTime(Math.max(0.0001,volume),start+0.005);g.gain.setValueAtTime(Math.max(0.0001,volume),start+Math.max(0.03,duration-0.02));g.gain.exponentialRampToValueAtTime(0.0001,start+duration);osc.connect(g);g.connect(out);osc.start(start);osc.stop(start+duration+0.02);});
+function audioNeedsResume(ctx){
+  return !ctx || ctx.state === 'suspended' || ctx.state === 'interrupted';
 }
+
+function unlockAlarmAudio(){
+  const ctx = getAlarmAudioContext();
+  if(!ctx) return false;
+
+  try{
+    if(audioNeedsResume(ctx)) ctx.resume();
+    if(audioNeedsResume(ctx)){
+      _alarmReady = false;
+      updateAlarmSoundButton();
+      return false;
+    }
+
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(_alarmGain || ctx.destination);
+    src.start(0);
+
+    _alarmReady = true;
+    updateAlarmSoundButton();
+    return true;
+  }catch{
+    _alarmReady = false;
+    updateAlarmSoundButton();
+    return false;
+  }
+}
+
+function installAudioUnlock(){
+  const fn = () => {
+    if(state.settings?.alarmSoundEnabled === false) return;
+    unlockAlarmAudio();
+  };
+  ['pointerdown','touchstart','touchend','keydown','click'].forEach(evt =>
+    window.addEventListener(evt, fn, { passive:true })
+  );
+}
+
+function scheduleBeep(ctx,start,duration=0.10,freq=2350,volume=0.52){
+  const out = _alarmGain || ctx.destination;
+  [freq, freq*1.015].forEach(f=>{
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(f,start);
+    g.gain.setValueAtTime(0.0001,start);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001,volume),start+0.005);
+    g.gain.setValueAtTime(Math.max(0.0001,volume),start+Math.max(0.03,duration-0.02));
+    g.gain.exponentialRampToValueAtTime(0.0001,start+duration);
+    osc.connect(g);
+    g.connect(out);
+    osc.start(start);
+    osc.stop(start+duration+0.02);
+  });
+}
+
+function armAlarmSound(playTest=true){
+  state.settings.alarmSoundEnabled = true;
+
+  const ok = unlockAlarmAudio();
+  if(!ok) return false;
+
+  if(playTest){
+    const ctx = getAlarmAudioContext();
+    if(!ctx) return false;
+
+    const now = ctx.currentTime + 0.02;
+    scheduleBeep(ctx, now,       0.08, 2100, 0.42);
+    scheduleBeep(ctx, now + 0.18,0.10, 2550, 0.50);
+  }
+
+  updateAlarmSoundButton();
+  return true;
+}
+
+function toggleAlarmSoundByUserGesture(){
+  const active = state.settings.alarmSoundEnabled !== false && _alarmReady;
+
+  if(active){
+    state.settings.alarmSoundEnabled = false;
+    _alarmReady = false;
+    updateAlarmSoundButton();
+    saveDraftDebounced();
+    return;
+  }
+
+  state.settings.alarmSoundEnabled = true;
+  const ok = armAlarmSound(true);
+  updateAlarmSoundButton();
+  saveDraftDebounced();
+
+  if(!ok){
+    alert('Der Ton konnte auf diesem iPhone noch nicht freigeschaltet werden. Bitte Lautstärke prüfen und den Button erneut direkt antippen.');
+  }
+}
+
 function playIntervalBeep(){
-  try{const p=[120,90,120,90,120,360];const tot=Math.max(1,Math.round(Number(state.settings.alarmDurationSec||4)/0.9));const vib=[];for(let i=0;i<tot;i++)vib.push(...p);if(navigator.vibrate)navigator.vibrate(vib);}catch{}
-  const ctx=getAlarmAudioContext();if(!ctx)return false;
-  try{if(ctx.state==='suspended')ctx.resume();}catch{}
-  if(ctx.state==='suspended')return false;
-  const dur=clamp(Number(state.settings.alarmDurationSec||4),1,30),now=ctx.currentTime+0.02,cycle=0.90;
-  for(let t=0;t<dur;t+=cycle){scheduleBeep(ctx,now+t,0.10,2350,0.52);scheduleBeep(ctx,now+t+0.20,0.10,2350,0.52);scheduleBeep(ctx,now+t+0.40,0.12,2550,0.56);}
+  if(state.settings?.alarmSoundEnabled === false) return false;
+
+  const ctx = getAlarmAudioContext();
+  if(!ctx) return false;
+
+  if(audioNeedsResume(ctx)){
+    if(!unlockAlarmAudio()) return false;
+  }
+
+  if(audioNeedsResume(ctx)) return false;
+
+  try{
+    const p=[120,90,120,90,120,360];
+    const tot=Math.max(1,Math.round(Number(state.settings.alarmDurationSec||4)/0.9));
+    const vib=[];
+    for(let i=0;i<tot;i++) vib.push(...p);
+    if(navigator.vibrate) navigator.vibrate(vib);
+  }catch{}
+
+  const dur = clamp(Number(state.settings.alarmDurationSec||4),1,30);
+  const now = ctx.currentTime + 0.02;
+  const cycle = 0.90;
+
+  for(let t=0;t<dur;t+=cycle){
+    scheduleBeep(ctx, now+t,       0.10, 2350, 0.52);
+    scheduleBeep(ctx, now+t+0.20,  0.10, 2350, 0.52);
+    scheduleBeep(ctx, now+t+0.40,  0.12, 2550, 0.56);
+  }
+
   return true;
 }
 
@@ -756,7 +899,9 @@ function tickTimer(vid){
 }
 function startTimer(vid){
   const versuch=getVersuchById(vid);if(!versuch)return;
+ if(state.settings.alarmSoundEnabled !== false){
   unlockAlarmAudio();
+}
   const t=ensureTimer(vid,versuch);if(t.running)return;
   if(!versuch.startzeit)versuch.startzeit=formatTimeHHMMSS(new Date());
   const mins=(versuch.messungen||[]).map(m=>Number(m.min)).filter(n=>Number.isFinite(n)&&n>=0).sort((a,b)=>a-b);
@@ -1008,6 +1153,7 @@ function hookStaticInputs(){
   $('settings-alarmDuration')?.addEventListener('input',()=>{collectSettingsFromUi();saveDraftDebounced();});
   $('pdfType-protokoll')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
   $('pdfType-vollstaendig')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
+  $('btnAlarmSoundToggle')?.addEventListener('click',toggleAlarmSoundByUserGesture);
   $('btnAddVersuch')?.addEventListener('click',()=>{const v=defaultVersuch();state.versuche.push(v);renderVersuche();renderLiveTab();saveDraftDebounced();setTimeout(()=>document.querySelector(`.versuch-card[data-vid="${v.id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'}),40);});
   $('btnSave')?.addEventListener('click',()=>saveCurrentToHistory('Pumpversuch im Verlauf gespeichert.'));
   $('btnSaveRestsand')?.addEventListener('click',()=>saveCurrentToHistory('Restsanddaten im Verlauf gespeichert.'));
