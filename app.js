@@ -346,13 +346,8 @@ function writeHistory(list){
 }
 
 function tryWriteHistory(list){
-  let next = Array.isArray(list) ? list.slice(0, HISTORY_MAX) : [];
-
-  while(next.length){
-    if(writeHistory(next)) return true;
-    next = next.slice(0, -1); // älteste Einträge schrittweise entfernen
-  }
-  return false;
+  const next = Array.isArray(list) ? list.slice(0, HISTORY_MAX) : [];
+  return writeHistory(next);
 }
 
 function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
@@ -374,13 +369,15 @@ function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
     photoMode: 'full'
   };
 
-  if(tryWriteHistory([fullEntry, ...current])){
+  const fullList = [fullEntry, ...current].slice(0, HISTORY_MAX);
+  if(tryWriteHistory(fullList)){
     renderHistoryList();
     if(msg) alert(msg);
     return true;
   }
 
-  // 2) Fallback: ohne Fotos speichern
+  // 2) Fallback: nur der NEUE Eintrag ohne Fotos
+  // Bestehende Verlaufseinträge bleiben unverändert erhalten
   const strippedEntry = {
     ...baseEntry,
     id: uid(),
@@ -388,16 +385,17 @@ function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
     photoMode: 'stripped'
   };
 
-  if(tryWriteHistory([strippedEntry, ...current])){
+  const strippedList = [strippedEntry, ...current].slice(0, HISTORY_MAX);
+  if(tryWriteHistory(strippedList)){
     renderHistoryList();
     alert(
       (msg || 'Im Verlauf gespeichert.') +
-      '\n\nHinweis: Der Verlaufseintrag wurde ohne Fotos gespeichert, weil der lokale Speicher voll war.'
+      '\n\nHinweis: Der neue Verlaufseintrag wurde ohne Fotos gespeichert, weil der lokale Speicher fast voll ist. Bereits gespeicherte Einträge wurden nicht verändert.'
     );
     return true;
   }
 
-  alert('Speichern im Verlauf fehlgeschlagen. Lokaler Browser-Speicher ist voll.');
+  alert('Speichern im Verlauf fehlgeschlagen. Der lokale Speicher ist voll. Es wurde kein bestehender Verlaufseintrag gelöscht oder überschrieben.');
   return false;
 }
 /* ── TABS ── */
