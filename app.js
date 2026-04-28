@@ -612,7 +612,7 @@ async function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
     };
 
     await dbSaveHistoryEntry(entry);
-    renderHistoryList();
+    await renderHistoryList();
 
     if(msg) alert(msg);
     return true;
@@ -621,43 +621,6 @@ async function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
     alert('Speichern im Verlauf fehlgeschlagen.');
     return false;
   }
-}
-
-  // 1) Zuerst vollständig inkl. Fotos versuchen
-  const fullEntry = {
-    ...baseEntry,
-    snapshot: snap,
-    photoMode: 'full'
-  };
-
-  const fullList = [fullEntry, ...current].slice(0, HISTORY_MAX);
-  if(tryWriteHistory(fullList)){
-    renderHistoryList();
-    if(msg) alert(msg);
-    return true;
-  }
-
-  // 2) Fallback: nur der NEUE Eintrag ohne Fotos
-  // Bestehende Verlaufseinträge bleiben unverändert erhalten
-  const strippedEntry = {
-    ...baseEntry,
-    id: uid(),
-    snapshot: stripSnapshotPhotos(snap),
-    photoMode: 'stripped'
-  };
-
-  const strippedList = [strippedEntry, ...current].slice(0, HISTORY_MAX);
-  if(tryWriteHistory(strippedList)){
-    renderHistoryList();
-    alert(
-      (msg || 'Im Verlauf gespeichert.') +
-      '\n\nHinweis: Der neue Verlaufseintrag wurde ohne Fotos gespeichert, weil der lokale Speicher fast voll ist. Bereits gespeicherte Einträge wurden nicht verändert.'
-    );
-    return true;
-  }
-
-  alert('Speichern im Verlauf fehlgeschlagen. Der lokale Speicher ist voll. Es wurde kein bestehender Verlaufseintrag gelöscht oder überschrieben.');
-  return false;
 }
 /* ── TABS ── */
 function initTabs(){
