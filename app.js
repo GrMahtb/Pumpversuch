@@ -6,13 +6,66 @@ const STORAGE_DRAFT='htb-pumpversuch-draft-v18';
 const STORAGE_HISTORY='htb-pumpversuch-history-v18';
 const HISTORY_MAX=30;
 const DEFAULT_INTERVALLE=[0,1,2,3,4,5,15,30,45,60,75,90,105,120,135,150,165,180];
-const FIRMA={name:'HTB Baugesellschaft m.b.H.',slogan:'BAUEN MIT SPEZIALISTEN ALS PARTNER',adresse:'A-6471 Arzl im Pitztal, Gewerbepark Pitztal 16',tel:'Tel. +43(0)5412/63975',email:'office.arzl@htb-bau.at',web:'www.htb-bau.at'};
+const FIRMA = {
+  name:'HTB Baugesellschaft m.b.H.',
+  slogan:'BAUEN MIT SPEZIALISTEN ALS PARTNER'
+};
+
+const FILIALEN = {
+  Arzl: {
+    adresse:'A-6471 Arzl im Pitztal, Gewerbepark Pitztal 16',
+    tel:'Tel. +43(0)5412/63975',
+    email:'office.arzl@htb-bau.at',
+    web:'www.htb-bau.at'
+  },
+  'Nüziders': {
+    adresse:'A-6714 Nüziders, Landstraße 19',
+    tel:'Tel. +43 5552 / 34 739',
+    email:'office.nueziders@htb-bau.at',
+    web:'www.htb-bau.at'
+  },
+  Zirl: {
+    adresse:'A-6170 Zirl, Neuraut 1',
+    tel:'Tel. +43 5238 / 58 873 1',
+    email:'office.ibk@htb-bau.at',
+    web:'www.htb-bau.at'
+  },
+  Schwoich: {
+    adresse:'A-6334 Schwoich, Kufsteiner Wald 28',
+    tel:'Tel. +43 5372 / 63 600',
+    email:'office.schwoich@htb-bau.at',
+    web:'www.htb-bau.at'
+  },
+  Fusch: {
+    adresse:'A-5672 Fusch an der Großglocknerstraße, Achenstraße 2',
+    tel:'Tel. +43 6546 / 40 116',
+    email:'office.fusch@htb-bau.at',
+    web:'www.htb-bau.at'
+  },
+  Wels: {
+    adresse:'A-4600 Wels, Hans-Sachs-Straße 103',
+    tel:'Tel. +43 7242 / 601 600',
+    email:'office.wels@htb-bau.at',
+    web:'www.htb-bau.at'
+  },
+  Klagenfurt: {
+    adresse:'A-9020 Klagenfurt, Josef-Sablatnig-Straße 251',
+    tel:'Tel. +43 463 / 33 533 700',
+    email:'office.klagenfurt@htb-bau.at',
+    web:'www.htb-bau.at'
+  }
+};
+
+function getFilialeData(filiale){
+  return FILIALEN[filiale] || FILIALEN.Arzl;
+}
+
 const $=id=>document.getElementById(id);
 
 /* ── STATE ── */
 function getInitialState(){
   return{
-    meta:{objekt:'',grundstueck:'',ort:'',geologie:'',auftragsnummer:'',auftraggeber:'',bauleitung:'',bohrmeister:'',koordination:'',geprueftDurch:'',geprueftAm:''},
+    meta:{filiale:'',objekt:'',grundstueck:'',ort:'',geologie:'',auftragsnummer:'',auftraggeber:'',bauleitung:'',bohrmeister:'',koordination:'',geprueftDurch:'',geprueftAm:''},
     selection:{foerder:true,schluck:false},
     foerder:{dm:'',endteufe:'',ruhe:''},
     schluck:{dm:'',endteufe:'',ruhe:''},
@@ -143,7 +196,20 @@ function hydrateVersuch(v){
 }
 
 /* ── FIELD MAPS ── */
-const META_FIELDS=[['meta-objekt','objekt'],['meta-grundstueck','grundstueck'],['meta-ort','ort'],['meta-geologie','geologie'],['meta-auftragsnummer','auftragsnummer'],['meta-auftraggeber','auftraggeber'],['meta-bauleitung','bauleitung'],['meta-bohrmeister','bohrmeister'],['meta-koordination','koordination'],['meta-geprueftDurch','geprueftDurch'],['meta-geprueftAm','geprueftAm']];
+const META_FIELDS=[
+  ['meta-filiale','filiale'],
+  ['meta-objekt','objekt'],
+  ['meta-grundstueck','grundstueck'],
+  ['meta-ort','ort'],
+  ['meta-geologie','geologie'],
+  ['meta-auftragsnummer','auftragsnummer'],
+  ['meta-auftraggeber','auftraggeber'],
+  ['meta-bauleitung','bauleitung'],
+  ['meta-bohrmeister','bohrmeister'],
+  ['meta-koordination','koordination'],
+  ['meta-geprueftDurch','geprueftDurch'],
+  ['meta-geprueftAm','geprueftAm']
+];
 const BRUNNEN_FIELDS=[['foerder-dm','foerder','dm'],['foerder-endteufe','foerder','endteufe'],['foerder-ruhe','foerder','ruhe'],['schluck-dm','schluck','dm'],['schluck-endteufe','schluck','endteufe'],['schluck-ruhe','schluck','ruhe']];
 
 /* ── SYNC UI ── */
@@ -167,7 +233,17 @@ function syncSettingsToUi(){
   updateMainPdfButtonLabel();
 }
 function collectSettingsFromUi(){state.settings.alarmDurationSec=clamp(Number($('settings-alarmDuration')?.value||4),1,30);state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked?'vollstaendig':'protokoll';updateMainPdfButtonLabel();}
+function ensureRequiredFiliale(){
+  collectMetaFromUi();
+  const filiale = String(state.meta.filiale || '').trim();
 
+  if(FILIALEN[filiale]) return true;
+
+  document.querySelector('.tab[data-tab="protokoll"]')?.click();
+  alert('Bitte bei den Stammdaten eine Filiale auswählen.');
+  $('meta-filiale')?.focus();
+  return false;
+}
 function renderOverviewPhotoThumb(){
   const box=$('overviewPhotoThumb');if(!box)return;
   if(!state.overviewPhotoDataUrl){box.hidden=true;box.innerHTML='';return;}
@@ -280,6 +356,8 @@ function tryWriteHistory(list){
 }
 
 function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
+  if(!ensureRequiredFiliale()) return false;
+
   const snap = collectSnapshot();
   const current = readHistory();
 
@@ -968,10 +1046,10 @@ function getWellRowsForPdf(versuch,key,ruhe){
     return{min:Number.isFinite(min)?min:null,valueNum,deltaM,deltaCm};
   });
 }
-function getFooterTextSingleLine(subtitle=''){
-  return `${FIRMA.name} · ${FIRMA.tel} · ${FIRMA.email} · ${FIRMA.web} · ${FIRMA.adresse}${subtitle ? ' · ' + subtitle : ''}`;
+function getFooterTextSingleLine(meta, subtitle=''){
+  const filial = getFilialeData(meta?.filiale);
+  return `${FIRMA.name} · ${filial.tel} · ${filial.email} · ${filial.web} · ${filial.adresse}${subtitle ? ' · ' + subtitle : ''}`;
 }
-
 function getFooterFontSize(font, text, maxW, startSize = 6.4, minSize = 4.6){
   let size = startSize;
   const safeText = pdfSafe(text);
@@ -982,10 +1060,10 @@ function getFooterFontSize(font, text, maxW, startSize = 6.4, minSize = 4.6){
 }
 
 function drawFooter(page, ctx, subtitle=''){
-  const { PAGE_W, mm, fontR, K } = ctx;
+  const { PAGE_W, mm, fontR, K, currentMeta } = ctx;
   const x = mm(12);
   const maxW = PAGE_W - x - mm(12);
-  const text = getFooterTextSingleLine(subtitle);
+  const text = getFooterTextSingleLine(currentMeta || {}, subtitle);
   const size = getFooterFontSize(fontR, text, maxW, 6.4, 4.6);
   drawTextSafe(page, text, { x, y: mm(8.8), size, font: fontR, color: K });
 }
@@ -1103,7 +1181,7 @@ async function drawImagePage(pdf,ctx,title,subtitle,dataUrl){
 }
 /* ── NEU: Fußzeile mit Bild + Text ── */
 function drawNewFooterFull(page, ctx, subtitle='') {
-  const { PAGE_W, mm, fontR, K, fusszeile } = ctx;
+  const { PAGE_W, mm, fontR, K, fusszeile, currentMeta } = ctx;
 
   let imgH = 0;
   if(fusszeile){
@@ -1114,7 +1192,7 @@ function drawNewFooterFull(page, ctx, subtitle='') {
 
   const x = mm(8);
   const maxW = PAGE_W - x - mm(8);
-  const text = getFooterTextSingleLine(subtitle);
+  const text = getFooterTextSingleLine(currentMeta || {}, subtitle);
   const size = getFooterFontSize(fontR, text, maxW, 6.0, 4.4);
 
   drawTextSafe(page, text, {
@@ -1234,7 +1312,7 @@ page.drawLine({
     { label: 'Auftraggeber',         value: snap.meta?.auftraggeber   || '—', big: false },
     { label: '',                     value: 'Pumpversuch',                    big: true  },
     { label: 'Geprüft durch',        value: snap.meta?.geprueftDurch  || '—', big: false },
-    { label: 'Arzl, am',             value: dateDE(snap.meta?.geprueftAm) || todayDE(), big: false },
+    { label: 'Ort / Datum',          value: `${snap.meta?.ort || '—'}, am ${dateDE(snap.meta?.geprueftAm) || todayDE()}`, big: false },
   ];
 
   const slotH = areaH / fields.length;
@@ -1713,48 +1791,81 @@ function addFullPdfPageNumbers(pdf, ctx){
   }
 }
 async function exportPdf(snapshot=null,type='protokoll'){
+  if(!snapshot && !ensureRequiredFiliale()) return;
+
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
+
   const versuche=(snap.versuche||[]).map(v=>hydrateVersuch(v));
   if(!versuche.length){alert('Es ist noch keine Pumpstufe vorhanden.');return;}
+
   const{PDFDocument}=window.PDFLib;
   const pdf=await PDFDocument.create();
   const assets=await loadPdfAssets(pdf);
   const ctx=getPdfCtx(window.PDFLib,assets);
-if(type==='vollstaendig'){
-  const hasOverview=!!snap.overviewPhotoDataUrl;
-  const hasRestsand=!!(snap.restsand?.imhoff?.photoDataUrl||snap.restsand?.sieb?.photoDataUrl||snap.restsand?.imhoff?.menge||snap.restsand?.sieb?.menge||snap.restsand?.bemerkung);
-  const hasPh=!!(snap.ph?.sulfat?.wert||snap.ph?.temperatur?.wert||snap.ph?.ph?.wert||snap.ph?.sulfat?.photoDataUrl||snap.ph?.temperatur?.photoDataUrl||snap.ph?.ph?.photoDataUrl);
+  ctx.currentMeta = snap.meta || {};
 
-  await drawCoverPage(pdf,ctx,snap);
-  await drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh);
+  if(type==='vollstaendig'){
+    const hasOverview=!!snap.overviewPhotoDataUrl;
+    const hasRestsand=!!(
+      snap.restsand?.imhoff?.photoDataUrl ||
+      snap.restsand?.sieb?.photoDataUrl ||
+      snap.restsand?.imhoff?.menge ||
+      snap.restsand?.sieb?.menge ||
+      snap.restsand?.bemerkung
+    );
+    const hasPh=!!(
+      snap.ph?.sulfat?.wert ||
+      snap.ph?.temperatur?.wert ||
+      snap.ph?.ph?.wert ||
+      snap.ph?.sulfat?.photoDataUrl ||
+      snap.ph?.temperatur?.photoDataUrl ||
+      snap.ph?.ph?.photoDataUrl
+    );
 
-  for(let i=0;i<versuche.length;i++){
-    await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
-    if(versuche[i].photoDataUrl){
-      await drawImagePage(
-        pdf,
-        ctx,
-        `Foto Durchflussmesser ${getStageTitle(i)}`,
-        `${snap.meta?.objekt||''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,
-        versuche[i].photoDataUrl
-      );
+    await drawCoverPage(pdf,ctx,snap);
+    await drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh);
+
+    for(let i=0;i<versuche.length;i++){
+      await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
+
+      if(versuche[i].photoDataUrl){
+        await drawImagePage(
+          pdf,
+          ctx,
+          `Foto Durchflussmesser ${getStageTitle(i)}`,
+          `${snap.meta?.objekt||''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,
+          versuche[i].photoDataUrl
+        );
+      }
+    }
+
+    if(hasOverview){
+      const title=`Übersicht ${snap.meta?.objekt||''} am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`.replace(/\s+/g,' ').trim();
+      await drawImagePage(pdf,ctx,title,'Übersichtsfoto',snap.overviewPhotoDataUrl);
+    }
+
+    if(hasRestsand) await drawRestsandPage(pdf,ctx,snap);
+    if(hasPh) await drawPhPage(pdf,ctx,snap);
+
+    addFullPdfPageNumbers(pdf, ctx);
+  }else{
+    for(let i=0;i<versuche.length;i++){
+      await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
+
+      // NEU: Beweisfoto auch im normalen Protokoll-PDF ausgeben
+      if(versuche[i].photoDataUrl){
+        await drawImagePage(
+          pdf,
+          ctx,
+          `Foto Durchflussmesser ${getStageTitle(i)}`,
+          `${snap.meta?.objekt||''} · ${dateDE(snap.meta?.geprueftAm)||todayDE()}`,
+          versuche[i].photoDataUrl
+        );
+      }
     }
   }
 
-  if(hasOverview){
-    const title=`Übersicht ${snap.meta?.objekt||''} am ${dateDE(snap.meta?.geprueftAm)||todayDE()}`.replace(/\s+/g,' ').trim();
-    await drawImagePage(pdf,ctx,title,'Übersichtsfoto',snap.overviewPhotoDataUrl);
-  }
-
-  if(hasRestsand) await drawRestsandPage(pdf,ctx,snap);
-  if(hasPh) await drawPhPage(pdf,ctx,snap);
-
-  // Seitenzahlen ab PDF-Seite 3
-  addFullPdfPageNumbers(pdf, ctx);
-}else{
-    for(let i=0;i<versuche.length;i++)await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
-  }
   const bytes=await pdf.save();
   const blob=new Blob([bytes],{type:'application/pdf'});
   const url=URL.createObjectURL(blob);
@@ -1767,39 +1878,60 @@ if(type==='vollstaendig'){
 }
 
 async function exportRestsandPdf(snapshot=null){
+  if(!snapshot && !ensureRequiredFiliale()) return;
+
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
+
   const{PDFDocument}=window.PDFLib;
   const pdf=await PDFDocument.create();
   const assets=await loadPdfAssets(pdf);
   const ctx=getPdfCtx(window.PDFLib,assets);
+  ctx.currentMeta = snap.meta || {};
+
   await drawRestsandPage(pdf,ctx,snap);
+
   const bytes=await pdf.save();
   const blob=new Blob([bytes],{type:'application/pdf'});
   const url=URL.createObjectURL(blob);
   const obj=(snap.meta?.objekt||'Restsand').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');
   const w=window.open(url,'_blank');
-  if(!w){const a=document.createElement('a');a.href=url;a.download=`${dateTag()}_HTB_Restsandprotokoll_${obj||'Dokument'}.pdf`;a.click();}
+  if(!w){
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`${dateTag()}_HTB_Restsandprotokoll_${obj||'Dokument'}.pdf`;
+    a.click();
+  }
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 
 async function exportPhPdf(snapshot=null){
+  if(!snapshot && !ensureRequiredFiliale()) return;
+
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
+
   const{PDFDocument}=window.PDFLib;
   const pdf=await PDFDocument.create();
   const assets=await loadPdfAssets(pdf);
   const ctx=getPdfCtx(window.PDFLib,assets);
+  ctx.currentMeta = snap.meta || {};
+
   await drawPhPage(pdf,ctx,snap);
+
   const bytes=await pdf.save();
   const blob=new Blob([bytes],{type:'application/pdf'});
   const url=URL.createObjectURL(blob);
   const obj=(snap.meta?.objekt||'Sulfatmessung').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');
   const w=window.open(url,'_blank');
-  if(!w){const a=document.createElement('a');a.href=url;a.download=`${dateTag()}_HTB_Sulfatprotokoll_${obj||'Dokument'}.pdf`;a.click();}
+  if(!w){
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`${dateTag()}_HTB_Sulfatprotokoll_${obj||'Dokument'}.pdf`;
+    a.click();
+  }
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
-
 /* ── RESET / INSTALL ── */
 function resetAll(){
   if(!confirm('Alle Eingaben wirklich zurücksetzen?'))return;
