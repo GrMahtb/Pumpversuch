@@ -78,7 +78,7 @@ function getInitialState(){
     overviewPhotoDataUrl:'',
     versuche:[],
     restsand:{imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''},
-    ph:{datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}},
+    ph:{datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}},
     settings:{alarmDurationSec:4,pdfExportType:'protokoll',alarmSoundEnabled:true}
   };
 }
@@ -292,21 +292,43 @@ function renderRestsandPhotoAreas(){
   });
 }
 function renderPhPhotoAreas(){
-  [{key:'sulfat',area:'sulfatPhotoArea',inputId:'sulfatPhotoInput',label:'Foto Teststäbchen'},
-   {key:'temperatur',area:'tempPhotoArea',inputId:'tempPhotoInput',label:'Foto Thermometer'},
-   {key:'ph',area:'phPhotoArea',inputId:'phPhotoInput',label:'Foto pH-Meter'}].forEach(def=>{
+  [
+    {key:'sulfat',area:'sulfatPhotoArea',inputId:'sulfatPhotoInput',label:'Foto Teststäbchen'},
+    {key:'temperatur',area:'tempPhotoArea',inputId:'tempPhotoInput',label:'Foto Thermometer'},
+    {key:'leitfaehigkeit',area:'leitPhotoArea',inputId:'leitPhotoInput',label:'Foto Leitfähigkeitsmessgerät'},
+    {key:'ph',area:'phPhotoArea',inputId:'phPhotoInput',label:'Foto pH-Meter'}
+  ].forEach(def=>{
     const area=$(def.area);if(!area)return;
     const data=def.key==='ph'?state.ph.ph.photoDataUrl:state.ph[def.key].photoDataUrl;
     const has=!!data;
     area.innerHTML=`<button class="restsand-photo-btn" data-ph-photo="${def.key}" type="button">${camSvg(22,18)} ${has?'Foto ändern':def.label}</button>
-      <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-ph-input="${def.key}" style="display:none">
-      ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}`;
+<input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-ph-input="${def.key}" style="display:none">
+${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}`;
   });
 }
 function syncRestsandToUi(){if($('restsand-imhoff-menge'))$('restsand-imhoff-menge').value=state.restsand.imhoff.menge||'';if($('restsand-sieb-menge'))$('restsand-sieb-menge').value=state.restsand.sieb.menge||'';if($('restsand-bemerkung'))$('restsand-bemerkung').value=state.restsand.bemerkung||'';renderRestsandPhotoAreas();}
 function collectRestsandFromUi(){state.restsand.imhoff.menge=$('restsand-imhoff-menge')?.value||'';state.restsand.sieb.menge=$('restsand-sieb-menge')?.value||'';state.restsand.bemerkung=$('restsand-bemerkung')?.value||'';}
-function syncPhToUi(){if($('ph-datum'))$('ph-datum').value=state.ph.datum||'';if($('ph-bauherr'))$('ph-bauherr').value=state.ph.bauherr||'';if($('ph-baustelle'))$('ph-baustelle').value=state.ph.baustelle||'';if($('ph-gewaessername'))$('ph-gewaessername').value=state.ph.gewaessername||'';if($('ph-sulfat-wert'))$('ph-sulfat-wert').value=state.ph.sulfat.wert||'';if($('ph-temp-wert'))$('ph-temp-wert').value=state.ph.temperatur.wert||'';if($('ph-ph-wert'))$('ph-ph-wert').value=state.ph.ph.wert||'';renderPhPhotoAreas();}
-function collectPhFromUi(){state.ph.datum=$('ph-datum')?.value||'';state.ph.bauherr=$('ph-bauherr')?.value||'';state.ph.baustelle=$('ph-baustelle')?.value||'';state.ph.gewaessername=$('ph-gewaessername')?.value||'';state.ph.sulfat.wert=$('ph-sulfat-wert')?.value||'';state.ph.temperatur.wert=$('ph-temp-wert')?.value||'';state.ph.ph.wert=$('ph-ph-wert')?.value||'';}
+function syncPhToUi(){
+  if($('ph-datum'))$('ph-datum').value=state.ph.datum||'';
+  if($('ph-bauherr'))$('ph-bauherr').value=state.ph.bauherr||'';
+  if($('ph-baustelle'))$('ph-baustelle').value=state.ph.baustelle||'';
+  if($('ph-gewaessername'))$('ph-gewaessername').value=state.ph.gewaessername||'';
+  if($('ph-sulfat-wert'))$('ph-sulfat-wert').value=state.ph.sulfat.wert||'';
+  if($('ph-temp-wert'))$('ph-temp-wert').value=state.ph.temperatur.wert||'';
+  if($('ph-leitfaehigkeit-wert'))$('ph-leitfaehigkeit-wert').value=state.ph.leitfaehigkeit.wert||'';
+  if($('ph-ph-wert'))$('ph-ph-wert').value=state.ph.ph.wert||'';
+  renderPhPhotoAreas();
+}
+function collectPhFromUi(){
+  state.ph.datum=$('ph-datum')?.value||'';
+  state.ph.bauherr=$('ph-bauherr')?.value||'';
+  state.ph.baustelle=$('ph-baustelle')?.value||'';
+  state.ph.gewaessername=$('ph-gewaessername')?.value||'';
+  state.ph.sulfat.wert=$('ph-sulfat-wert')?.value||'';
+  state.ph.temperatur.wert=$('ph-temp-wert')?.value||'';
+  state.ph.leitfaehigkeit.wert=$('ph-leitfaehigkeit-wert')?.value||'';
+  state.ph.ph.wert=$('ph-ph-wert')?.value||'';
+}
 
 /* ── SNAPSHOT / STORAGE ── */
 function collectSnapshot(){
@@ -322,7 +344,7 @@ function applySnapshot(snap,render=true){
   state.overviewPhotoDataUrl=typeof snap.overviewPhotoDataUrl==='string'?snap.overviewPhotoDataUrl:'';
   state.versuche=Array.isArray(snap.versuche)?snap.versuche.map(v=>hydrateVersuch(v)):[];
   state.restsand={imhoff:{...base.restsand.imhoff,...((snap.restsand||{}).imhoff||{})},sieb:{...base.restsand.sieb,...((snap.restsand||{}).sieb||{})},bemerkung:(snap.restsand||{}).bemerkung||''};
-  state.ph={...base.ph,...(snap.ph||{}),sulfat:{...base.ph.sulfat,...((snap.ph||{}).sulfat||{})},temperatur:{...base.ph.temperatur,...((snap.ph||{}).temperatur||{})},ph:{...base.ph.ph,...((snap.ph||{}).ph||{})}};
+  state.ph={...base.ph,...(snap.ph||{}),sulfat:{...base.ph.sulfat,...((snap.ph||{}).sulfat||{})},temperatur:{...base.ph.temperatur,...((snap.ph||{}).temperatur||{})},leitfaehigkeit:{...base.ph.leitfaehigkeit,...((snap.ph||{}).leitfaehigkeit||{})},ph:{...base.ph.ph,...((snap.ph||{}).ph||{})}};
   state.settings={...base.settings,...(snap.settings||{})};
   Object.keys(timerMap).forEach(hardStopTimer);
   if(render){syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();syncRestsandToUi();syncPhToUi();syncSettingsToUi();renderVersuche();renderLiveTab();renderHistoryList();}
@@ -450,6 +472,7 @@ function snapshotToIndexedPayload(entryId, snap){
 
   if(s.ph?.sulfat)      stashPhoto(s.ph.sulfat,      'photoDataUrl', 'photoKey', 'ph:sulfat');
   if(s.ph?.temperatur)  stashPhoto(s.ph.temperatur,  'photoDataUrl', 'photoKey', 'ph:temperatur');
+  if(s.ph?.leitfaehigkeit)  stashPhoto(s.ph.leitfaehigkeit, 'photoDataUrl', 'photoKey', 'ph:leitfaehigkeit');
   if(s.ph?.ph)          stashPhoto(s.ph.ph,          'photoDataUrl', 'photoKey', 'ph:ph');
 
   return { snapshot: s, photos };
@@ -578,6 +601,7 @@ async function materializeSnapshotPhotos(snap){
 
   await restorePhoto(s.ph?.sulfat,      'photoDataUrl', 'photoKey');
   await restorePhoto(s.ph?.temperatur,  'photoDataUrl', 'photoKey');
+  await restorePhoto(s.ph?.leitfaehigkeit, 'photoDataUrl', 'photoKey');
   await restorePhoto(s.ph?.ph,          'photoDataUrl', 'photoKey');
 
   return s;
@@ -825,7 +849,7 @@ function hookGlobalPhotoDelegation(){
     const btn=e.target.closest('button');if(!btn)return;
     if(btn.id==='overviewPhotoBtnTrigger'){$('overviewPhotoInput')?.click();return;}
     if(btn.dataset.rsPhoto){document.getElementById(`${btn.dataset.rsPhoto}PhotoInput`)?.click();return;}
-    if(btn.dataset.phPhoto){const map={sulfat:'sulfatPhotoInput',temperatur:'tempPhotoInput',ph:'phPhotoInput'};$(map[btn.dataset.phPhoto])?.click();return;}
+    if(btn.dataset.phPhoto){const map={sulfat:'sulfatPhotoInput',temperatur:'tempPhotoInput',leitfaehigkeit:'leitPhotoInput',ph:'phPhotoInput'};$(map[btn.dataset.phPhoto])?.click();return;}
     if(btn.dataset.photoDel){
       const what=btn.dataset.photoDel;
       if(what==='overview'){state.overviewPhotoDataUrl='';renderOverviewPhotoThumb();saveDraftDebounced();return;}
@@ -1204,7 +1228,7 @@ function hookStaticInputs(){
   $('sel-foerder')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
   $('sel-schluck')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
   ['restsand-imhoff-menge','restsand-sieb-menge','restsand-bemerkung'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectRestsandFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectRestsandFromUi();saveDraftDebounced();});});
-  ['ph-datum','ph-bauherr','ph-baustelle','ph-gewaessername','ph-sulfat-wert','ph-temp-wert','ph-ph-wert'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectPhFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectPhFromUi();saveDraftDebounced();});});
+  ['ph-datum','ph-bauherr','ph-baustelle','ph-gewaessername','ph-sulfat-wert','ph-temp-wert','ph-leitfaehigkeit-wert','ph-ph-wert'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectPhFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectPhFromUi();saveDraftDebounced();});});
   $('settings-alarmDuration')?.addEventListener('input',()=>{collectSettingsFromUi();saveDraftDebounced();});
   $('pdfType-protokoll')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
   $('pdfType-vollstaendig')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
@@ -1231,7 +1255,7 @@ function buildTemplateSnapshot(){
   const snap=collectSnapshot();snap.overviewPhotoDataUrl='';
   snap.versuche=(snap.versuche||[]).map(v=>{const hv=hydrateVersuch(v);hv.messungen=(hv.messungen||[]).map(m=>({min:m.min,foerder_m:'',schluck_m:'',foerder_menge:''}));hv.elapsedMs=0;hv.startzeit='';hv.photoDataUrl='';return hv;});
   snap.restsand={imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''};
-  snap.ph={datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}};
+  snap.ph={datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}};
   return snap;
 }
 function exportTemplateJson(){const snap=buildTemplateSnapshot();const obj=(snap.meta.objekt||'Vorlage').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');downloadJson(snap,`${dateTag()}_HTB_Vorlage_${obj||'Pumpversuch'}.htbpump.json`);}
@@ -1326,6 +1350,7 @@ function collectSnapshotPhotos(snapshot){
   if(snapshot.restsand?.sieb?.photoDataUrl)photos.push({name:`${obj}_Restsand_Sieb`,dataUrl:snapshot.restsand.sieb.photoDataUrl});
   if(snapshot.ph?.sulfat?.photoDataUrl)photos.push({name:`${obj}_Sulfat`,dataUrl:snapshot.ph.sulfat.photoDataUrl});
   if(snapshot.ph?.temperatur?.photoDataUrl)photos.push({name:`${obj}_Temperatur`,dataUrl:snapshot.ph.temperatur.photoDataUrl});
+  if(snapshot.ph?.leitfaehigkeit?.photoDataUrl)photos.push({name:`${obj}_Leitfaehigkeit`,dataUrl:snapshot.ph.leitfaehigkeit.photoDataUrl});
   if(snapshot.ph?.ph?.photoDataUrl)photos.push({name:`${obj}_pH`,dataUrl:snapshot.ph.ph.photoDataUrl});
   return photos;
 }
@@ -1386,6 +1411,7 @@ async function renderHistoryList(){
             <div class="historySection__body">
               Sulfat: <b>${h(String(snap.ph?.sulfat?.wert||'—'))}</b><br>
               Temperatur: <b>${h(String(snap.ph?.temperatur?.wert||'—'))}</b><br>
+              Leitfähigkeit: <b>${h(String(snap.ph?.leitfaehigkeit?.wert||'—'))}</b><br>
               pH: <b>${h(String(snap.ph?.ph?.wert||'—'))}</b>
             </div>
           </details>
@@ -2200,52 +2226,69 @@ async function drawPhPage(pdf,ctx,snap){
   drawTextSafe(page,'SO4(2-) darf 2 000 mg/l nicht ueberschreiten.',
     {x:rx+4,y:uY,size:7,font:fontR,color:K});
 
-  // ── Temperatur + pH Blöcke ──
-  // Gleicher Abstand (sectionGap) wie zwischen Meta-Zeile und Teststäbchen-Balken
-  const btmBlockGap=sectionGap;
-  const btmTop=blockBottom-btmBlockGap;         // Oberkante der Blöcke
-  const btmBottom=y0+mm(14);                    // Unterkante (innerhalb Rahmen, Platz f. Footer)
-  const btmH=btmTop-btmBottom;
-  const bW=(W-mm(8))/2;
+  // ── Temperatur + Leitfähigkeit + pH Blöcke ──
+// Gleicher Abstand (sectionGap) wie zwischen Meta-Zeile und Teststäbchen-Balken
+const btmBlockGap=sectionGap;
+const btmTop=blockBottom-btmBlockGap;
+const btmBottom=y0+mm(14);
+const btmH=btmTop-btmBottom;
 
-  // Temperatur
-  page.drawRectangle({x:x0,y:btmBottom,width:bW,height:btmH,borderColor:K,borderWidth:0.8});
-  page.drawRectangle({x:x0,y:btmTop-mm(11),width:bW,height:mm(11),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,'Temperatur Messung',
-    {x:x0+4,y:btmTop-mm(8),size:10,font:fontB,color:K});
-  if(snap.ph?.temperatur?.photoDataUrl){
+// exakt gedrittelte Breite innerhalb des Rahmens
+const bW=W/3;
+
+const bottomBlocks=[
+  {
+    x:x0,
+    title:'Temperatur Messung',
+    value:`${snap.ph?.temperatur?.wert||'—'} °C`,
+    photoDataUrl:snap.ph?.temperatur?.photoDataUrl
+  },
+  {
+    x:x0+bW,
+    title:'Leitfähigkeit Messung',
+    value:`${snap.ph?.leitfaehigkeit?.wert||'—'} µS/cm`,
+    photoDataUrl:snap.ph?.leitfaehigkeit?.photoDataUrl
+  },
+  {
+    x:x0+bW*2,
+    title:'pH Messung',
+    value:`${snap.ph?.ph?.wert||'—'} pH`,
+    photoDataUrl:snap.ph?.ph?.photoDataUrl
+  }
+];
+
+for(const block of bottomBlocks){
+  page.drawRectangle({x:block.x,y:btmBottom,width:bW,height:btmH,borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:block.x,y:btmTop-mm(11),width:bW,height:mm(11),color:GREY,borderColor:K,borderWidth:0.8});
+
+  drawTextSafe(page,block.title,{
+    x:block.x+4,
+    y:btmTop-mm(8),
+    size:9,
+    font:fontB,
+    color:K
+  });
+
+  if(block.photoDataUrl){
     try{
-      const img=await embedDataUrlImage(pdf,snap.ph.temperatur.photoDataUrl);
-      const aX=x0+4,aY=btmBottom+mm(12),aW=bW-8,aH=btmH-mm(25);
+      const img=await embedDataUrlImage(pdf,block.photoDataUrl);
+      const aX=block.x+4,aY=btmBottom+mm(12),aW=bW-8,aH=btmH-mm(25);
       const ratio=img.width/img.height;
       let dw=aW,dh=dw/ratio;
       if(dh>aH){dh=aH;dw=dh*ratio;}
       page.drawImage(img,{x:aX+(aW-dw)/2,y:aY+(aH-dh)/2,width:dw,height:dh});
     }catch(err){console.error(err);}
   }
-  page.drawRectangle({x:x0,y:btmBottom,width:bW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`${snap.ph?.temperatur?.wert||'—'} °C`,
-    {x:x0+4,y:btmBottom+mm(2.5),size:10,font:fontB,color:K});
 
-  // pH
-  const px2=x0+bW+mm(8);
-  page.drawRectangle({x:px2,y:btmBottom,width:bW,height:btmH,borderColor:K,borderWidth:0.8});
-  page.drawRectangle({x:px2,y:btmTop-mm(11),width:bW,height:mm(11),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,'pH Messung',
-    {x:px2+4,y:btmTop-mm(8),size:10,font:fontB,color:K});
-  if(snap.ph?.ph?.photoDataUrl){
-    try{
-      const img=await embedDataUrlImage(pdf,snap.ph.ph.photoDataUrl);
-      const aX=px2+4,aY=btmBottom+mm(12),aW=bW-8,aH=btmH-mm(25);
-      const ratio=img.width/img.height;
-      let dw=aW,dh=dw/ratio;
-      if(dh>aH){dh=aH;dw=dh*ratio;}
-      page.drawImage(img,{x:aX+(aW-dw)/2,y:aY+(aH-dh)/2,width:dw,height:dh});
-    }catch(err){console.error(err);}
-  }
-  page.drawRectangle({x:px2,y:btmBottom,width:bW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,`${snap.ph?.ph?.wert||'—'} pH`,
-    {x:px2+4,y:btmBottom+mm(2.5),size:10,font:fontB,color:K});
+  page.drawRectangle({x:block.x,y:btmBottom,width:bW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,block.value,{
+    x:block.x+4,
+    y:btmBottom+mm(2.5),
+    size:9,
+    font:fontB,
+    color:K
+  });
+}
 
   drawFooter(page,ctx,'Sulfatmessung Wasser');
 }
@@ -2296,13 +2339,15 @@ async function exportPdf(snapshot=null,type='protokoll'){
       snap.restsand?.bemerkung
     );
     const hasPh=!!(
-      snap.ph?.sulfat?.wert ||
-      snap.ph?.temperatur?.wert ||
-      snap.ph?.ph?.wert ||
-      snap.ph?.sulfat?.photoDataUrl ||
-      snap.ph?.temperatur?.photoDataUrl ||
-      snap.ph?.ph?.photoDataUrl
-    );
+  snap.ph?.sulfat?.wert ||
+  snap.ph?.temperatur?.wert ||
+  snap.ph?.leitfaehigkeit?.wert ||
+  snap.ph?.ph?.wert ||
+  snap.ph?.sulfat?.photoDataUrl ||
+  snap.ph?.temperatur?.photoDataUrl ||
+  snap.ph?.leitfaehigkeit?.photoDataUrl ||
+  snap.ph?.ph?.photoDataUrl
+);
 
     await drawCoverPage(pdf,ctx,snap);
     await drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh);
