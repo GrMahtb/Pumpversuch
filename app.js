@@ -292,8 +292,7 @@ function renderRestsandPhotoAreas(){
   });
 }
 function renderPhPhotoAreas(){
-  [
-    {key:'sulfat',area:'sulfatPhotoArea',inputId:'sulfatPhotoInput',label:'Foto Teststäbchen'},
+  [{key:'sulfat',area:'sulfatPhotoArea',inputId:'sulfatPhotoInput',label:'Foto Teststäbchen'},
     {key:'temperatur',area:'tempPhotoArea',inputId:'tempPhotoInput',label:'Foto Thermometer'},
     {key:'leitfaehigkeit',area:'leitPhotoArea',inputId:'leitPhotoInput',label:'Foto Leitfähigkeitsmessgerät'},
     {key:'ph',area:'phPhotoArea',inputId:'phPhotoInput',label:'Foto pH-Meter'}
