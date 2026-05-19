@@ -467,3 +467,197 @@ body.screen-flash::after{
   .brand{margin:0 -10px 12px}
   .brand__bar{padding:10px 12px}
 }
+/* ═══════════════════════════════════════════
+HELLMODUS
+═══════════════════════════════════════════ */
+body.theme-light{
+--bg:#f3f4f6;
+--card:#ffffff;
+--card2:#ffffff;
+--border:#d8dee5;
+--text:#111111;
+--muted:#5f6873;
+--shadow:0 8px 22px rgba(0,0,0,.08);
+}
+
+body.theme-light{
+color:var(--text);
+}
+
+body.theme-light .brand__bar{
+border-bottom-color:rgba(0,0,0,.10);
+}
+
+body.theme-light .brand__company,
+body.theme-light .restsand-card__title,
+body.theme-light .live-stage__title,
+body.theme-light .live-well__title,
+body.theme-light .modal-title{
+color:#111;
+}
+
+body.theme-light .brand__subtitle,
+body.theme-light .hint,
+body.theme-light .text,
+body.theme-light .field__label,
+body.theme-light .rate-label,
+body.theme-light .interval-label,
+body.theme-light .rate-hint,
+body.theme-light .timer-info,
+body.theme-light .floating-timer__label,
+body.theme-light .modal-sub,
+body.theme-light .modal-field-label,
+body.theme-light .historyItem__date,
+body.theme-light .historySection__body,
+body.theme-light .historyKf__line,
+body.theme-light .kf-box__label,
+body.theme-light .kf-box__note,
+body.theme-light .live-stage__meta,
+body.theme-light .live-well__sub,
+body.theme-light .photo-thumb-caption,
+body.theme-light .ph-norm-note{
+color:var(--muted);
+}
+
+body.theme-light .tabs,
+body.theme-light .card,
+body.theme-light .select-card,
+body.theme-light .brunnen-box,
+body.theme-light .settings-group,
+body.theme-light .timer-box,
+body.theme-light .floating-timer,
+body.theme-light .modal-box,
+body.theme-light .restsand-card,
+body.theme-light .restsand-photo-area,
+body.theme-light .overview-thumb-wrap,
+body.theme-light .photo-thumb-wrap,
+body.theme-light .ph-info-box,
+body.theme-light .ph-photo-area,
+body.theme-light .ph-norm-box,
+body.theme-light .live-well,
+body.theme-light .live-chart,
+body.theme-light .kf-box,
+body.theme-light .historyItem,
+body.theme-light .historySection,
+body.theme-light .historyKf{
+background:#fff;
+border-color:var(--border);
+color:#111;
+}
+
+body.theme-light .tab{
+color:#111;
+}
+
+body.theme-light .tab.is-active{
+background:#fff;
+color:#111;
+box-shadow:inset 0 0 0 2px #111;
+}
+
+body.theme-light .tab.is-active svg{
+stroke:#111;
+}
+
+body.theme-light .card__title,
+body.theme-light .settings-group__title,
+body.theme-light .historyKf__title,
+body.theme-light .historySection summary{
+color:#111;
+}
+
+body.theme-light .card__title::before,
+body.theme-light .versuch-card>summary.card__title::before{
+background:#111;
+}
+
+body.theme-light .card--collapsible>summary.card__title::after,
+body.theme-light .historySection summary::after{
+color:var(--muted);
+}
+
+body.theme-light .versuch-card>summary.card__title{
+background:#fff;
+color:#111;
+border-bottom:1px solid var(--border);
+}
+
+body.theme-light .versuch-card>summary.card__title::after{
+color:#111;
+}
+
+body.theme-light .field__input,
+body.theme-light .field__select,
+body.theme-light .field__textarea,
+body.theme-light .rate-input,
+body.theme-light .interval-input,
+body.theme-light .mess-input,
+body.theme-light .modal-input{
+background:#fff;
+color:#111;
+border-color:var(--border);
+}
+
+body.theme-light .rate-input--readonly{
+background:#f7f8fa;
+color:#111;
+}
+
+body.theme-light .btn--ghost,
+body.theme-light .del-btn,
+body.theme-light .timer-btn--ghost,
+body.theme-light .historyBtns button,
+body.theme-light .modal-adj-btn,
+body.theme-light .row-plus,
+body.theme-light .btn--install{
+background:#fff;
+color:#111;
+border-color:var(--border);
+}
+
+body.theme-light .mess-table th,
+body.theme-light .ph-norm-table th,
+body.theme-light .historyItem__head{
+background:#f7f8fa;
+color:#111;
+border-color:var(--border);
+}
+
+body.theme-light .historyItem[open] .historyItem__head{
+background:#f7f8fa;
+border-bottom-color:var(--border);
+}
+
+body.theme-light .mess-table td,
+body.theme-light .ph-norm-table td{
+border-color:var(--border);
+color:#111;
+}
+
+body.theme-light .mess-input{
+color:#111;
+}
+
+body.theme-light .rate-conv,
+body.theme-light .timer-display,
+body.theme-light .floating-timer__display,
+body.theme-light .kf-box__value,
+body.theme-light .modal-preview{
+color:#111;
+}
+
+body.theme-light .floating-timer{
+border-color:#111;
+}
+
+body.theme-light .floating-timer:hover{
+border-color:#444;
+}
+
+body.theme-light .live-well--foerder{
+box-shadow:inset 0 0 0 1px rgba(59,157,221,.18);
+}
+
+body.theme-light .live-well--schluck{
+box-shadow:inset 0 0 0 1px rgba(245,166,35,.18);
+}
