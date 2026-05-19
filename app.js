@@ -70,17 +70,17 @@ const $=id=>document.getElementById(id);
 
 /* ── STATE ── */
 function getInitialState(){
-  return{
-    meta:{filiale:'',objekt:'',grundstueck:'',ort:'',geologie:'',auftragsnummer:'',auftraggeber:'',bauleitung:'',bohrmeister:'',koordination:'',geprueftDurch:'',geprueftAm:''},
-    selection:{foerder:true,schluck:false},
-    foerder:{dm:'',endteufe:'',ruhe:''},
-    schluck:{dm:'',endteufe:'',ruhe:''},
-    overviewPhotoDataUrl:'',
-    versuche:[],
-    restsand:{imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''},
-    ph:{datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}},
-    settings:{alarmDurationSec:4,pdfExportType:'protokoll',alarmSoundEnabled:true}
-  };
+return{
+meta:{filiale:'',objekt:'',grundstueck:'',ort:'',geologie:'',auftragsnummer:'',auftraggeber:'',bauleitung:'',bohrmeister:'',koordination:'',geprueftDurch:'',geprueftAm:''},
+selection:{foerder:true,schluck:false},
+foerder:{dm:'',endteufe:'',ruhe:''},
+schluck:{dm:'',endteufe:'',ruhe:''},
+overviewPhotoDataUrl:'',
+versuche:[],
+restsand:{imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''},
+ph:{datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}},
+settings:{alarmDurationSec:4,pdfExportType:'protokoll',alarmSoundEnabled:true,theme:'dark'}
+};
 }
 const state=getInitialState();
 const timerMap={};
@@ -231,18 +231,56 @@ function collectSelectionFromUi(){
   state.selection.foerder=f;state.selection.schluck=s;updateBrunnenVisibility();return true;
 }
 function updateMainPdfButtonLabel(){const btn=$('btnPdf');if(btn)btn.textContent=state.settings.pdfExportType==='vollstaendig'?'PDF Vollständig':'PDF Protokoll';}
-function syncSettingsToUi(){
-  if($('settings-alarmDuration')) $('settings-alarmDuration').value = state.settings.alarmDurationSec ?? 4;
+function applyTheme(theme){
+const nextTheme=theme==='light'?'light':'dark';
 
-  const a = $('pdfType-protokoll');
-  const b = $('pdfType-vollstaendig');
-  if(a) a.checked = state.settings.pdfExportType !== 'vollstaendig';
-  if(b) b.checked = state.settings.pdfExportType === 'vollstaendig';
+if(!state.settings) state.settings={};
+state.settings.theme=nextTheme;
 
-  updateMainPdfButtonLabel();
-  updateAlarmSoundButton();
+document.body.classList.toggle('theme-light',nextTheme==='light');
+document.body.classList.toggle('theme-dark',nextTheme==='dark');
+
+const bg=nextTheme==='light'?'#f3f4f6':'#0d2f4f';
+document.documentElement.style.background=bg;
+document.body.style.background=bg;
+
+const themeMeta=document.querySelector('meta[name="theme-color"]');
+if(themeMeta) themeMeta.setAttribute('content',bg);
+
+const brandLogo=$('brandLogo');
+if(brandLogo){
+const darkSrc=brandLogo.dataset.darkSrc||`${BASE}logo.svg?v=86`;
+const lightSrc=brandLogo.dataset.lightSrc||`${BASE}logo_hell.svg?v=86`;
+const nextSrc=nextTheme==='light'?lightSrc:darkSrc;
+if(brandLogo.getAttribute('src')!==nextSrc){
+brandLogo.setAttribute('src',nextSrc);
 }
-function collectSettingsFromUi(){state.settings.alarmDurationSec=clamp(Number($('settings-alarmDuration')?.value||4),1,30);state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked?'vollstaendig':'protokoll';updateMainPdfButtonLabel();}
+}
+}
+function syncSettingsToUi(){
+if($('settings-alarmDuration')) $('settings-alarmDuration').value = state.settings.alarmDurationSec ?? 4;
+
+const a = $('pdfType-protokoll');
+const b = $('pdfType-vollstaendig');
+if(a) a.checked = state.settings.pdfExportType !== 'vollstaendig';
+if(b) b.checked = state.settings.pdfExportType === 'vollstaendig';
+
+const themeDark = $('theme-dark');
+const themeLight = $('theme-light');
+if(themeDark) themeDark.checked = (state.settings.theme || 'dark') !== 'light';
+if(themeLight) themeLight.checked = (state.settings.theme || 'dark') === 'light';
+
+updateMainPdfButtonLabel();
+updateAlarmSoundButton();
+applyTheme(state.settings.theme || 'dark');
+}
+function collectSettingsFromUi(){
+state.settings.alarmDurationSec=clamp(Number($('settings-alarmDuration')?.value||4),1,30);
+state.settings.pdfExportType=$('pdfType-vollstaendig')?.checked?'vollstaendig':'protokoll';
+state.settings.theme=$('theme-light')?.checked?'light':'dark';
+updateMainPdfButtonLabel();
+applyTheme(state.settings.theme);
+}
 function updateAlarmSoundButton(){
   const btn = $('btnAlarmSoundToggle');
   const status = $('alarmSoundStatus');
@@ -1222,30 +1260,32 @@ function hookVersuchDelegation(){
 
 /* ── STATIC INPUTS ── */
 function hookStaticInputs(){
-  META_FIELDS.forEach(([id])=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectMetaFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectMetaFromUi();saveDraftDebounced();});});
-  BRUNNEN_FIELDS.forEach(([id])=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectBrunnenFromUi();saveDraftDebounced();scheduleLiveRender();});el.addEventListener('change',()=>{collectBrunnenFromUi();saveDraftDebounced();scheduleLiveRender();});});
-  $('sel-foerder')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
-  $('sel-schluck')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
-  ['restsand-imhoff-menge','restsand-sieb-menge','restsand-bemerkung'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectRestsandFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectRestsandFromUi();saveDraftDebounced();});});
-  ['ph-datum','ph-bauherr','ph-baustelle','ph-gewaessername','ph-sulfat-wert','ph-temp-wert','ph-leitfaehigkeit-wert','ph-ph-wert'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectPhFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectPhFromUi();saveDraftDebounced();});});
-  $('settings-alarmDuration')?.addEventListener('input',()=>{collectSettingsFromUi();saveDraftDebounced();});
-  $('pdfType-protokoll')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
-  $('pdfType-vollstaendig')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
-  $('btnAlarmSoundToggle')?.addEventListener('click',async()=>{await toggleAlarmSoundByUserGesture();});
-  $('btnAddVersuch')?.addEventListener('click',()=>{const v=defaultVersuch();state.versuche.push(v);renderVersuche();renderLiveTab();saveDraftDebounced();setTimeout(()=>document.querySelector(`.versuch-card[data-vid="${v.id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'}),40);});
-  $('btnSave')?.addEventListener('click',()=>saveCurrentToHistory('Pumpversuch im Verlauf gespeichert.'));
-  $('btnSaveRestsand')?.addEventListener('click',()=>saveCurrentToHistory('Restsanddaten im Verlauf gespeichert.'));
-  $('btnSavePh')?.addEventListener('click',()=>saveCurrentToHistory('pH/Sulfat-Daten im Verlauf gespeichert.'));
-  $('btnPdf')?.addEventListener('click',async()=>{try{await exportPdf(null,state.settings.pdfExportType);}catch(err){console.error(err);alert('PDF-Fehler: '+(err?.message||String(err)));}});
-  $('btnPdfRestsand')?.addEventListener('click',async()=>{try{await exportRestsandPdf();}catch(err){console.error(err);alert('Restsand-PDF Fehler');}});
-  $('btnPdfPh')?.addEventListener('click',async()=>{try{await exportPhPdf();}catch(err){console.error(err);alert('Sulfat/pH-PDF Fehler');}});
-  $('btnReset')?.addEventListener('click',resetAll);
-  $('btnExportTemplate')?.addEventListener('click',exportTemplateJson);
-  $('btnImportTemplate')?.addEventListener('click',()=>$('importFileInput')?.click());
-  $('btnExportFull')?.addEventListener('click',exportFullJson);
-  $('btnImportFull')?.addEventListener('click',()=>$('importFullInput')?.click());
-  $('importFileInput')?.addEventListener('change',handleTemplateImport);
-  $('importFullInput')?.addEventListener('change',handleFullImport);
+META_FIELDS.forEach(([id])=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectMetaFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectMetaFromUi();saveDraftDebounced();});});
+BRUNNEN_FIELDS.forEach(([id])=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectBrunnenFromUi();saveDraftDebounced();scheduleLiveRender();});el.addEventListener('change',()=>{collectBrunnenFromUi();saveDraftDebounced();scheduleLiveRender();});});
+$('sel-foerder')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
+$('sel-schluck')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
+['restsand-imhoff-menge','restsand-sieb-menge','restsand-bemerkung'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectRestsandFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectRestsandFromUi();saveDraftDebounced();});});
+['ph-datum','ph-bauherr','ph-baustelle','ph-gewaessername','ph-sulfat-wert','ph-temp-wert','ph-leitfaehigkeit-wert','ph-ph-wert'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectPhFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectPhFromUi();saveDraftDebounced();});});
+$('settings-alarmDuration')?.addEventListener('input',()=>{collectSettingsFromUi();saveDraftDebounced();});
+$('pdfType-protokoll')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
+$('pdfType-vollstaendig')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
+$('theme-dark')?.addEventListener('change',()=>{collectSettingsFromUi();renderLiveTab();saveDraftDebounced();});
+$('theme-light')?.addEventListener('change',()=>{collectSettingsFromUi();renderLiveTab();saveDraftDebounced();});
+$('btnAlarmSoundToggle')?.addEventListener('click',async()=>{await toggleAlarmSoundByUserGesture();});
+$('btnAddVersuch')?.addEventListener('click',()=>{const v=defaultVersuch();state.versuche.push(v);renderVersuche();renderLiveTab();saveDraftDebounced();setTimeout(()=>document.querySelector(`.versuch-card[data-vid="${v.id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'}),40);});
+$('btnSave')?.addEventListener('click',()=>saveCurrentToHistory('Pumpversuch im Verlauf gespeichert.'));
+$('btnSaveRestsand')?.addEventListener('click',()=>saveCurrentToHistory('Restsanddaten im Verlauf gespeichert.'));
+$('btnSavePh')?.addEventListener('click',()=>saveCurrentToHistory('pH/Sulfat-Daten im Verlauf gespeichert.'));
+$('btnPdf')?.addEventListener('click',async()=>{try{await exportPdf(null,state.settings.pdfExportType);}catch(err){console.error(err);alert('PDF-Fehler: '+(err?.message||String(err)));}});
+$('btnPdfRestsand')?.addEventListener('click',async()=>{try{await exportRestsandPdf();}catch(err){console.error(err);alert('Restsand-PDF Fehler');}});
+$('btnPdfPh')?.addEventListener('click',async()=>{try{await exportPhPdf();}catch(err){console.error(err);alert('Sulfat/pH-PDF Fehler');}});
+$('btnReset')?.addEventListener('click',resetAll);
+$('btnExportTemplate')?.addEventListener('click',exportTemplateJson);
+$('btnImportTemplate')?.addEventListener('click',()=>$('importFileInput')?.click());
+$('btnExportFull')?.addEventListener('click',exportFullJson);
+$('btnImportFull')?.addEventListener('click',()=>$('importFullInput')?.click());
+$('importFileInput')?.addEventListener('change',handleTemplateImport);
+$('importFullInput')?.addEventListener('change',handleFullImport);
 }
 
 /* ── EXPORT / IMPORT JSON ── */
@@ -1264,28 +1304,54 @@ async function handleFullImport(e){const file=e.target.files&&e.target.files[0];
 
 /* ── LIVE TAB ── */
 function buildLiveChartSvg(points,key){
-  const color=key==='foerder'?'#56b7ff':'#ffb45a';
-  const W=560,H=280,ml=58,mr=18,mt=18,mb=42,pw=W-ml-mr,ph=H-mt-mb;
-  const xMax=points.length?Math.max(...points.map(p=>p.x)):10;
-  const yMax=points.length?Math.max(...points.map(p=>p.y)):10;
-  const xAxis=getNiceAxis(0,xMax>0?xMax:10,6),yAxis=getNiceAxis(0,yMax>0?yMax:10,6);
-  const xTicks=buildTicks(xAxis),yTicks=buildTicks(yAxis);
-  const tx=v=>ml+((v-xAxis.min)/(xAxis.max-xAxis.min||1))*pw;
-  const ty=v=>mt+ph-((v-yAxis.min)/(yAxis.max-yAxis.min||1))*ph;
-  const gridY=yTicks.map(v=>`<line x1="${ml}" y1="${ty(v)}" x2="${W-mr}" y2="${ty(v)}" stroke="rgba(255,255,255,.12)" stroke-width="1"/><text x="${ml-8}" y="${ty(v)+4}" text-anchor="end" fill="rgba(220,240,255,.75)" font-size="11">${h(fmtTick(v,0))}</text>`).join('');
-  const gridX=xTicks.map(v=>`<line x1="${tx(v)}" y1="${mt}" x2="${tx(v)}" y2="${mt+ph}" stroke="rgba(255,255,255,.08)" stroke-width="1"/><text x="${tx(v)}" y="${H-16}" text-anchor="middle" fill="rgba(220,240,255,.75)" font-size="11">${h(fmtTick(v,0))}</text>`).join('');
-  const poly=points.map(p=>`${tx(p.x)},${ty(p.y)}`).join(' ');
-  const circles=points.map(p=>`<circle cx="${tx(p.x)}" cy="${ty(p.y)}" r="3.5" fill="${color}" stroke="#fff" stroke-width="1.2"/>`).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="#0b1725"/>
-    ${gridY}${gridX}
-    <rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="1.2"/>
-    ${points.length?`<polyline points="${poly}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`:''}
-    ${circles}
-    <text x="${ml+pw/2}" y="${H-4}" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">Zeit [min]</text>
-    <text x="16" y="${mt+ph/2}" transform="rotate(-90 16 ${mt+ph/2})" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">Absenkung [cm]</text>
-    ${!points.length?`<text x="${ml+pw/2}" y="${mt+ph/2}" text-anchor="middle" fill="rgba(220,240,255,.72)" font-size="13">Noch keine Messwerte</text>`:''}
-  </svg>`;
+const isLight=state.settings?.theme==='light';
+const color=key==='foerder'
+?(isLight?'#2f7fb7':'#56b7ff')
+:(isLight?'#d6871b':'#ffb45a');
+
+const palette=isLight
+?{
+bg:'#ffffff',
+gridY:'rgba(0,0,0,.12)',
+gridX:'rgba(0,0,0,.08)',
+plotBorder:'rgba(17,17,17,.18)',
+axisText:'#111111',
+tickText:'rgba(17,17,17,.72)',
+emptyText:'rgba(17,17,17,.55)',
+pointStroke:'#111111'
+}
+:{
+bg:'#0b1725',
+gridY:'rgba(255,255,255,.12)',
+gridX:'rgba(255,255,255,.08)',
+plotBorder:'rgba(255,255,255,.18)',
+axisText:'#ffffff',
+tickText:'rgba(220,240,255,.75)',
+emptyText:'rgba(220,240,255,.72)',
+pointStroke:'#ffffff'
+};
+
+const W=560,H=280,ml=58,mr=18,mt=18,mb=42,pw=W-ml-mr,ph=H-mt-mb;
+const xMax=points.length?Math.max(...points.map(p=>p.x)):10;
+const yMax=points.length?Math.max(...points.map(p=>p.y)):10;
+const xAxis=getNiceAxis(0,xMax>0?xMax:10,6),yAxis=getNiceAxis(0,yMax>0?yMax:10,6);
+const xTicks=buildTicks(xAxis),yTicks=buildTicks(yAxis);
+const tx=v=>ml+((v-xAxis.min)/(xAxis.max-xAxis.min||1))*pw;
+const ty=v=>mt+ph-((v-yAxis.min)/(yAxis.max-yAxis.min||1))*ph;
+const gridY=yTicks.map(v=>`<line x1="${ml}" y1="${ty(v)}" x2="${W-mr}" y2="${ty(v)}" stroke="${palette.gridY}" stroke-width="1"/><text x="${ml-8}" y="${ty(v)+4}" text-anchor="end" fill="${palette.tickText}" font-size="11">${h(fmtTick(v,0))}</text>`).join('');
+const gridX=xTicks.map(v=>`<line x1="${tx(v)}" y1="${mt}" x2="${tx(v)}" y2="${mt+ph}" stroke="${palette.gridX}" stroke-width="1"/><text x="${tx(v)}" y="${H-16}" text-anchor="middle" fill="${palette.tickText}" font-size="11">${h(fmtTick(v,0))}</text>`).join('');
+const poly=points.map(p=>`${tx(p.x)},${ty(p.y)}`).join(' ');
+const circles=points.map(p=>`<circle cx="${tx(p.x)}" cy="${ty(p.y)}" r="3.5" fill="${color}" stroke="${palette.pointStroke}" stroke-width="1.2"/>`).join('');
+return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="${W}" height="${H}" rx="10" fill="${palette.bg}"/>
+${gridY}${gridX}
+<rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="none" stroke="${palette.plotBorder}" stroke-width="1.2"/>
+${points.length?`<polyline points="${poly}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`:''}
+${circles}
+<text x="${ml+pw/2}" y="${H-4}" text-anchor="middle" fill="${palette.axisText}" font-size="12" font-weight="700">Zeit [min]</text>
+<text x="16" y="${mt+ph/2}" transform="rotate(-90 16 ${mt+ph/2})" text-anchor="middle" fill="${palette.axisText}" font-size="12" font-weight="700">Absenkung [cm]</text>
+${!points.length?`<text x="${ml+pw/2}" y="${mt+ph/2}" text-anchor="middle" fill="${palette.emptyText}" font-size="13">Noch keine Messwerte</text>`:''}
+</svg>`;
 }
 function buildLiveWellPanelHtml(versuch,key,brunnen){
   const est=getStageKfEstimate(versuch,key,brunnen);
