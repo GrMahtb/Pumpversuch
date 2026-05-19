@@ -50,9 +50,14 @@
   <header class="brand">
     <div class="brand__bar">
       <div class="brand__logo">
-        <img src="/Pumpversuch/logo.svg?v=86" alt="HTB Logo"
-             onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=86';" />
-      </div>
+        <img
+  id="brandLogo"
+  src="/Pumpversuch/logo.svg?v=86"
+  data-dark-src="/Pumpversuch/logo.svg?v=86"
+  data-light-src="/Pumpversuch/logo_hell.svg?v=86"
+  alt="HTB Logo"
+  onerror="this.onerror=null;this.src='/Pumpversuch/logo.png?v=86';"
+/>
       <div class="brand__info">
         <div class="brand__company">Pumpversuch-Protokoll</div>
         <div class="brand__subtitle">HTB Baugesellschaft m.b.H. · Spezialtiefbau</div>
@@ -388,58 +393,72 @@
   </main>
 
   <!-- SETTINGS -->
-  <main id="tab-settings" class="pane" role="tabpanel" hidden>
-    <section class="card">
-      <div class="card__title">Einstellungen</div>
+ <main id="tab-settings" class="pane" role="tabpanel" hidden>
+<section class="card">
+<div class="card__title">Einstellungen</div>
 
-     <div class="settings-group">
-  <div class="settings-group__title">4.1 Alarm</div>
+<div class="settings-group">
+<div class="settings-group__title">4.1 Darstellung</div>
 
-  <label class="field">
-    <span class="field__label">Alarmdauer [Sekunden]</span>
-    <input id="settings-alarmDuration" class="field__input" type="number" min="1" max="30" step="1" value="4" />
-  </label>
+<label class="select-card" style="margin-bottom:8px">
+<input type="radio" name="appTheme" id="theme-dark" value="dark" checked />
+<span><b>Dunkel</b> – aktuelles Design unverändert</span>
+</label>
 
-  <div class="action-row" style="justify-content:flex-start; margin-top:10px;">
-    <button id="btnAlarmSoundToggle" class="btn btn--ghost btn--small" type="button">Ton einschalten</button>
-  </div>
-
-  <div id="alarmSoundStatus" class="hint" style="text-align:left; margin-top:8px;">
-    Für iPhone: Ton einmal hier aktivieren oder vor dem Start testen.
-  </div>
+<label class="select-card">
+<input type="radio" name="appTheme" id="theme-light" value="light" />
+<span><b>Hell</b> – weiße Flächen, sehr hellgrauer Hintergrund, schwarze Schrift, Logo aus <code>logo_hell.svg</code></span>
+</label>
 </div>
 
-      <div class="settings-group">
-        <div class="settings-group__title">4.2 PDF Export (Standard)</div>
-        <label class="select-card" style="margin-bottom:8px">
-          <input type="radio" name="pdfType" id="pdfType-protokoll" value="protokoll" checked />
-          <span><b>Protokoll</b> – Messdaten und Diagramme</span>
-        </label>
-        <label class="select-card">
-          <input type="radio" name="pdfType" id="pdfType-vollstaendig" value="vollstaendig" />
-          <span><b>Vollständige Auswertung</b> – Deckblatt, Inhaltsverzeichnis, Protokoll, Fotos, Restsand, pH</span>
-        </label>
-      </div>
+<div class="settings-group">
+<div class="settings-group__title">4.2 Alarm</div>
 
-      <div class="settings-group">
-        <div class="settings-group__title">4.3 Vorlagen Export / Import</div>
-        <div class="action-row" style="justify-content:flex-start;gap:10px;flex-wrap:wrap">
-          <button id="btnExportTemplate" class="btn btn--ghost btn--small" type="button">📤 Vorlage exportieren</button>
-          <button id="btnImportTemplate" class="btn btn--ghost btn--small" type="button">📥 Vorlage importieren</button>
-          <input id="importFileInput" type="file" accept=".json,.htbpump.json" style="display:none" />
-        </div>
-      </div>
+<label class="field">
+<span class="field__label">Alarmdauer [Sekunden]</span>
+<input id="settings-alarmDuration" class="field__input" type="number" min="1" max="30" step="1" value="4" />
+</label>
 
-      <div class="settings-group">
-        <div class="settings-group__title">4.4 Vollständiger Export / Import</div>
-        <div class="action-row" style="justify-content:flex-start;gap:10px;flex-wrap:wrap">
-          <button id="btnExportFull" class="btn btn--ghost btn--small" type="button">📦 Export (inkl. Fotos)</button>
-          <button id="btnImportFull" class="btn btn--ghost btn--small" type="button">📦 Import</button>
-          <input id="importFullInput" type="file" accept=".json" style="display:none" />
-        </div>
-      </div>
-    </section>
-  </main>
+<div class="action-row" style="justify-content:flex-start; margin-top:10px;">
+<button id="btnAlarmSoundToggle" class="btn btn--ghost btn--small" type="button">Ton einschalten</button>
+</div>
+
+<div id="alarmSoundStatus" class="hint" style="text-align:left; margin-top:8px;">
+Für iPhone: Ton einmal hier aktivieren oder vor dem Start testen.
+</div>
+</div>
+
+<div class="settings-group">
+<div class="settings-group__title">4.3 PDF Export (Standard)</div>
+<label class="select-card" style="margin-bottom:8px">
+<input type="radio" name="pdfType" id="pdfType-protokoll" value="protokoll" checked />
+<span><b>Protokoll</b> – Messdaten und Diagramme</span>
+</label>
+<label class="select-card">
+<input type="radio" name="pdfType" id="pdfType-vollstaendig" value="vollstaendig" />
+<span><b>Vollständige Auswertung</b> – Deckblatt, Inhaltsverzeichnis, Protokoll, Fotos, Restsand, pH</span>
+</label>
+</div>
+
+<div class="settings-group">
+<div class="settings-group__title">4.4 Vorlagen Export / Import</div>
+<div class="action-row" style="justify-content:flex-start;gap:10px;flex-wrap:wrap">
+<button id="btnExportTemplate" class="btn btn--ghost btn--small" type="button">📤 Vorlage exportieren</button>
+<button id="btnImportTemplate" class="btn btn--ghost btn--small" type="button">📥 Vorlage importieren</button>
+<input id="importFileInput" type="file" accept=".json,.htbpump.json" style="display:none" />
+</div>
+</div>
+
+<div class="settings-group">
+<div class="settings-group__title">4.5 Vollständiger Export / Import</div>
+<div class="action-row" style="justify-content:flex-start;gap:10px;flex-wrap:wrap">
+<button id="btnExportFull" class="btn btn--ghost btn--small" type="button">📦 Export (inkl. Fotos)</button>
+<button id="btnImportFull" class="btn btn--ghost btn--small" type="button">📦 Import</button>
+<input id="importFullInput" type="file" accept=".json" style="display:none" />
+</div>
+</div>
+</section>
+</main>
 
   <footer class="footer">
     &copy; <b>HTB Baugesellschaft m.b.H.</b> – Pumpversuch PWA v95
