@@ -352,6 +352,43 @@ body{
 .ph-norm-table th{background:#111214;color:var(--text);font-weight:900}
 .ph-norm-note{margin-top:7px;color:var(--muted);font-size:.85em;line-height:1.4}
 
+/* Kolbenentwicklung */
+.kolben-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9em;
+  color: var(--text);
+  margin-top: 10px;
+}
+.kolben-table th, .kolben-table td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.kolben-table th {
+  background: #111214;
+  color: var(--text);
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: .8em;
+  letter-spacing: .5px;
+}
+.kolben-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+.kolben-table .field__input {
+  border: none;
+  background: transparent;
+  padding: 4px;
+  width: 100%;
+  color: var(--text);
+  box-sizing: border-box;
+}
+.kolben-table .field__input:focus {
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
 /* Settings */
 .settings-group{
   background:var(--card2);border:1px solid var(--border);border-radius:14px;
