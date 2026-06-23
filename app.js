@@ -428,53 +428,52 @@ function collectPhFromUi(){
 }
 
 function renderKolbenRows(){
-  const host = $('kolbenRowsContainer');
-  if(!host) return;
+const host = $('kolbenRowsContainer');
+if(!host) return;
 
-  if(!Array.isArray(state.kolben.rows) || !state.kolben.rows.length){
-    state.kolben.rows = [{huebe:'',aufsandung:'',anmerkungen:''}];
-  }
+if(!Array.isArray(state.kolben.rows) || !state.kolben.rows.length){
+state.kolben.rows = [{huebe:'',aufsandung:'',anmerkungen:''}];
+}
 
-  host.innerHTML = state.kolben.rows.map((row, i) => `
-    <div class="kolben-row" data-kolben-row="${i}">
-      <label class="field">
-        <span class="field__label" style="display:none;">Anzahl Kolbenhübe</span>
-        <input
-          id="kolben-huebe-${i}"
-          class="field__input"
-          type="number"
-          step="1"
-          inputmode="numeric"
-          placeholder="z.B. 15"
-          value="${h(row.huebe || '')}"
-        />
-      </label>
+const GRID = 'display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:8px;align-items:center;';
 
-      <label class="field">
-        <span class="field__label" style="display:none;">Aufsandung [cm]</span>
-        <input
-          id="kolben-aufsandung-${i}"
-          class="field__input"
-          type="number"
-          step="0.1"
-          inputmode="decimal"
-          placeholder="z.B. 3.5"
-          value="${h(row.aufsandung || '')}"
-        />
-      </label>
+const header = `
+<div class="kolben-row kolben-row--head" style="${GRID}margin-bottom:6px;font-weight:600;font-size:.85em;">
+<span>Anzahl Kolbenhübe</span>
+<span>Aufsandung [cm]</span>
+<span>Anmerkung</span>
+</div>`;
 
-      <label class="field">
-        <span class="field__label" style="display:none;">Anmerkungen</span>
-        <input
-          id="kolben-anmerkungen-${i}"
-          class="field__input"
-          type="text"
-          placeholder="Anmerkung"
-          value="${h(row.anmerkungen || '')}"
-        />
-      </label>
-    </div>
-  `).join('');
+const rows = state.kolben.rows.map((row, i) => `
+<div class="kolben-row" data-kolben-row="${i}" style="${GRID}margin-bottom:6px;">
+<input
+id="kolben-huebe-${i}"
+class="field__input"
+type="number"
+step="1"
+inputmode="numeric"
+placeholder="z.B. 15"
+value="${h(row.huebe || '')}"
+/>
+<input
+id="kolben-aufsandung-${i}"
+class="field__input"
+type="number"
+step="0.1"
+inputmode="decimal"
+placeholder="z.B. 3.5"
+value="${h(row.aufsandung || '')}"
+/>
+<input
+id="kolben-anmerkungen-${i}"
+class="field__input"
+type="text"
+placeholder="Anmerkung"
+value="${h(row.anmerkungen || '')}"
+/>
+</div>`).join('');
+
+host.innerHTML = header + rows;
 }
 
 function syncKolbenToUi(){
