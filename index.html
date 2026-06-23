@@ -437,32 +437,32 @@
         </label>
       </div>
     </section>
+    
+<section class="card">
+  <div class="card__title">Protokoll Kolbenhübe</div>
 
-    <section class="card">
-      <div class="card__title">Protokoll Kolbenhübe</div>
-      <div style="overflow-x:auto;">
-        <table class="kolben-table">
-          <thead>
-            <tr>
-              <th style="width:10%;">Nr.</th>
-              <th style="width:30%;">Anzahl Kolbenhübe</th>
-              <th style="width:30%;">Aufsandung [cm]</th>
-              <th style="width:30%;">Anmerkungen</th>
-            </tr>
-          </thead>
-          <tbody id="kolben-table-body">
-            <!-- Wird im JS generiert -->
-          </tbody>
-        </table>
-      </div>
+  <div class="kolben-rows">
+    <div class="kolben-row kolben-row--head">
+      <div>Anzahl Kolbenhübe</div>
+      <div>Aufsandung [cm]</div>
+      <div>Anmerkungen</div>
+    </div>
 
-      <div class="form-grid" style="margin-top:20px;">
-        <label class="field field--full">
-          <span class="field__label">Restsandmessung (gefordert &lt; 1,0 g/m³) [g/m³]</span>
-          <input id="kolben-restsandmessung" class="field__input" type="text" placeholder="z.B. 0.15" />
-        </label>
-      </div>
-    </section>
+    <div id="kolbenRowsContainer"></div>
+  </div>
+
+  <div class="plus-wrap" style="margin-top:16px;">
+    <button id="btnAddKolbenRow" class="btn-plus" type="button">+</button>
+    <div class="plus-label">Kolbenmessung hinzufügen</div>
+  </div>
+
+  <div class="form-grid" style="margin-top:20px;">
+    <label class="field field--full">
+      <span class="field__label">Restsandmessung (gefordert &lt; 1,0 g/m³) [g/m³]</span>
+      <input id="kolben-restsandmessung" class="field__input" type="text" placeholder="z.B. 0.15" />
+    </label>
+  </div>
+</section>
 
     <section class="card card--actions card--actions-bottom">
       <div class="action-row">
