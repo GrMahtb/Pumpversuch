@@ -79,12 +79,15 @@ overviewPhotoDataUrl:'',
 versuche:[],
 restsand:{imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''},
 ph:{datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''},combined:{aktiv:false,ph:'',lf:'',temp:'',o2:'',photoDataUrl:''}},
-kolben:{durchmesser:'',entnahme:'',nummer:'',brunnenOk:'',rows:[
-  {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
-  {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
-  {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
-  {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''}
-],restsandmessung:''},
+kolben:{
+  durchmesser:'',
+  entnahme:'',
+  nummer:'',
+  brunnenOk:'',
+  rows:[
+    {huebe:'',aufsandung:'',anmerkungen:''}
+  ],
+},
 settings:{alarmDurationSec:4,pdfExportType:'protokoll',alarmSoundEnabled:true,theme:'dark'}
 };
 }
@@ -414,46 +417,83 @@ function collectPhFromUi(){
 }
 
 function renderKolbenRows(){
-  const tbody=$('kolben-table-body');if(!tbody)return;
-  let html='';
-  for(let i=0;i<16;i++){
-    html+=`
-      <tr>
-        <td style="text-align:center; font-weight:bold; border:1px solid var(--border); color:var(--muted);">${i+1}</td>
-        <td style="border:1px solid var(--border);"><input id="kolben-huebe-${i}" class="field__input" type="number" step="1" style="border:none; background:transparent; padding:4px;" /></td>
-        <td style="border:1px solid var(--border);"><input id="kolben-aufsandung-${i}" class="field__input" type="number" step="0.1" style="border:none; background:transparent; padding:4px;" /></td>
-        <td style="border:1px solid var(--border);"><input id="kolben-anmerkungen-${i}" class="field__input" type="text" style="border:none; background:transparent; padding:4px;" /></td>
-      </tr>
-    `;
+  const host = $('kolbenRowsContainer');
+  if(!host) return;
+
+  if(!Array.isArray(state.kolben.rows) || !state.kolben.rows.length){
+    state.kolben.rows = [{huebe:'',aufsandung:'',anmerkungen:''}];
   }
-  tbody.innerHTML=html;
+
+  host.innerHTML = state.kolben.rows.map((row, i) => `
+    <div class="kolben-row" data-kolben-row="${i}">
+      <label class="field">
+        <span class="field__label" style="display:none;">Anzahl Kolbenhübe</span>
+        <input
+          id="kolben-huebe-${i}"
+          class="field__input"
+          type="number"
+          step="1"
+          inputmode="numeric"
+          placeholder="z.B. 15"
+          value="${h(row.huebe || '')}"
+        />
+      </label>
+
+      <label class="field">
+        <span class="field__label" style="display:none;">Aufsandung [cm]</span>
+        <input
+          id="kolben-aufsandung-${i}"
+          class="field__input"
+          type="number"
+          step="0.1"
+          inputmode="decimal"
+          placeholder="z.B. 3.5"
+          value="${h(row.aufsandung || '')}"
+        />
+      </label>
+
+      <label class="field">
+        <span class="field__label" style="display:none;">Anmerkungen</span>
+        <input
+          id="kolben-anmerkungen-${i}"
+          class="field__input"
+          type="text"
+          placeholder="Anmerkung"
+          value="${h(row.anmerkungen || '')}"
+        />
+      </label>
+    </div>
+  `).join('');
 }
+
 function syncKolbenToUi(){
-  if($('kolben-ausbaudurchmesser'))$('kolben-ausbaudurchmesser').value=state.kolben.durchmesser||'';
-  if($('kolben-entnahme'))$('kolben-entnahme').value=state.kolben.entnahme||'';
-  if($('kolben-nummer'))$('kolben-nummer').value=state.kolben.nummer||'';
-  if($('kolben-brunnenOk'))$('kolben-brunnenOk').value=state.kolben.brunnenOk||'';
-  if($('kolben-restsandmessung'))$('kolben-restsandmessung').value=state.kolben.restsandmessung||'';
-  for(let i=0;i<16;i++){
-    const row=state.kolben.rows[i]||{huebe:'',aufsandung:'',anmerkungen:''};
-    if($(`kolben-huebe-${i}`)) $(`kolben-huebe-${i}`).value=row.huebe||'';
-    if($(`kolben-aufsandung-${i}`)) $(`kolben-aufsandung-${i}`).value=row.aufsandung||'';
-    if($(`kolben-anmerkungen-${i}`)) $(`kolben-anmerkungen-${i}`).value=row.anmerkungen||'';
-  }
+  if($('kolben-ausbaudurchmesser')) $('kolben-ausbaudurchmesser').value = state.kolben.durchmesser || '';
+  if($('kolben-entnahme')) $('kolben-entnahme').value = state.kolben.entnahme || '';
+  if($('kolben-nummer')) $('kolben-nummer').value = state.kolben.nummer || '';
+  if($('kolben-brunnenOk')) $('kolben-brunnenOk').value = state.kolben.brunnenOk || '';
+  if($('kolben-restsandmessung')) $('kolben-restsandmessung').value = state.kolben.restsandmessung || '';
+
+  renderKolbenRows();
 }
+
 function collectKolbenFromUi(){
-  state.kolben.durchmesser=$('kolben-ausbaudurchmesser')?.value||'';
-  state.kolben.entnahme=$('kolben-entnahme')?.value||'';
-  state.kolben.nummer=$('kolben-nummer')?.value||'';
-  state.kolben.brunnenOk=$('kolben-brunnenOk')?.value||'';
-  state.kolben.restsandmessung=$('kolben-restsandmessung')?.value||'';
-  state.kolben.rows=[];
-  for(let i=0;i<16;i++){
-    state.kolben.rows.push({
-      huebe:$(`kolben-huebe-${i}`)?.value||'',
-      aufsandung:$(`kolben-aufsandung-${i}`)?.value||'',
-      anmerkungen:$(`kolben-anmerkungen-${i}`)?.value||''
-    });
+  state.kolben.durchmesser = $('kolben-ausbaudurchmesser')?.value || '';
+  state.kolben.entnahme = $('kolben-entnahme')?.value || '';
+  state.kolben.nummer = $('kolben-nummer')?.value || '';
+  state.kolben.brunnenOk = $('kolben-brunnenOk')?.value || '';
+  state.kolben.restsandmessung = $('kolben-restsandmessung')?.value || '';
+
+  const host = $('kolbenRowsContainer');
+  if(host){
+    const rows = [...host.querySelectorAll('[data-kolben-row]')].map((rowEl, i) => ({
+      huebe: $(`kolben-huebe-${i}`)?.value || '',
+      aufsandung: $(`kolben-aufsandung-${i}`)?.value || '',
+      anmerkungen: $(`kolben-anmerkungen-${i}`)?.value || ''
+    }));
+
+    state.kolben.rows = rows.length
+      ? rows
+      : [{huebe:'',aufsandung:'',anmerkungen:''}];
   }
 }
 
@@ -472,13 +512,17 @@ function applySnapshot(snap,render=true){
   state.versuche=Array.isArray(snap.versuche)?snap.versuche.map(v=>hydrateVersuch(v)):[];
   state.restsand={imhoff:{...base.restsand.imhoff,...((snap.restsand||{}).imhoff||{})},sieb:{...base.restsand.sieb,...((snap.restsand||{}).sieb||{})},bemerkung:(snap.restsand||{}).bemerkung||''};
   state.ph={...base.ph,...(snap.ph||{}),sulfat:{...base.ph.sulfat,...((snap.ph||{}).sulfat||{})},temperatur:{...base.ph.temperatur,...((snap.ph||{}).temperatur||{})},leitfaehigkeit:{...base.ph.leitfaehigkeit,...((snap.ph||{}).leitfaehigkeit||{})},ph:{...base.ph.ph,...((snap.ph||{}).ph||{})},combined:{...base.ph.combined,...((snap.ph||{}).combined||{})}};
-  state.kolben={
-    ...base.kolben,
-    ...(snap.kolben||{}),
-    rows:Array.isArray(snap.kolben?.rows)
-      ?snap.kolben.rows.map((r,i)=>({...((base.kolben.rows||[])[i]||{huebe:'',aufsandung:'',anmerkungen:''}),...r}))
-      :clone(base.kolben.rows)
-  };
+  state.kolben = {
+  ...base.kolben,
+  ...(snap.kolben || {}),
+  rows: Array.isArray(snap.kolben?.rows) && snap.kolben.rows.length
+    ? snap.kolben.rows.map(r => ({
+        huebe: r?.huebe || '',
+        aufsandung: r?.aufsandung || '',
+        anmerkungen: r?.anmerkungen || ''
+      }))
+    : clone(base.kolben.rows)
+};
   state.settings={...base.settings,...(snap.settings||{})};
   Object.keys(timerMap).forEach(hardStopTimer);
   if(render){syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();syncRestsandToUi();syncPhToUi();syncKolbenToUi();syncSettingsToUi();renderVersuche();renderLiveTab();renderHistoryList();}
@@ -1382,13 +1426,38 @@ $('sel-schluck')?.addEventListener('change',()=>{if(!collectSelectionFromUi())re
 $('ph-mode-kombi')?.addEventListener('change',()=>{togglePhModeDisplay();collectPhFromUi();saveDraftDebounced();});
 $('ph-mode-einzel')?.addEventListener('change',()=>{togglePhModeDisplay();collectPhFromUi();saveDraftDebounced();});
 ['kolben-ausbaudurchmesser','kolben-entnahme','kolben-nummer','kolben-brunnenOk','kolben-restsandmessung'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectKolbenFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectKolbenFromUi();saveDraftDebounced();});});
-for(let i=0;i<16;i++){
-  ['huebe','aufsandung','anmerkungen'].forEach(field=>{
-    const el=$(`kolben-${field}-${i}`);if(!el)return;
-    el.addEventListener('input',()=>{collectKolbenFromUi();saveDraftDebounced();});
-    el.addEventListener('change',()=>{collectKolbenFromUi();saveDraftDebounced();});
+const kolbenRowsHost = $('kolbenRowsContainer');
+if(kolbenRowsHost && kolbenRowsHost.dataset.bound !== '1'){
+  kolbenRowsHost.dataset.bound = '1';
+
+  kolbenRowsHost.addEventListener('input', () => {
+    collectKolbenFromUi();
+    saveDraftDebounced();
+  });
+
+  kolbenRowsHost.addEventListener('change', () => {
+    collectKolbenFromUi();
+    saveDraftDebounced();
   });
 }
+
+$('btnAddKolbenRow')?.addEventListener('click', () => {
+  collectKolbenFromUi();
+
+  state.kolben.rows.push({
+    huebe:'',
+    aufsandung:'',
+    anmerkungen:''
+  });
+
+  renderKolbenRows();
+  saveDraftDebounced();
+
+  setTimeout(() => {
+    const rows = document.querySelectorAll('#kolbenRowsContainer [data-kolben-row]');
+    rows[rows.length - 1]?.scrollIntoView({behavior:'smooth', block:'center'});
+  }, 40);
+});
 $('settings-alarmDuration')?.addEventListener('input',()=>{collectSettingsFromUi();saveDraftDebounced();});
 $('pdfType-protokoll')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
 $('pdfType-vollstaendig')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
@@ -2602,50 +2671,135 @@ async function drawKolbenPage(pdf,ctx,snap){
   drawTextSafe(page,'Brunnen OK',{x:x0+colW*3+4,y:kolbenMetaY+mm(8.5),size:7.2,font:fontB,color:K});
   drawTextSafe(page,String(kolben.brunnenOk||'—'),{x:x0+colW*3+4,y:kolbenMetaY+mm(3),size:9,font:fontR,color:K});
 
-  const tableTop=kolbenMetaY-mm(4);
-  const tableHeaderH=mm(8);
-  const rowHeight=mm(6.5);
-  const tableH=tableHeaderH+rowHeight*16;
-  const tableBottom=tableTop-tableH;
+const tableTop = kolbenMetaY - mm(4);
+const tableHeaderH = mm(8);
 
-  page.drawRectangle({x:x0,y:tableBottom,width:W,height:tableH,borderColor:K,borderWidth:0.8});
-  page.drawRectangle({x:x0,y:tableTop-tableHeaderH,width:W,height:tableHeaderH,color:GREY,borderColor:K,borderWidth:0.8});
+const allRows = Array.isArray(kolben.rows)
+  ? kolben.rows.filter(r => r.huebe || r.aufsandung || r.anmerkungen)
+  : [];
 
-  const w1=W*0.12;
-  const w2=W*0.28;
-  const w3=W*0.28;
-  const w4=W*0.32;
+const rowsToDraw = allRows.length
+  ? allRows
+  : [{huebe:'',aufsandung:'',anmerkungen:''}];
 
-  const x1=x0;
-  const x2=x1+w1;
-  const x3=x2+w2;
-  const x4=x3+w3;
+const maxTableBottom = y0 + mm(54);
+const minRowH = mm(5.2);
+const maxRowH = mm(7.2);
+const availableRowsH = tableTop - maxTableBottom - tableHeaderH;
 
-  page.drawLine({start:{x:x2,y:tableBottom},end:{x:x2,y:tableTop},thickness:0.8,color:K});
-  page.drawLine({start:{x:x3,y:tableBottom},end:{x:x3,y:tableTop},thickness:0.8,color:K});
-  page.drawLine({start:{x:x4,y:tableBottom},end:{x:x4,y:tableTop},thickness:0.8,color:K});
+const rowHeight = Math.max(
+  minRowH,
+  Math.min(maxRowH, availableRowsH / Math.max(1, rowsToDraw.length))
+);
 
-  drawTextSafe(page,'Nr.',{x:x1+mm(2),y:tableTop-tableHeaderH+mm(2.5),size:8,font:fontB,color:K});
-  drawTextSafe(page,'Anzahl Kolbenhübe',{x:x2+mm(2),y:tableTop-tableHeaderH+mm(2.5),size:8,font:fontB,color:K});
-  drawTextSafe(page,'Aufsandung [cm]',{x:x3+mm(2),y:tableTop-tableHeaderH+mm(2.5),size:8,font:fontB,color:K});
-  drawTextSafe(page,'Anmerkungen',{x:x4+mm(2),y:tableTop-tableHeaderH+mm(2.5),size:8,font:fontB,color:K});
+const tableH = tableHeaderH + rowHeight * rowsToDraw.length;
+const tableBottom = tableTop - tableH;
 
-  const rows=kolben.rows||[];
-  for(let i=0;i<16;i++){
-    const yRowTop=tableTop-tableHeaderH-rowHeight*i;
-    const yRowBottom=yRowTop-rowHeight;
-    if(i>0){
-      page.drawLine({start:{x:x0,y:yRowTop},end:{x:x0+W,y:yRowTop},thickness:0.5,color:K});
-    }
-    const rData=rows[i]||{huebe:'',aufsandung:'',anmerkungen:''};
-    drawTextSafe(page,String(i+1),{x:x1+w1/2-2,y:yRowBottom+mm(1.8),size:8,font:fontB,color:K});
-    drawTextSafe(page,String(rData.huebe||''),{x:x2+mm(3),y:yRowBottom+mm(1.8),size:8,font:fontR,color:K});
-    drawTextSafe(page,String(rData.aufsandung||''),{x:x3+mm(3),y:yRowBottom+mm(1.8),size:8,font:fontR,color:K});
-    drawTextSafe(page,String(rData.anmerkungen||''),{x:x4+mm(3),y:yRowBottom+mm(1.8),size:8,font:fontR,color:K});
+page.drawRectangle({
+  x:x0,
+  y:tableBottom,
+  width:W,
+  height:tableH,
+  borderColor:K,
+  borderWidth:0.8
+});
+
+page.drawRectangle({
+  x:x0,
+  y:tableTop - tableHeaderH,
+  width:W,
+  height:tableHeaderH,
+  color:GREY,
+  borderColor:K,
+  borderWidth:0.8
+});
+
+const w1 = W * 0.30;
+const w2 = W * 0.30;
+const w3 = W * 0.40;
+
+const c1 = x0;
+const c2 = c1 + w1;
+const c3 = c2 + w2;
+
+page.drawLine({
+  start:{x:c2,y:tableBottom},
+  end:{x:c2,y:tableTop},
+  thickness:0.8,
+  color:K
+});
+
+page.drawLine({
+  start:{x:c3,y:tableBottom},
+  end:{x:c3,y:tableTop},
+  thickness:0.8,
+  color:K
+});
+
+drawTextSafe(page,'Anzahl Kolbenhübe',{
+  x:c1 + mm(2),
+  y:tableTop - tableHeaderH + mm(2.5),
+  size:8,
+  font:fontB,
+  color:K
+});
+
+drawTextSafe(page,'Aufsandung [cm]',{
+  x:c2 + mm(2),
+  y:tableTop - tableHeaderH + mm(2.5),
+  size:8,
+  font:fontB,
+  color:K
+});
+
+drawTextSafe(page,'Anmerkungen',{
+  x:c3 + mm(2),
+  y:tableTop - tableHeaderH + mm(2.5),
+  size:8,
+  font:fontB,
+  color:K
+});
+
+rowsToDraw.forEach((rData, i) => {
+  const yRowTop = tableTop - tableHeaderH - rowHeight * i;
+  const yRowBottom = yRowTop - rowHeight;
+
+  if(i > 0){
+    page.drawLine({
+      start:{x:x0,y:yRowTop},
+      end:{x:x0 + W,y:yRowTop},
+      thickness:0.5,
+      color:K
+    });
   }
 
+  drawTextSafe(page,String(rData.huebe || ''),{
+    x:c1 + mm(3),
+    y:yRowBottom + mm(1.8),
+    size:8,
+    font:fontR,
+    color:K
+  });
+
+  drawTextSafe(page,String(rData.aufsandung || ''),{
+    x:c2 + mm(3),
+    y:yRowBottom + mm(1.8),
+    size:8,
+    font:fontR,
+    color:K
+  });
+
+  drawTextSafe(page,String(rData.anmerkungen || ''),{
+    x:c3 + mm(3),
+    y:yRowBottom + mm(1.8),
+    size:8,
+    font:fontR,
+    color:K
+  });
+});
+
   const restsandY=tableBottom-mm(3)-mm(10);
-  page.drawRectangle({x:x0,y:restandY,width:W,height:mm(10),borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:x0,y:restsandY,width:W,height:mm(10),borderColor:K,borderWidth:0.8});
   drawTextSafe(page,`Restsandmessung (gefordert < 1,0 g/m³):   ${kolben.restsandmessung||'—'} g/m³`,{
     x:x0+mm(3),
     y:restandY+mm(3.2),
@@ -2654,7 +2808,7 @@ async function drawKolbenPage(pdf,ctx,snap){
     color:K
   });
 
-  const sigY=restandY-mm(4)-mm(16);
+  const sigY=restsandY-mm(4)-mm(16);
   page.drawRectangle({x:x0+W-mm(60),y:sigY,width:mm(60),height:mm(16),borderColor:K,borderWidth:0.8});
   page.drawRectangle({x:x0+W-mm(60),y:sigY+mm(12),width:mm(60),height:mm(4),color:GREY,borderColor:K,borderWidth:0.8});
   drawTextSafe(page,'Auswertung HTB: Datum, Unterschrift',{
@@ -2885,7 +3039,7 @@ function resetAll(){
   state.overviewPhotoDataUrl='';state.versuche=[];
   state.restsand=clone(base.restsand);state.ph=clone(base.ph);state.kolben=clone(base.kolben);state.settings=clone(base.settings);
   syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();
-  syncRestsandToUi();syncPhToUi();syncKolbenToUi();syncSettingsToUi();renderVersuche();renderLiveTab();saveDraftDebounced();
+  syncRestsandToUi();syncPhToUi();renderKolbenRows();syncKolbenToUi();syncSettingsToUi();renderVersuche();renderLiveTab();saveDraftDebounced();
 }
 
 function initInstallButton(){
