@@ -71,6 +71,7 @@
     <button class="tab is-active" data-tab="protokoll" type="button">Protokoll</button>
     <button class="tab" data-tab="restsand" type="button">Restsand</button>
     <button class="tab" data-tab="ph" type="button">pH/Sulfat</button>
+    <button class="tab" data-tab="kolben" type="button">Kolben</button>
     <button class="tab" data-tab="verlauf" type="button">Verlauf</button>
     <button class="tab" data-tab="live" type="button">Live</button>
     <button class="tab tab--icon" data-tab="settings" type="button" aria-label="Einstellungen">
@@ -318,6 +319,21 @@
       <div class="ph-info-box"><b>Messung mittels Teststäbchen „Quantofix"</b><br />Ergebnis nach 120 sec</div>
     </section>
 
+    <!-- Messmethode für T / LF / pH / O2 -->
+    <section class="card">
+      <div class="card__title">Messmethode für T / LF / pH / O₂</div>
+      <div class="select-grid">
+        <label class="select-card">
+          <input type="radio" id="ph-mode-einzel" name="ph-mode" checked />
+          <span>Einzelmessungen (T, LF, pH separat)</span>
+        </label>
+        <label class="select-card">
+          <input type="radio" id="ph-mode-kombi" name="ph-mode" />
+          <span>Kombigerät (pH/LF/T/O₂ untereinander, 1 Foto)</span>
+        </label>
+      </div>
+    </section>
+
     <div class="ph-grid">
       <section class="card ph-card">
         <div class="card__title">Sulfatmessung SO₄²⁻</div>
@@ -336,7 +352,7 @@
         </div>
       </section>
 
-      <section class="card ph-card">
+      <section class="card ph-card" id="ph-card-temp">
         <div class="card__title">Temperatur Messung</div>
         <div class="ph-photo-area" id="tempPhotoArea"></div>
         <label class="field" style="margin-top:10px">
@@ -345,22 +361,47 @@
         </label>
       </section>
       
-    <section class="card ph-card">
-     <div class="card__title">Leitfähigkeit Messung</div>
-      <div class="ph-photo-area" id="leitPhotoArea"></div>
+      <section class="card ph-card" id="ph-card-leit">
+        <div class="card__title">Leitfähigkeit Messung</div>
+        <div class="ph-photo-area" id="leitPhotoArea"></div>
         <label class="field" style="margin-top:10px">
-        <span class="field__label">Leitfähigkeit [µS/cm]</span>
-        <input id="ph-leitfaehigkeit-wert" class="field__input" type="number" step="0.1" placeholder="z.B. 850" />
+          <span class="field__label">Leitfähigkeit [µS/cm]</span>
+          <input id="ph-leitfaehigkeit-wert" class="field__input" type="number" step="0.1" placeholder="z.B. 850" />
         </label>
       </section>
       
-      <section class="card ph-card">
+      <section class="card ph-card" id="ph-card-ph">
         <div class="card__title">pH Messung</div>
         <div class="ph-photo-area" id="phPhotoArea"></div>
         <label class="field" style="margin-top:10px">
           <span class="field__label">pH-Wert</span>
           <input id="ph-ph-wert" class="field__input" type="number" step="0.1" placeholder="z.B. 7.3" />
         </label>
+      </section>
+
+      <!-- Kombiniertes Messgerät (pH/LF/T/O2) -->
+      <section class="card ph-card" id="ph-card-kombi" style="display:none">
+        <div class="card__title">Kombigerät (pH/LF/T/O₂)</div>
+        <div class="ph-photo-area" id="kombiPhotoArea"></div>
+        
+        <div class="form-grid" style="margin-top:10px;">
+          <label class="field">
+            <span class="field__label">pH-Wert</span>
+            <input id="ph-combined-ph" class="field__input" type="number" step="0.1" placeholder="z.B. 7.3" />
+          </label>
+          <label class="field">
+            <span class="field__label">Leitfähigkeit [µS/cm]</span>
+            <input id="ph-combined-lf" class="field__input" type="number" step="0.1" placeholder="z.B. 850" />
+          </label>
+          <label class="field">
+            <span class="field__label">Temperatur [°C]</span>
+            <input id="ph-combined-temp" class="field__input" type="number" step="0.1" placeholder="z.B. 13.8" />
+          </label>
+          <label class="field">
+            <span class="field__label">Sauerstoff O₂ [mg/l]</span>
+            <input id="ph-combined-o2" class="field__input" type="number" step="0.1" placeholder="z.B. 9.5" />
+          </label>
+        </div>
       </section>
     </div>
 
@@ -370,6 +411,65 @@
         <button id="btnPdfPh" class="btn btn--ghost btn--small" type="button">PDF Sulfatprotokoll</button>
       </div>
       <div class="hint">Speichert pH/Sulfat-Daten im aktuellen Verlaufs-Eintrag</div>
+    </section>
+  </main>
+
+  <!-- KOLBEN -->
+  <main id="tab-kolben" class="pane" role="tabpanel" hidden>
+    <section class="card">
+      <div class="card__title">Brunnen- / Kolbenentwicklung</div>
+      <div class="form-grid">
+        <label class="field">
+          <span class="field__label">Ausbaudurchmesser (freier Durchgang) [mm]</span>
+          <input id="kolben-ausbaudurchmesser" class="field__input" type="number" step="1" placeholder="z.B. 150" />
+        </label>
+        <label class="field">
+          <span class="field__label">Entnahme</span>
+          <input id="kolben-entnahme" class="field__input" type="text" placeholder="z.B. Brunnen 1" />
+        </label>
+        <label class="field">
+          <span class="field__label">Nummer</span>
+          <input id="kolben-nummer" class="field__input" type="text" placeholder="z.B. 1" />
+        </label>
+        <label class="field">
+          <span class="field__label">Brunnen OK</span>
+          <input id="kolben-brunnenOk" class="field__input" type="text" placeholder="z.B. Ja" />
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card__title">Protokoll Kolbenhübe</div>
+      <div style="overflow-x:auto;">
+        <table class="kolben-table">
+          <thead>
+            <tr>
+              <th style="width:10%;">Nr.</th>
+              <th style="width:30%;">Anzahl Kolbenhübe</th>
+              <th style="width:30%;">Aufsandung [cm]</th>
+              <th style="width:30%;">Anmerkungen</th>
+            </tr>
+          </thead>
+          <tbody id="kolben-table-body">
+            <!-- Wird im JS generiert -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="form-grid" style="margin-top:20px;">
+        <label class="field field--full">
+          <span class="field__label">Restsandmessung (gefordert &lt; 1,0 g/m³) [g/m³]</span>
+          <input id="kolben-restsandmessung" class="field__input" type="text" placeholder="z.B. 0.15" />
+        </label>
+      </div>
+    </section>
+
+    <section class="card card--actions card--actions-bottom">
+      <div class="action-row">
+        <button id="btnSaveKolben" class="btn btn--save btn--small" type="button">Speichern</button>
+        <button id="btnPdfKolben" class="btn btn--ghost btn--small" type="button">PDF Kolbenprotokoll</button>
+      </div>
+      <div class="hint">Speichert Kolbenentwicklungsdaten im aktuellen Verlaufs-Eintrag</div>
     </section>
   </main>
 
@@ -438,7 +538,7 @@ Für iPhone: Ton einmal hier aktivieren oder vor dem Start testen.
 </label>
 <label class="select-card">
 <input type="radio" name="pdfType" id="pdfType-vollstaendig" value="vollstaendig" />
-<span><b>Vollständige Auswertung</b> – Deckblatt, Inhaltsverzeichnis, Protokoll, Fotos, Restsand, pH</span>
+<span><b>Vollständige Auswertung</b> – Deckblatt, Inhaltsverzeichnis, Protokoll, Fotos, Restsand, pH, Kolben</span>
 </label>
 </div>
 
