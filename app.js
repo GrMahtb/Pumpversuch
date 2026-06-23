@@ -87,6 +87,7 @@ kolben:{
   rows:[
     {huebe:'',aufsandung:'',anmerkungen:''}
   ],
+  restsandmessung:''
 },
 settings:{alarmDurationSec:4,pdfExportType:'protokoll',alarmSoundEnabled:true,theme:'dark'}
 };
@@ -357,21 +358,31 @@ ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"><button class="re
   });
 }
 function togglePhModeDisplay(){
-  const isKombi=!!state.ph.combined?.aktiv;
-  const cardTemp=$('ph-card-temp');
-  const cardLeit=$('ph-card-leit');
-  const cardPh=$('ph-card-ph');
-  const cardKombi=$('ph-card-kombi');
+  state.ph.combined = state.ph.combined || {};
+
+  // Wichtig:
+  // Wenn die Radio-Buttons im DOM existieren, ist der DOM-Zustand führend.
+  // Dadurch ist die Anzeige nicht mehr um einen Klick versetzt.
+  const domKombi = $('ph-mode-kombi');
+  const isKombi = domKombi ? !!domKombi.checked : !!state.ph.combined.aktiv;
+
+  state.ph.combined.aktiv = isKombi;
+
+  const cardTemp = $('ph-card-temp');
+  const cardLeit = $('ph-card-leit');
+  const cardPh = $('ph-card-ph');
+  const cardKombi = $('ph-card-kombi');
+
   if(isKombi){
-    if(cardTemp)cardTemp.style.display='none';
-    if(cardLeit)cardLeit.style.display='none';
-    if(cardPh)cardPh.style.display='none';
-    if(cardKombi)cardKombi.style.display='block';
+    if(cardTemp) cardTemp.style.display = 'none';
+    if(cardLeit) cardLeit.style.display = 'none';
+    if(cardPh) cardPh.style.display = 'none';
+    if(cardKombi) cardKombi.style.display = 'block';
   }else{
-    if(cardTemp)cardTemp.style.display='block';
-    if(cardLeit)cardLeit.style.display='block';
-    if(cardPh)cardPh.style.display='block';
-    if(cardKombi)cardKombi.style.display='none';
+    if(cardTemp) cardTemp.style.display = 'block';
+    if(cardLeit) cardLeit.style.display = 'block';
+    if(cardPh) cardPh.style.display = 'block';
+    if(cardKombi) cardKombi.style.display = 'none';
   }
 }
 function syncRestsandToUi(){if($('restsand-imhoff-menge'))$('restsand-imhoff-menge').value=state.restsand.imhoff.menge||'';if($('restsand-sieb-menge'))$('restsand-sieb-menge').value=state.restsand.sieb.menge||'';if($('restsand-bemerkung'))$('restsand-bemerkung').value=state.restsand.bemerkung||'';renderRestsandPhotoAreas();}
@@ -467,6 +478,14 @@ function renderKolbenRows(){
 }
 
 function syncKolbenToUi(){
+  if(!state.kolben){
+    state.kolben = clone(getInitialState().kolben);
+  }
+
+  if(!Array.isArray(state.kolben.rows) || !state.kolben.rows.length){
+    state.kolben.rows = [{huebe:'',aufsandung:'',anmerkungen:''}];
+  }
+
   if($('kolben-ausbaudurchmesser')) $('kolben-ausbaudurchmesser').value = state.kolben.durchmesser || '';
   if($('kolben-entnahme')) $('kolben-entnahme').value = state.kolben.entnahme || '';
   if($('kolben-nummer')) $('kolben-nummer').value = state.kolben.nummer || '';
@@ -496,7 +515,38 @@ function collectKolbenFromUi(){
       : [{huebe:'',aufsandung:'',anmerkungen:''}];
   }
 }
+function addKolbenRow(){
+  if(!state.kolben){
+    state.kolben = clone(getInitialState().kolben);
+  }
 
+  collectKolbenFromUi();
+
+  if(!Array.isArray(state.kolben.rows)){
+    state.kolben.rows = [];
+  }
+
+  state.kolben.rows.push({
+    huebe:'',
+    aufsandung:'',
+    anmerkungen:''
+  });
+
+  renderKolbenRows();
+  saveDraftDebounced();
+
+  requestAnimationFrame(() => {
+    const rows = document.querySelectorAll('#kolbenRowsContainer [data-kolben-row]');
+    const lastRow = rows[rows.length - 1];
+
+    lastRow?.scrollIntoView({
+      behavior:'smooth',
+      block:'center'
+    });
+
+    lastRow?.querySelector('input')?.focus();
+  });
+}
 /* ── SNAPSHOT / STORAGE ── */
 function collectSnapshot(){
   collectMetaFromUi();collectBrunnenFromUi();collectSelectionFromUi();collectRestsandFromUi();collectPhFromUi();collectKolbenFromUi();collectSettingsFromUi();
@@ -656,7 +706,7 @@ function snapshotToIndexedPayload(entryId, snap){
   if(s.ph?.temperatur)  stashPhoto(s.ph.temperatur,  'photoDataUrl', 'photoKey', 'ph:temperatur');
   if(s.ph?.leitfaehigkeit)  stashPhoto(s.ph.leitfaehigkeit, 'photoDataUrl', 'photoKey', 'ph:leitfaehigkeit');
   if(s.ph?.ph)          stashPhoto(s.ph.ph,          'photoDataUrl', 'photoKey', 'ph:ph');
-
+  if(s.ph?.combined)    stashPhoto(s.ph.combined,    'photoDataUrl', 'photoKey', 'ph:combined');
   return { snapshot: s, photos };
 }
 
@@ -785,7 +835,7 @@ async function materializeSnapshotPhotos(snap){
   await restorePhoto(s.ph?.temperatur,  'photoDataUrl', 'photoKey');
   await restorePhoto(s.ph?.leitfaehigkeit, 'photoDataUrl', 'photoKey');
   await restorePhoto(s.ph?.ph,          'photoDataUrl', 'photoKey');
-
+  await restorePhoto(s.ph?.combined,    'photoDataUrl', 'photoKey');
   return s;
 }
 
@@ -1423,10 +1473,16 @@ $('sel-foerder')?.addEventListener('change',()=>{if(!collectSelectionFromUi())re
 $('sel-schluck')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
 ['restsand-imhoff-menge','restsand-sieb-menge','restsand-bemerkung'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectRestsandFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectRestsandFromUi();saveDraftDebounced();});});
 ['ph-datum','ph-bauherr','ph-baustelle','ph-gewaessername','ph-sulfat-wert','ph-temp-wert','ph-leitfaehigkeit-wert','ph-ph-wert','ph-combined-ph','ph-combined-lf','ph-combined-temp','ph-combined-o2'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectPhFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectPhFromUi();saveDraftDebounced();});});
-$('ph-mode-kombi')?.addEventListener('change',()=>{togglePhModeDisplay();collectPhFromUi();saveDraftDebounced();});
-$('ph-mode-einzel')?.addEventListener('change',()=>{togglePhModeDisplay();collectPhFromUi();saveDraftDebounced();});
+function handlePhModeChange(){
+  collectPhFromUi();
+  togglePhModeDisplay();
+  saveDraftDebounced();
+}
+$('ph-mode-kombi')?.addEventListener('change', handlePhModeChange);
+$('ph-mode-einzel')?.addEventListener('change', handlePhModeChange);
 ['kolben-ausbaudurchmesser','kolben-entnahme','kolben-nummer','kolben-brunnenOk','kolben-restsandmessung'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectKolbenFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectKolbenFromUi();saveDraftDebounced();});});
 const kolbenRowsHost = $('kolbenRowsContainer');
+
 if(kolbenRowsHost && kolbenRowsHost.dataset.bound !== '1'){
   kolbenRowsHost.dataset.bound = '1';
 
@@ -1441,23 +1497,21 @@ if(kolbenRowsHost && kolbenRowsHost.dataset.bound !== '1'){
   });
 }
 
-$('btnAddKolbenRow')?.addEventListener('click', () => {
-  collectKolbenFromUi();
+// Plus-Button robust über Event-Delegation.
+// Dadurch funktioniert er auch dann, wenn DOM-Inhalte später neu gerendert werden.
+if(document.body && document.body.dataset.kolbenPlusBound !== '1'){
+  document.body.dataset.kolbenPlusBound = '1';
 
-  state.kolben.rows.push({
-    huebe:'',
-    aufsandung:'',
-    anmerkungen:''
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('#btnAddKolbenRow');
+    if(!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    addKolbenRow();
   });
-
-  renderKolbenRows();
-  saveDraftDebounced();
-
-  setTimeout(() => {
-    const rows = document.querySelectorAll('#kolbenRowsContainer [data-kolben-row]');
-    rows[rows.length - 1]?.scrollIntoView({behavior:'smooth', block:'center'});
-  }, 40);
-});
+}
 $('settings-alarmDuration')?.addEventListener('input',()=>{collectSettingsFromUi();saveDraftDebounced();});
 $('pdfType-protokoll')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
 $('pdfType-vollstaendig')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
@@ -1489,14 +1543,16 @@ function buildTemplateSnapshot(){
   snap.versuche=(snap.versuche||[]).map(v=>{const hv=hydrateVersuch(v);hv.messungen=(hv.messungen||[]).map(m=>({min:m.min,foerder_m:'',schluck_m:'',foerder_menge:''}));hv.elapsedMs=0;hv.startzeit='';hv.photoDataUrl='';return hv;});
   snap.restsand={imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''};
   snap.ph={datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''},combined:{aktiv:false,ph:'',lf:'',temp:'',o2:'',photoDataUrl:''}};
-  snap.kolben={durchmesser:'',entnahme:'',nummer:'',brunnenOk:'',rows:[
-    {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
-    {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
-    {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
-    {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''}
-  ],restsandmessung:''};
-  return snap;
-}
+  snap.kolben = {
+  durchmesser:'',
+  entnahme:'',
+  nummer:'',
+  brunnenOk:'',
+  rows:[
+    {huebe:'',aufsandung:'',anmerkungen:''}
+  ],
+  restsandmessung:''
+};
 function exportTemplateJson(){const snap=buildTemplateSnapshot();const obj=(snap.meta.objekt||'Vorlage').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');downloadJson(snap,`${dateTag()}_HTB_Vorlage_${obj||'Pumpversuch'}.htbpump.json`);}
 function exportFullJson(){const snap=collectSnapshot();const obj=(snap.meta.objekt||'Export').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');downloadJson(snap,`${dateTag()}_HTB_Pumpversuch_${obj||'Export'}.json`);}
 async function handleTemplateImport(e){const file=e.target.files&&e.target.files[0];if(!file)return;try{const raw=await file.text();applySnapshot(JSON.parse(raw),true);saveDraftDebounced();alert('Vorlage importiert.');}catch(err){console.error(err);alert('Vorlage konnte nicht importiert werden.');}finally{e.target.value='';}}
@@ -2802,7 +2858,7 @@ rowsToDraw.forEach((rData, i) => {
   page.drawRectangle({x:x0,y:restsandY,width:W,height:mm(10),borderColor:K,borderWidth:0.8});
   drawTextSafe(page,`Restsandmessung (gefordert < 1,0 g/m³):   ${kolben.restsandmessung||'—'} g/m³`,{
     x:x0+mm(3),
-    y:restandY+mm(3.2),
+    y:restsandY+mm(3.2),
     size:9,
     font:fontB,
     color:K
