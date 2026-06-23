@@ -1526,7 +1526,14 @@ $('btnSaveKolben')?.addEventListener('click',()=>saveCurrentToHistory('Kolbendat
 $('btnPdf')?.addEventListener('click',async()=>{try{await exportPdf(null,state.settings.pdfExportType);}catch(err){console.error(err);alert('PDF-Fehler: '+(err?.message||String(err)));}});
 $('btnPdfRestsand')?.addEventListener('click',async()=>{try{await exportRestsandPdf();}catch(err){console.error(err);alert('Restsand-PDF Fehler');}});
 $('btnPdfPh')?.addEventListener('click',async()=>{try{await exportPhPdf();}catch(err){console.error(err);alert('Sulfat/pH-PDF Fehler');}});
-$('btnPdfKolben')?.addEventListener('click',async()=>{try{await exportKolbenPdf();}catch(err){console.error(err);alert('Kolben-PDF Fehler');}});
+$('btnPdfKolben')?.addEventListener('click', async () => {
+  try {
+    await exportKolbenPdf();
+  } catch (err) {
+    console.error('Kolben-PDF Fehler:', err);
+    alert('Kolben-PDF Fehler: ' + (err?.message || String(err)));
+  }
+});
 $('btnReset')?.addEventListener('click',resetAll);
 $('btnExportTemplate')?.addEventListener('click',exportTemplateJson);
 $('btnImportTemplate')?.addEventListener('click',()=>$('importFileInput')?.click());
@@ -1539,20 +1546,87 @@ $('importFullInput')?.addEventListener('change',handleFullImport);
 /* ── EXPORT / IMPORT JSON ── */
 function downloadJson(obj,filename){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
 function buildTemplateSnapshot(){
-  const snap=collectSnapshot();snap.overviewPhotoDataUrl='';
-  snap.versuche=(snap.versuche||[]).map(v=>{const hv=hydrateVersuch(v);hv.messungen=(hv.messungen||[]).map(m=>({min:m.min,foerder_m:'',schluck_m:'',foerder_menge:''}));hv.elapsedMs=0;hv.startzeit='';hv.photoDataUrl='';return hv;});
-  snap.restsand={imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''};
-  snap.ph={datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''},combined:{aktiv:false,ph:'',lf:'',temp:'',o2:'',photoDataUrl:''}};
+  const snap = collectSnapshot();
+
+  snap.overviewPhotoDataUrl = '';
+
+  snap.versuche = (snap.versuche || []).map(v => {
+    const hv = hydrateVersuch(v);
+
+    hv.messungen = (hv.messungen || []).map(m => ({
+      min: m.min,
+      foerder_m: '',
+      schluck_m: '',
+      foerder_menge: ''
+    }));
+
+    hv.elapsedMs = 0;
+    hv.startzeit = '';
+    hv.photoDataUrl = '';
+
+    return hv;
+  });
+
+  snap.restsand = {
+    imhoff: {
+      photoDataUrl: '',
+      menge: ''
+    },
+    sieb: {
+      photoDataUrl: '',
+      menge: ''
+    },
+    bemerkung: ''
+  };
+
+  snap.ph = {
+    datum: '',
+    bauherr: '',
+    baustelle: '',
+    gewaessername: '',
+    sulfat: {
+      wert: '',
+      photoDataUrl: ''
+    },
+    temperatur: {
+      wert: '',
+      photoDataUrl: ''
+    },
+    leitfaehigkeit: {
+      wert: '',
+      photoDataUrl: ''
+    },
+    ph: {
+      wert: '',
+      photoDataUrl: ''
+    },
+    combined: {
+      aktiv: false,
+      ph: '',
+      lf: '',
+      temp: '',
+      o2: '',
+      photoDataUrl: ''
+    }
+  };
+
   snap.kolben = {
-  durchmesser:'',
-  entnahme:'',
-  nummer:'',
-  brunnenOk:'',
-  rows:[
-    {huebe:'',aufsandung:'',anmerkungen:''}
-  ],
-  restsandmessung:''
-};
+    durchmesser: '',
+    entnahme: '',
+    nummer: '',
+    brunnenOk: '',
+    rows: [
+      {
+        huebe: '',
+        aufsandung: '',
+        anmerkungen: ''
+      }
+    ],
+    restsandmessung: ''
+  };
+
+  return snap;
+}
 function exportTemplateJson(){const snap=buildTemplateSnapshot();const obj=(snap.meta.objekt||'Vorlage').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');downloadJson(snap,`${dateTag()}_HTB_Vorlage_${obj||'Pumpversuch'}.htbpump.json`);}
 function exportFullJson(){const snap=collectSnapshot();const obj=(snap.meta.objekt||'Export').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');downloadJson(snap,`${dateTag()}_HTB_Pumpversuch_${obj||'Export'}.json`);}
 async function handleTemplateImport(e){const file=e.target.files&&e.target.files[0];if(!file)return;try{const raw=await file.text();applySnapshot(JSON.parse(raw),true);saveDraftDebounced();alert('Vorlage importiert.');}catch(err){console.error(err);alert('Vorlage konnte nicht importiert werden.');}finally{e.target.value='';}}
