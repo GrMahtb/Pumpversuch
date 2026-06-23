@@ -78,7 +78,13 @@ schluck:{dm:'',endteufe:'',ruhe:''},
 overviewPhotoDataUrl:'',
 versuche:[],
 restsand:{imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''},
-ph:{datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}},
+ph:{datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''},combined:{aktiv:false,ph:'',lf:'',temp:'',o2:'',photoDataUrl:''}},
+kolben:{durchmesser:'',entnahme:'',nummer:'',brunnenOk:'',rows:[
+  {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
+  {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
+  {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
+  {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''}
+],restsandmessung:''},
 settings:{alarmDurationSec:4,pdfExportType:'protokoll',alarmSoundEnabled:true,theme:'dark'}
 };
 }
@@ -333,15 +339,37 @@ function renderPhPhotoAreas(){
   [{key:'sulfat',area:'sulfatPhotoArea',inputId:'sulfatPhotoInput',label:'Foto Teststäbchen'},
     {key:'temperatur',area:'tempPhotoArea',inputId:'tempPhotoInput',label:'Foto Thermometer'},
     {key:'leitfaehigkeit',area:'leitPhotoArea',inputId:'leitPhotoInput',label:'Foto Leitfähigkeitsmessgerät'},
-    {key:'ph',area:'phPhotoArea',inputId:'phPhotoInput',label:'Foto pH-Meter'}
+    {key:'ph',area:'phPhotoArea',inputId:'phPhotoInput',label:'Foto pH-Meter'},
+    {key:'combined',area:'kombiPhotoArea',inputId:'kombiPhotoInput',label:'Foto Kombigerät'}
   ].forEach(def=>{
     const area=$(def.area);if(!area)return;
-    const data=def.key==='ph'?state.ph.ph.photoDataUrl:state.ph[def.key].photoDataUrl;
+    let data;
+    if(def.key==='ph') data=state.ph.ph.photoDataUrl;
+    else if(def.key==='combined') data=state.ph.combined?.photoDataUrl;
+    else data=state.ph[def.key].photoDataUrl;
     const has=!!data;
     area.innerHTML=`<button class="restsand-photo-btn" data-ph-photo="${def.key}" type="button">${camSvg(22,18)} ${has?'Foto ändern':def.label}</button>
 <input type="file" accept="image/*" capture="environment" id="${def.inputId}" data-ph-input="${def.key}" style="display:none">
 ${has?`<img class="ph-thumb" src="${h(data)}" alt="${def.key}"><button class="restsand-del-btn" data-photo-del="ph-${def.key}" type="button">Entfernen</button>`:''}`;
   });
+}
+function togglePhModeDisplay(){
+  const isKombi=!!state.ph.combined?.aktiv;
+  const cardTemp=$('ph-card-temp');
+  const cardLeit=$('ph-card-leit');
+  const cardPh=$('ph-card-ph');
+  const cardKombi=$('ph-card-kombi');
+  if(isKombi){
+    if(cardTemp)cardTemp.style.display='none';
+    if(cardLeit)cardLeit.style.display='none';
+    if(cardPh)cardPh.style.display='none';
+    if(cardKombi)cardKombi.style.display='block';
+  }else{
+    if(cardTemp)cardTemp.style.display='block';
+    if(cardLeit)cardLeit.style.display='block';
+    if(cardPh)cardPh.style.display='block';
+    if(cardKombi)cardKombi.style.display='none';
+  }
 }
 function syncRestsandToUi(){if($('restsand-imhoff-menge'))$('restsand-imhoff-menge').value=state.restsand.imhoff.menge||'';if($('restsand-sieb-menge'))$('restsand-sieb-menge').value=state.restsand.sieb.menge||'';if($('restsand-bemerkung'))$('restsand-bemerkung').value=state.restsand.bemerkung||'';renderRestsandPhotoAreas();}
 function collectRestsandFromUi(){state.restsand.imhoff.menge=$('restsand-imhoff-menge')?.value||'';state.restsand.sieb.menge=$('restsand-sieb-menge')?.value||'';state.restsand.bemerkung=$('restsand-bemerkung')?.value||'';}
@@ -354,6 +382,17 @@ function syncPhToUi(){
   if($('ph-temp-wert'))$('ph-temp-wert').value=state.ph.temperatur.wert||'';
   if($('ph-leitfaehigkeit-wert'))$('ph-leitfaehigkeit-wert').value=state.ph.leitfaehigkeit.wert||'';
   if($('ph-ph-wert'))$('ph-ph-wert').value=state.ph.ph.wert||'';
+
+  if($('ph-combined-ph'))$('ph-combined-ph').value=state.ph.combined?.ph||'';
+  if($('ph-combined-lf'))$('ph-combined-lf').value=state.ph.combined?.lf||'';
+  if($('ph-combined-temp'))$('ph-combined-temp').value=state.ph.combined?.temp||'';
+  if($('ph-combined-o2'))$('ph-combined-o2').value=state.ph.combined?.o2||'';
+
+  const isKombi=!!state.ph.combined?.aktiv;
+  if($('ph-mode-kombi'))$('ph-mode-kombi').checked=isKombi;
+  if($('ph-mode-einzel'))$('ph-mode-einzel').checked=!isKombi;
+  togglePhModeDisplay();
+
   renderPhPhotoAreas();
 }
 function collectPhFromUi(){
@@ -365,12 +404,63 @@ function collectPhFromUi(){
   state.ph.temperatur.wert=$('ph-temp-wert')?.value||'';
   state.ph.leitfaehigkeit.wert=$('ph-leitfaehigkeit-wert')?.value||'';
   state.ph.ph.wert=$('ph-ph-wert')?.value||'';
+
+  state.ph.combined=state.ph.combined||{};
+  state.ph.combined.aktiv=$('ph-mode-kombi')?.checked||false;
+  state.ph.combined.ph=$('ph-combined-ph')?.value||'';
+  state.ph.combined.lf=$('ph-combined-lf')?.value||'';
+  state.ph.combined.temp=$('ph-combined-temp')?.value||'';
+  state.ph.combined.o2=$('ph-combined-o2')?.value||'';
+}
+
+function renderKolbenRows(){
+  const tbody=$('kolben-table-body');if(!tbody)return;
+  let html='';
+  for(let i=0;i<16;i++){
+    html+=`
+      <tr>
+        <td style="text-align:center; font-weight:bold; border:1px solid var(--border); color:var(--muted);">${i+1}</td>
+        <td style="border:1px solid var(--border);"><input id="kolben-huebe-${i}" class="field__input" type="number" step="1" style="border:none; background:transparent; padding:4px;" /></td>
+        <td style="border:1px solid var(--border);"><input id="kolben-aufsandung-${i}" class="field__input" type="number" step="0.1" style="border:none; background:transparent; padding:4px;" /></td>
+        <td style="border:1px solid var(--border);"><input id="kolben-anmerkungen-${i}" class="field__input" type="text" style="border:none; background:transparent; padding:4px;" /></td>
+      </tr>
+    `;
+  }
+  tbody.innerHTML=html;
+}
+function syncKolbenToUi(){
+  if($('kolben-ausbaudurchmesser'))$('kolben-ausbaudurchmesser').value=state.kolben.durchmesser||'';
+  if($('kolben-entnahme'))$('kolben-entnahme').value=state.kolben.entnahme||'';
+  if($('kolben-nummer'))$('kolben-nummer').value=state.kolben.nummer||'';
+  if($('kolben-brunnenOk'))$('kolben-brunnenOk').value=state.kolben.brunnenOk||'';
+  if($('kolben-restsandmessung'))$('kolben-restsandmessung').value=state.kolben.restsandmessung||'';
+  for(let i=0;i<16;i++){
+    const row=state.kolben.rows[i]||{huebe:'',aufsandung:'',anmerkungen:''};
+    if($(`kolben-huebe-${i}`)) $(`kolben-huebe-${i}`).value=row.huebe||'';
+    if($(`kolben-aufsandung-${i}`)) $(`kolben-aufsandung-${i}`).value=row.aufsandung||'';
+    if($(`kolben-anmerkungen-${i}`)) $(`kolben-anmerkungen-${i}`).value=row.anmerkungen||'';
+  }
+}
+function collectKolbenFromUi(){
+  state.kolben.durchmesser=$('kolben-ausbaudurchmesser')?.value||'';
+  state.kolben.entnahme=$('kolben-entnahme')?.value||'';
+  state.kolben.nummer=$('kolben-nummer')?.value||'';
+  state.kolben.brunnenOk=$('kolben-brunnenOk')?.value||'';
+  state.kolben.restsandmessung=$('kolben-restsandmessung')?.value||'';
+  state.kolben.rows=[];
+  for(let i=0;i<16;i++){
+    state.kolben.rows.push({
+      huebe:$(`kolben-huebe-${i}`)?.value||'',
+      aufsandung:$(`kolben-aufsandung-${i}`)?.value||'',
+      anmerkungen:$(`kolben-anmerkungen-${i}`)?.value||''
+    });
+  }
 }
 
 /* ── SNAPSHOT / STORAGE ── */
 function collectSnapshot(){
-  collectMetaFromUi();collectBrunnenFromUi();collectSelectionFromUi();collectRestsandFromUi();collectPhFromUi();collectSettingsFromUi();
-  return{v:18,meta:clone(state.meta),selection:clone(state.selection),foerder:clone(state.foerder),schluck:clone(state.schluck),overviewPhotoDataUrl:state.overviewPhotoDataUrl||'',versuche:clone(state.versuche),restsand:clone(state.restsand),ph:clone(state.ph),settings:clone(state.settings)};
+  collectMetaFromUi();collectBrunnenFromUi();collectSelectionFromUi();collectRestsandFromUi();collectPhFromUi();collectKolbenFromUi();collectSettingsFromUi();
+  return{v:18,meta:clone(state.meta),selection:clone(state.selection),foerder:clone(state.foerder),schluck:clone(state.schluck),overviewPhotoDataUrl:state.overviewPhotoDataUrl||'',versuche:clone(state.versuche),restsand:clone(state.restsand),ph:clone(state.ph),kolben:clone(state.kolben),settings:clone(state.settings)};
 }
 function applySnapshot(snap,render=true){
   const base=getInitialState();snap=snap||{};
@@ -381,10 +471,17 @@ function applySnapshot(snap,render=true){
   state.overviewPhotoDataUrl=typeof snap.overviewPhotoDataUrl==='string'?snap.overviewPhotoDataUrl:'';
   state.versuche=Array.isArray(snap.versuche)?snap.versuche.map(v=>hydrateVersuch(v)):[];
   state.restsand={imhoff:{...base.restsand.imhoff,...((snap.restsand||{}).imhoff||{})},sieb:{...base.restsand.sieb,...((snap.restsand||{}).sieb||{})},bemerkung:(snap.restsand||{}).bemerkung||''};
-  state.ph={...base.ph,...(snap.ph||{}),sulfat:{...base.ph.sulfat,...((snap.ph||{}).sulfat||{})},temperatur:{...base.ph.temperatur,...((snap.ph||{}).temperatur||{})},leitfaehigkeit:{...base.ph.leitfaehigkeit,...((snap.ph||{}).leitfaehigkeit||{})},ph:{...base.ph.ph,...((snap.ph||{}).ph||{})}};
+  state.ph={...base.ph,...(snap.ph||{}),sulfat:{...base.ph.sulfat,...((snap.ph||{}).sulfat||{})},temperatur:{...base.ph.temperatur,...((snap.ph||{}).temperatur||{})},leitfaehigkeit:{...base.ph.leitfaehigkeit,...((snap.ph||{}).leitfaehigkeit||{})},ph:{...base.ph.ph,...((snap.ph||{}).ph||{})},combined:{...base.ph.combined,...((snap.ph||{}).combined||{})}};
+  state.kolben={
+    ...base.kolben,
+    ...(snap.kolben||{}),
+    rows:Array.isArray(snap.kolben?.rows)
+      ?snap.kolben.rows.map((r,i)=>({...((base.kolben.rows||[])[i]||{huebe:'',aufsandung:'',anmerkungen:''}),...r}))
+      :clone(base.kolben.rows)
+  };
   state.settings={...base.settings,...(snap.settings||{})};
   Object.keys(timerMap).forEach(hardStopTimer);
-  if(render){syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();syncRestsandToUi();syncPhToUi();syncSettingsToUi();renderVersuche();renderLiveTab();renderHistoryList();}
+  if(render){syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();syncRestsandToUi();syncPhToUi();syncKolbenToUi();syncSettingsToUi();renderVersuche();renderLiveTab();renderHistoryList();}
 }
 function saveDraftDebounced(){clearTimeout(_saveT);_saveT=setTimeout(()=>{try{localStorage.setItem(STORAGE_DRAFT,JSON.stringify(collectSnapshot()));}catch{}},250);}
 function loadDraft(){try{const raw=localStorage.getItem(STORAGE_DRAFT);if(raw)applySnapshot(JSON.parse(raw),true);}catch(e){console.warn('Draft load failed',e);}}
@@ -407,9 +504,13 @@ function stripSnapshotPhotos(snap){
   s.ph.sulfat = s.ph.sulfat || {};
   s.ph.temperatur = s.ph.temperatur || {};
   s.ph.ph = s.ph.ph || {};
+  s.ph.combined = s.ph.combined || {};
   s.ph.sulfat.photoDataUrl = '';
   s.ph.temperatur.photoDataUrl = '';
   s.ph.ph.photoDataUrl = '';
+  s.ph.combined.photoDataUrl = '';
+
+  s.kolben = s.kolben || {};
 
   return s;
 }
@@ -886,12 +987,19 @@ function hookGlobalPhotoDelegation(){
     const btn=e.target.closest('button');if(!btn)return;
     if(btn.id==='overviewPhotoBtnTrigger'){$('overviewPhotoInput')?.click();return;}
     if(btn.dataset.rsPhoto){document.getElementById(`${btn.dataset.rsPhoto}PhotoInput`)?.click();return;}
-    if(btn.dataset.phPhoto){const map={sulfat:'sulfatPhotoInput',temperatur:'tempPhotoInput',leitfaehigkeit:'leitPhotoInput',ph:'phPhotoInput'};$(map[btn.dataset.phPhoto])?.click();return;}
+    if(btn.dataset.phPhoto){const map={sulfat:'sulfatPhotoInput',temperatur:'tempPhotoInput',leitfaehigkeit:'leitPhotoInput',ph:'phPhotoInput',combined:'kombiPhotoInput'};$(map[btn.dataset.phPhoto])?.click();return;}
     if(btn.dataset.photoDel){
       const what=btn.dataset.photoDel;
       if(what==='overview'){state.overviewPhotoDataUrl='';renderOverviewPhotoThumb();saveDraftDebounced();return;}
       if(what.startsWith('restsand-')){const k=what.replace('restsand-','');state.restsand[k].photoDataUrl='';renderRestsandPhotoAreas();saveDraftDebounced();return;}
-      if(what.startsWith('ph-')){const k=what.replace('ph-','');if(k==='ph')state.ph.ph.photoDataUrl='';else state.ph[k].photoDataUrl='';renderPhPhotoAreas();saveDraftDebounced();}
+      if(what.startsWith('ph-')){
+        const k=what.replace('ph-','');
+        if(k==='ph')state.ph.ph.photoDataUrl='';
+        else if(k==='combined')state.ph.combined.photoDataUrl='';
+        else state.ph[k].photoDataUrl='';
+        renderPhPhotoAreas();
+        saveDraftDebounced();
+      }
     }
   });
   document.addEventListener('change',async e=>{
@@ -901,7 +1009,12 @@ function hookGlobalPhotoDelegation(){
       const dataUrl=await handlePhotoSelected(file);
       if(input.id==='overviewPhotoInput'){state.overviewPhotoDataUrl=dataUrl;renderOverviewPhotoThumb();}
       else if(input.dataset.rsInput){state.restsand[input.dataset.rsInput].photoDataUrl=dataUrl;renderRestsandPhotoAreas();}
-      else if(input.dataset.phInput){if(input.dataset.phInput==='ph')state.ph.ph.photoDataUrl=dataUrl;else state.ph[input.dataset.phInput].photoDataUrl=dataUrl;renderPhPhotoAreas();}
+      else if(input.dataset.phInput){
+        if(input.dataset.phInput==='ph')state.ph.ph.photoDataUrl=dataUrl;
+        else if(input.dataset.phInput==='combined')state.ph.combined.photoDataUrl=dataUrl;
+        else state.ph[input.dataset.phInput].photoDataUrl=dataUrl;
+        renderPhPhotoAreas();
+      }
       saveDraftDebounced();
     }catch(err){console.error(err);alert('Foto konnte nicht verarbeitet werden.');}
     finally{input.value='';}
@@ -1265,7 +1378,17 @@ BRUNNEN_FIELDS.forEach(([id])=>{const el=$(id);if(!el)return;el.addEventListener
 $('sel-foerder')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
 $('sel-schluck')?.addEventListener('change',()=>{if(!collectSelectionFromUi())return;renderVersuche();renderLiveTab();saveDraftDebounced();});
 ['restsand-imhoff-menge','restsand-sieb-menge','restsand-bemerkung'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectRestsandFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectRestsandFromUi();saveDraftDebounced();});});
-['ph-datum','ph-bauherr','ph-baustelle','ph-gewaessername','ph-sulfat-wert','ph-temp-wert','ph-leitfaehigkeit-wert','ph-ph-wert'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectPhFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectPhFromUi();saveDraftDebounced();});});
+['ph-datum','ph-bauherr','ph-baustelle','ph-gewaessername','ph-sulfat-wert','ph-temp-wert','ph-leitfaehigkeit-wert','ph-ph-wert','ph-combined-ph','ph-combined-lf','ph-combined-temp','ph-combined-o2'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectPhFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectPhFromUi();saveDraftDebounced();});});
+$('ph-mode-kombi')?.addEventListener('change',()=>{togglePhModeDisplay();collectPhFromUi();saveDraftDebounced();});
+$('ph-mode-einzel')?.addEventListener('change',()=>{togglePhModeDisplay();collectPhFromUi();saveDraftDebounced();});
+['kolben-ausbaudurchmesser','kolben-entnahme','kolben-nummer','kolben-brunnenOk','kolben-restsandmessung'].forEach(id=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{collectKolbenFromUi();saveDraftDebounced();});el.addEventListener('change',()=>{collectKolbenFromUi();saveDraftDebounced();});});
+for(let i=0;i<16;i++){
+  ['huebe','aufsandung','anmerkungen'].forEach(field=>{
+    const el=$(`kolben-${field}-${i}`);if(!el)return;
+    el.addEventListener('input',()=>{collectKolbenFromUi();saveDraftDebounced();});
+    el.addEventListener('change',()=>{collectKolbenFromUi();saveDraftDebounced();});
+  });
+}
 $('settings-alarmDuration')?.addEventListener('input',()=>{collectSettingsFromUi();saveDraftDebounced();});
 $('pdfType-protokoll')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
 $('pdfType-vollstaendig')?.addEventListener('change',()=>{collectSettingsFromUi();saveDraftDebounced();});
@@ -1276,9 +1399,11 @@ $('btnAddVersuch')?.addEventListener('click',()=>{const v=defaultVersuch();state
 $('btnSave')?.addEventListener('click',()=>saveCurrentToHistory('Pumpversuch im Verlauf gespeichert.'));
 $('btnSaveRestsand')?.addEventListener('click',()=>saveCurrentToHistory('Restsanddaten im Verlauf gespeichert.'));
 $('btnSavePh')?.addEventListener('click',()=>saveCurrentToHistory('pH/Sulfat-Daten im Verlauf gespeichert.'));
+$('btnSaveKolben')?.addEventListener('click',()=>saveCurrentToHistory('Kolbendaten im Verlauf gespeichert.'));
 $('btnPdf')?.addEventListener('click',async()=>{try{await exportPdf(null,state.settings.pdfExportType);}catch(err){console.error(err);alert('PDF-Fehler: '+(err?.message||String(err)));}});
 $('btnPdfRestsand')?.addEventListener('click',async()=>{try{await exportRestsandPdf();}catch(err){console.error(err);alert('Restsand-PDF Fehler');}});
 $('btnPdfPh')?.addEventListener('click',async()=>{try{await exportPhPdf();}catch(err){console.error(err);alert('Sulfat/pH-PDF Fehler');}});
+$('btnPdfKolben')?.addEventListener('click',async()=>{try{await exportKolbenPdf();}catch(err){console.error(err);alert('Kolben-PDF Fehler');}});
 $('btnReset')?.addEventListener('click',resetAll);
 $('btnExportTemplate')?.addEventListener('click',exportTemplateJson);
 $('btnImportTemplate')?.addEventListener('click',()=>$('importFileInput')?.click());
@@ -1294,7 +1419,13 @@ function buildTemplateSnapshot(){
   const snap=collectSnapshot();snap.overviewPhotoDataUrl='';
   snap.versuche=(snap.versuche||[]).map(v=>{const hv=hydrateVersuch(v);hv.messungen=(hv.messungen||[]).map(m=>({min:m.min,foerder_m:'',schluck_m:'',foerder_menge:''}));hv.elapsedMs=0;hv.startzeit='';hv.photoDataUrl='';return hv;});
   snap.restsand={imhoff:{photoDataUrl:'',menge:''},sieb:{photoDataUrl:'',menge:''},bemerkung:''};
-  snap.ph={datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''}};
+  snap.ph={datum:'',bauherr:'',baustelle:'',gewaessername:'',sulfat:{wert:'',photoDataUrl:''},temperatur:{wert:'',photoDataUrl:''},leitfaehigkeit:{wert:'',photoDataUrl:''},ph:{wert:'',photoDataUrl:''},combined:{aktiv:false,ph:'',lf:'',temp:'',o2:'',photoDataUrl:''}};
+  snap.kolben={durchmesser:'',entnahme:'',nummer:'',brunnenOk:'',rows:[
+    {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
+    {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
+    {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},
+    {huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''},{huebe:'',aufsandung:'',anmerkungen:''}
+  ],restsandmessung:''};
   return snap;
 }
 function exportTemplateJson(){const snap=buildTemplateSnapshot();const obj=(snap.meta.objekt||'Vorlage').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');downloadJson(snap,`${dateTag()}_HTB_Vorlage_${obj||'Pumpversuch'}.htbpump.json`);}
@@ -1417,6 +1548,7 @@ function collectSnapshotPhotos(snapshot){
   if(snapshot.ph?.temperatur?.photoDataUrl)photos.push({name:`${obj}_Temperatur`,dataUrl:snapshot.ph.temperatur.photoDataUrl});
   if(snapshot.ph?.leitfaehigkeit?.photoDataUrl)photos.push({name:`${obj}_Leitfaehigkeit`,dataUrl:snapshot.ph.leitfaehigkeit.photoDataUrl});
   if(snapshot.ph?.ph?.photoDataUrl)photos.push({name:`${obj}_pH`,dataUrl:snapshot.ph.ph.photoDataUrl});
+  if(snapshot.ph?.combined?.photoDataUrl)photos.push({name:`${obj}_pH_LF_T_O2`,dataUrl:snapshot.ph.combined.photoDataUrl});
   return photos;
 }
 function guessExtFromDataUrl(dataUrl){if(/^data:image\/png/i.test(dataUrl))return'png';if(/^data:image\/webp/i.test(dataUrl))return'webp';return'jpg';}
@@ -1480,6 +1612,14 @@ async function renderHistoryList(){
               pH: <b>${h(String(snap.ph?.ph?.wert||'—'))}</b>
             </div>
           </details>
+          <details class="historySection">
+            <summary>Kolbenentwicklung</summary>
+            <div class="historySection__body">
+              Durchmesser: <b>${h(String(snap.kolben?.durchmesser||'—'))}</b> mm<br>
+              Entnahme: <b>${h(String(snap.kolben?.entnahme||'—'))}</b><br>
+              Brunnen OK: <b>${h(String(snap.kolben?.brunnenOk||'—'))}</b>
+            </div>
+          </details>
         </div>
         ${buildHistoryKfHtml(snap)}
         <div class="historyBtns">
@@ -1488,6 +1628,7 @@ async function renderHistoryList(){
           <button type="button" data-hact="pdf-voll" data-id="${h(entry.id)}">PDF Vollständig</button>
           <button type="button" data-hact="pdf-restsand" data-id="${h(entry.id)}">PDF Restsand</button>
           <button type="button" data-hact="pdf-ph" data-id="${h(entry.id)}">PDF Sulfat</button>
+          <button type="button" data-hact="pdf-kolben" data-id="${h(entry.id)}">PDF Kolben</button>
           <button type="button" class="btn--export-photos" data-hact="photos" data-id="${h(entry.id)}">Fotos exportieren</button>
           <button type="button" data-hact="del" data-id="${h(entry.id)}">Löschen</button>
         </div>
@@ -1542,6 +1683,11 @@ function hookHistoryDelegation(){
         return;
       }
 
+      if(act==='pdf-kolben'){
+        await exportKolbenPdf(fullSnapshot);
+        return;
+      }
+
       if(act==='photos'){
         await exportPhotosFromSnapshot(fullSnapshot);
         return;
@@ -1551,6 +1697,7 @@ function hookHistoryDelegation(){
 
       if(act==='pdf-restsand') alert('Restsand-PDF Fehler');
       else if(act==='pdf-ph') alert('Sulfat-PDF Fehler');
+      else if(act==='pdf-kolben') alert('Kolben-PDF Fehler');
       else if(act==='photos') alert('Fotoexport fehlgeschlagen.');
       else if(act?.startsWith('pdf-')) alert('PDF-Fehler');
       else alert('Verlaufseintrag konnte nicht verarbeitet werden.');
@@ -1923,7 +2070,7 @@ page.drawLine({
     }
   });
 }
-async function drawTocPage(pdf, ctx, snap, hasOverview, hasRestsand, hasPh) {
+async function drawTocPage(pdf, ctx, snap, hasOverview, hasRestsand, hasPh, hasKolben) {
   const { PAGE_W, PAGE_H, mm, fontR, fontB, K, logo, rgb } = ctx;
   const page = pdf.addPage([PAGE_W, PAGE_H]);
 
@@ -2013,6 +2160,7 @@ page.drawLine({
   if (hasOverview)  entries.push({ nr: String(nr++), title: 'Übersichtsfoto',                    main: true });
   if (hasRestsand)  entries.push({ nr: String(nr++), title: 'Restsandmessung',                   main: true });
   if (hasPh)        entries.push({ nr: String(nr++), title: 'Prüfprotokoll Sulfatmessung / pH',  main: true });
+  if (hasKolben)    entries.push({ nr: String(nr++), title: 'Brunnen- / Kolbenentwicklung',       main: true });
 
   const tocLeft  = margin + mm(4);
   const nrX      = tocLeft;
@@ -2298,64 +2446,254 @@ const btmTop=blockBottom-btmBlockGap;
 const btmBottom=y0+mm(14);
 const btmH=btmTop-btmBottom;
 
-// exakt gedrittelte Breite innerhalb des Rahmens
-const bW=W/3;
-
-const bottomBlocks=[
-  {
-    x:x0,
-    title:'Temperatur Messung',
-    value:`${snap.ph?.temperatur?.wert||'—'} °C`,
-    photoDataUrl:snap.ph?.temperatur?.photoDataUrl
-  },
-  {
-    x:x0+bW,
-    title:'Leitfähigkeit Messung',
-    value:`${snap.ph?.leitfaehigkeit?.wert||'—'} µS/cm`,
-    photoDataUrl:snap.ph?.leitfaehigkeit?.photoDataUrl
-  },
-  {
-    x:x0+bW*2,
-    title:'pH Messung',
-    value:`${snap.ph?.ph?.wert||'—'} pH`,
-    photoDataUrl:snap.ph?.ph?.photoDataUrl
-  }
-];
-
-for(const block of bottomBlocks){
-  page.drawRectangle({x:block.x,y:btmBottom,width:bW,height:btmH,borderColor:K,borderWidth:0.8});
-  page.drawRectangle({x:block.x,y:btmTop-mm(11),width:bW,height:mm(11),color:GREY,borderColor:K,borderWidth:0.8});
-
-  drawTextSafe(page,block.title,{
-    x:block.x+4,
-    y:btmTop-mm(8),
+if(snap.ph?.combined?.aktiv || (snap.ph?.combined?.ph || snap.ph?.combined?.lf || snap.ph?.combined?.temp || snap.ph?.combined?.o2)){
+  page.drawRectangle({x:x0,y:btmBottom,width:W,height:btmH,borderColor:K,borderWidth:0.8});
+  const titleBarH=mm(10);
+  page.drawRectangle({x:x0,y:btmTop-titleBarH,width:W,height:titleBarH,color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'Kombinierte Messung (pH / LF / T / O2)',{
+    x:x0+4,
+    y:btmTop-mm(7),
     size:9,
     font:fontB,
     color:K
   });
 
-  if(block.photoDataUrl){
+  const contentH=btmH-titleBarH;
+  const colW=W/2;
+
+  page.drawLine({
+    start:{x:x0+colW,y:btmBottom},
+    end:{x:x0+colW,y:btmTop-titleBarH},
+    thickness:0.8,
+    color:K
+  });
+
+  const photoUrl=snap.ph?.combined?.photoDataUrl;
+  if(photoUrl){
     try{
-      const img=await embedDataUrlImage(pdf,block.photoDataUrl);
-      const aX=block.x+4,aY=btmBottom+mm(12),aW=bW-8,aH=btmH-mm(25);
+      const img=await embedDataUrlImage(pdf,photoUrl);
+      const aX=x0+4,aY=btmBottom+4,aW=colW-8,aH=contentH-8;
       const ratio=img.width/img.height;
       let dw=aW,dh=dw/ratio;
       if(dh>aH){dh=aH;dw=dh*ratio;}
       page.drawImage(img,{x:aX+(aW-dw)/2,y:aY+(aH-dh)/2,width:dw,height:dh});
     }catch(err){console.error(err);}
+  }else{
+    drawTextSafe(page,'Kein Foto vorhanden.',{
+      x:x0+10,
+      y:btmBottom+contentH/2,
+      size:9,
+      font:fontR,
+      color:K
+    });
   }
 
-  page.drawRectangle({x:block.x,y:btmBottom,width:bW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
-  drawTextSafe(page,block.value,{
-    x:block.x+4,
-    y:btmBottom+mm(2.5),
+  const textX=x0+colW+mm(5);
+  let textY=btmTop-titleBarH-mm(5);
+  const rowGap=mm(6.5);
+
+  const values=[
+    {label:'pH-Wert:',val:snap.ph?.combined?.ph||'—',unit:''},
+    {label:'Leitfähigkeit:',val:snap.ph?.combined?.lf||'—',unit:'µS/cm'},
+    {label:'Temperatur:',val:snap.ph?.combined?.temp||'—',unit:'°C'},
+    {label:'Sauerstoff O2:',val:snap.ph?.combined?.o2||'—',unit:'mg/l'}
+  ];
+
+  values.forEach(v=>{
+    drawTextSafe(page,v.label,{x:textX,y:textY,size:8.5,font:fontB,color:K});
+    drawTextSafe(page,`${v.val} ${v.unit}`.trim(),{x:textX+mm(32),y:textY,size:8.5,font:fontR,color:K});
+    textY-=rowGap;
+  });
+}else{
+  // exakt gedrittelte Breite innerhalb des Rahmens
+  const bW=W/3;
+
+  const bottomBlocks=[
+    {
+      x:x0,
+      title:'Temperatur Messung',
+      value:`${snap.ph?.temperatur?.wert||'—'} °C`,
+      photoDataUrl:snap.ph?.temperatur?.photoDataUrl
+    },
+    {
+      x:x0+bW,
+      title:'Leitfähigkeit Messung',
+      value:`${snap.ph?.leitfaehigkeit?.wert||'—'} µS/cm`,
+      photoDataUrl:snap.ph?.leitfaehigkeit?.photoDataUrl
+    },
+    {
+      x:x0+bW*2,
+      title:'pH Messung',
+      value:`${snap.ph?.ph?.wert||'—'} pH`,
+      photoDataUrl:snap.ph?.ph?.photoDataUrl
+    }
+  ];
+
+  for(const block of bottomBlocks){
+    page.drawRectangle({x:block.x,y:btmBottom,width:bW,height:btmH,borderColor:K,borderWidth:0.8});
+    page.drawRectangle({x:block.x,y:btmTop-mm(11),width:bW,height:mm(11),color:GREY,borderColor:K,borderWidth:0.8});
+
+    drawTextSafe(page,block.title,{
+      x:block.x+4,
+      y:btmTop-mm(8),
+      size:9,
+      font:fontB,
+      color:K
+    });
+
+    if(block.photoDataUrl){
+      try{
+        const img=await embedDataUrlImage(pdf,block.photoDataUrl);
+        const aX=block.x+4,aY=btmBottom+mm(12),aW=bW-8,aH=btmH-mm(25);
+        const ratio=img.width/img.height;
+        let dw=aW,dh=dw/ratio;
+        if(dh>aH){dh=aH;dw=dh*ratio;}
+        page.drawImage(img,{x:aX+(aW-dw)/2,y:aY+(aH-dh)/2,width:dw,height:dh});
+      }catch(err){console.error(err);}
+    }
+
+    page.drawRectangle({x:block.x,y:btmBottom,width:bW,height:mm(10),color:GREY,borderColor:K,borderWidth:0.8});
+    drawTextSafe(page,block.value,{
+      x:block.x+4,
+      y:btmBottom+mm(2.5),
+      size:9,
+      font:fontB,
+      color:K
+    });
+  }
+}
+
+  drawFooter(page,ctx,'Sulfatmessung Wasser');
+}
+
+async function drawKolbenPage(pdf,ctx,snap){
+  const{PAGE_W,PAGE_H,mm,fontR,fontB,K,GREY}=ctx;
+  const page=pdf.addPage([PAGE_W,PAGE_H]);
+  const margin=mm(8),x0=margin,y0=margin,W=PAGE_W-2*margin,H=PAGE_H-2*margin;
+  page.drawRectangle({x:x0,y:y0,width:W,height:H,borderColor:K,borderWidth:1.2});
+  drawHeaderBar(page,ctx,'Brunnen- / Kolbenentwicklung',FIRMA.name);
+
+  const metaRowH=mm(9);
+  const cy=y0+H-mm(13)-mm(3);
+  drawMetaGrid(page,x0,cy,W,metaRowH,snap.meta||{},fontR,fontB,K);
+
+  const kolbenMetaTop=cy-metaRowH*3-mm(3);
+  const kolbenMetaH=mm(14);
+  const kolbenMetaY=kolbenMetaTop-kolbenMetaH;
+
+  page.drawRectangle({x:x0,y:kolbenMetaY,width:W,height:kolbenMetaH,borderColor:K,borderWidth:0.8});
+
+  const colW=W/4;
+  for(let i=1;i<4;i++){
+    page.drawLine({start:{x:x0+i*colW,y:kolbenMetaY},end:{x:x0+i*colW,y:kolbenMetaY+kolbenMetaH},thickness:0.8,color:K});
+  }
+
+  const kolben=snap.kolben||{};
+
+  drawTextSafe(page,'Ausbaudurchmesser [mm]',{x:x0+4,y:kolbenMetaY+mm(8.5),size:7.2,font:fontB,color:K});
+  drawTextSafe(page,String(kolben.durchmesser||'—'),{x:x0+4,y:kolbenMetaY+mm(3),size:9,font:fontR,color:K});
+
+  drawTextSafe(page,'Entnahme',{x:x0+colW+4,y:kolbenMetaY+mm(8.5),size:7.2,font:fontB,color:K});
+  drawTextSafe(page,String(kolben.entnahme||'—'),{x:x0+colW+4,y:kolbenMetaY+mm(3),size:9,font:fontR,color:K});
+
+  drawTextSafe(page,'Nummer',{x:x0+colW*2+4,y:kolbenMetaY+mm(8.5),size:7.2,font:fontB,color:K});
+  drawTextSafe(page,String(kolben.nummer||'—'),{x:x0+colW*2+4,y:kolbenMetaY+mm(3),size:9,font:fontR,color:K});
+
+  drawTextSafe(page,'Brunnen OK',{x:x0+colW*3+4,y:kolbenMetaY+mm(8.5),size:7.2,font:fontB,color:K});
+  drawTextSafe(page,String(kolben.brunnenOk||'—'),{x:x0+colW*3+4,y:kolbenMetaY+mm(3),size:9,font:fontR,color:K});
+
+  const tableTop=kolbenMetaY-mm(4);
+  const tableHeaderH=mm(8);
+  const rowHeight=mm(6.5);
+  const tableH=tableHeaderH+rowHeight*16;
+  const tableBottom=tableTop-tableH;
+
+  page.drawRectangle({x:x0,y:tableBottom,width:W,height:tableH,borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:x0,y:tableTop-tableHeaderH,width:W,height:tableHeaderH,color:GREY,borderColor:K,borderWidth:0.8});
+
+  const w1=W*0.12;
+  const w2=W*0.28;
+  const w3=W*0.28;
+  const w4=W*0.32;
+
+  const x1=x0;
+  const x2=x1+w1;
+  const x3=x2+w2;
+  const x4=x3+w3;
+
+  page.drawLine({start:{x:x2,y:tableBottom},end:{x:x2,y:tableTop},thickness:0.8,color:K});
+  page.drawLine({start:{x:x3,y:tableBottom},end:{x:x3,y:tableTop},thickness:0.8,color:K});
+  page.drawLine({start:{x:x4,y:tableBottom},end:{x:x4,y:tableTop},thickness:0.8,color:K});
+
+  drawTextSafe(page,'Nr.',{x:x1+mm(2),y:tableTop-tableHeaderH+mm(2.5),size:8,font:fontB,color:K});
+  drawTextSafe(page,'Anzahl Kolbenhübe',{x:x2+mm(2),y:tableTop-tableHeaderH+mm(2.5),size:8,font:fontB,color:K});
+  drawTextSafe(page,'Aufsandung [cm]',{x:x3+mm(2),y:tableTop-tableHeaderH+mm(2.5),size:8,font:fontB,color:K});
+  drawTextSafe(page,'Anmerkungen',{x:x4+mm(2),y:tableTop-tableHeaderH+mm(2.5),size:8,font:fontB,color:K});
+
+  const rows=kolben.rows||[];
+  for(let i=0;i<16;i++){
+    const yRowTop=tableTop-tableHeaderH-rowHeight*i;
+    const yRowBottom=yRowTop-rowHeight;
+    if(i>0){
+      page.drawLine({start:{x:x0,y:yRowTop},end:{x:x0+W,y:yRowTop},thickness:0.5,color:K});
+    }
+    const rData=rows[i]||{huebe:'',aufsandung:'',anmerkungen:''};
+    drawTextSafe(page,String(i+1),{x:x1+w1/2-2,y:yRowBottom+mm(1.8),size:8,font:fontB,color:K});
+    drawTextSafe(page,String(rData.huebe||''),{x:x2+mm(3),y:yRowBottom+mm(1.8),size:8,font:fontR,color:K});
+    drawTextSafe(page,String(rData.aufsandung||''),{x:x3+mm(3),y:yRowBottom+mm(1.8),size:8,font:fontR,color:K});
+    drawTextSafe(page,String(rData.anmerkungen||''),{x:x4+mm(3),y:yRowBottom+mm(1.8),size:8,font:fontR,color:K});
+  }
+
+  const restsandY=tableBottom-mm(3)-mm(10);
+  page.drawRectangle({x:x0,y:restandY,width:W,height:mm(10),borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,`Restsandmessung (gefordert < 1,0 g/m³):   ${kolben.restsandmessung||'—'} g/m³`,{
+    x:x0+mm(3),
+    y:restandY+mm(3.2),
     size:9,
     font:fontB,
     color:K
   });
+
+  const sigY=restandY-mm(4)-mm(16);
+  page.drawRectangle({x:x0+W-mm(60),y:sigY,width:mm(60),height:mm(16),borderColor:K,borderWidth:0.8});
+  page.drawRectangle({x:x0+W-mm(60),y:sigY+mm(12),width:mm(60),height:mm(4),color:GREY,borderColor:K,borderWidth:0.8});
+  drawTextSafe(page,'Auswertung HTB: Datum, Unterschrift',{
+    x:x0+W-mm(60)+mm(2),
+    y:sigY+mm(13),
+    size:6.5,
+    font:fontB,
+    color:K
+  });
+
+  drawFooter(page,ctx,'Kolbenentwicklung');
 }
 
-  drawFooter(page,ctx,'Sulfatmessung Wasser');
+async function exportKolbenPdf(snapshot=null){
+  if(!snapshot && !ensureRequiredFiliale()) return;
+
+  const snap=snapshot||collectSnapshot();
+  if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
+
+  const{PDFDocument}=window.PDFLib;
+  const pdf=await PDFDocument.create();
+  const assets=await loadPdfAssets(pdf);
+  const ctx=getPdfCtx(window.PDFLib,assets);
+  ctx.currentMeta = snap.meta || {};
+
+  await drawKolbenPage(pdf,ctx,snap);
+
+  const bytes=await pdf.save();
+  const blob=new Blob([bytes],{type:'application/pdf'});
+  const url=URL.createObjectURL(blob);
+  const obj=(snap.meta?.objekt||'Kolbenentwicklung').replace(/[^\wäöüÄÖÜß\- ]+/g,'').trim().replace(/\s+/g,'_');
+  const w=window.open(url,'_blank');
+  if(!w){
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`${dateTag()}_HTB_Kolbenprotokoll_${obj||'Dokument'}.pdf`;
+    a.click();
+  }
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 /* ── PDF EXPORTS ── */
 function addFullPdfPageNumbers(pdf, ctx){
@@ -2395,7 +2733,7 @@ async function exportPdf(snapshot=null,type='protokoll'){
   ctx.currentMeta = snap.meta || {};
 
   if(type==='vollstaendig'){
-    const hasOverview=!!snap.overviewPhotoDataUrl;
+       const hasOverview=!!snap.overviewPhotoDataUrl;
     const hasRestsand=!!(
       snap.restsand?.imhoff?.photoDataUrl ||
       snap.restsand?.sieb?.photoDataUrl ||
@@ -2404,18 +2742,31 @@ async function exportPdf(snapshot=null,type='protokoll'){
       snap.restsand?.bemerkung
     );
     const hasPh=!!(
-  snap.ph?.sulfat?.wert ||
-  snap.ph?.temperatur?.wert ||
-  snap.ph?.leitfaehigkeit?.wert ||
-  snap.ph?.ph?.wert ||
-  snap.ph?.sulfat?.photoDataUrl ||
-  snap.ph?.temperatur?.photoDataUrl ||
-  snap.ph?.leitfaehigkeit?.photoDataUrl ||
-  snap.ph?.ph?.photoDataUrl
-);
+      snap.ph?.sulfat?.wert ||
+      snap.ph?.temperatur?.wert ||
+      snap.ph?.leitfaehigkeit?.wert ||
+      snap.ph?.ph?.wert ||
+      snap.ph?.sulfat?.photoDataUrl ||
+      snap.ph?.temperatur?.photoDataUrl ||
+      snap.ph?.leitfaehigkeit?.photoDataUrl ||
+      snap.ph?.ph?.photoDataUrl ||
+      snap.ph?.combined?.ph ||
+      snap.ph?.combined?.lf ||
+      snap.ph?.combined?.temp ||
+      snap.ph?.combined?.o2 ||
+      snap.ph?.combined?.photoDataUrl
+    );
+    const hasKolben=!!(
+      snap.kolben?.durchmesser ||
+      snap.kolben?.entnahme ||
+      snap.kolben?.nummer ||
+      snap.kolben?.brunnenOk ||
+      snap.kolben?.restsandmessung ||
+      (snap.kolben?.rows || []).some(r=>r.huebe || r.aufsandung || r.anmerkungen)
+    );
 
     await drawCoverPage(pdf,ctx,snap);
-    await drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh);
+    await drawTocPage(pdf,ctx,snap,hasOverview,hasRestsand,hasPh,hasKolben);
 
     for(let i=0;i<versuche.length;i++){
       await drawProtocolStagePage(pdf,ctx,snap,versuche[i],i);
@@ -2438,6 +2789,7 @@ async function exportPdf(snapshot=null,type='protokoll'){
 
     if(hasRestsand) await drawRestsandPage(pdf,ctx,snap);
     if(hasPh) await drawPhPage(pdf,ctx,snap);
+    if(hasKolben) await drawKolbenPage(pdf,ctx,snap);
 
     addFullPdfPageNumbers(pdf, ctx);
   }else{
@@ -2531,9 +2883,9 @@ function resetAll(){
   state.meta=clone(base.meta);state.selection=clone(base.selection);
   state.foerder=clone(base.foerder);state.schluck=clone(base.schluck);
   state.overviewPhotoDataUrl='';state.versuche=[];
-  state.restsand=clone(base.restsand);state.ph=clone(base.ph);state.settings=clone(base.settings);
+  state.restsand=clone(base.restsand);state.ph=clone(base.ph);state.kolben=clone(base.kolben);state.settings=clone(base.settings);
   syncMetaToUi();syncBrunnenToUi();syncSelectionToUi();renderOverviewPhotoThumb();
-  syncRestsandToUi();syncPhToUi();syncSettingsToUi();renderVersuche();renderLiveTab();saveDraftDebounced();
+  syncRestsandToUi();syncPhToUi();syncKolbenToUi();syncSettingsToUi();renderVersuche();renderLiveTab();saveDraftDebounced();
 }
 
 function initInstallButton(){
@@ -2548,6 +2900,7 @@ function initInstallButton(){
 window.addEventListener('DOMContentLoaded', async ()=>{
   installAudioUnlock();
   initTabs();
+  renderKolbenRows();
   hookStaticInputs();
   hookVersuchDelegation();
   hookHistoryDelegation();
@@ -2563,6 +2916,7 @@ window.addEventListener('DOMContentLoaded', async ()=>{
   renderOverviewPhotoThumb();
   syncRestsandToUi();
   syncPhToUi();
+  syncKolbenToUi();
   syncSettingsToUi();
   renderVersuche();
   renderLiveTab();
