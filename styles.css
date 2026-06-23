@@ -353,6 +353,45 @@ body{
 .ph-norm-note{margin-top:7px;color:var(--muted);font-size:.85em;line-height:1.4}
 
 /* Kolbenentwicklung */
+/* Kolbenentwicklung - dynamische Eingabe ohne Nummernspalte */
+.kolben-rows {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kolben-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.5fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.kolben-row--head {
+  color: var(--text);
+  font-weight: 900;
+  font-size: .9em;
+  padding: 2px 0 4px;
+}
+
+.kolben-row .field {
+  margin: 0;
+}
+
+.kolben-row .field__input {
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .kolben-row {
+    grid-template-columns: 1fr;
+  }
+
+  .kolben-row--head {
+    display: none;
+  }
+}
 .kolben-table {
   width: 100%;
   border-collapse: collapse;
