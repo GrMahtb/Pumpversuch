@@ -17,7 +17,7 @@ const FIRMA = {
   slogan:'BAUEN MIT SPEZIALISTEN ALS PARTNER'
 };
 
-const FILIALEN = {
+const NiederlassungN = {
   Arzl: {
     adresse:'A-6471 Arzl im Pitztal, Gewerbepark Pitztal 16',
     tel:'Tel. +43(0)5412/63975',
@@ -62,8 +62,8 @@ const FILIALEN = {
   }
 };
 
-function getFilialeData(filiale){
-  return FILIALEN[filiale] || FILIALEN.Arzl;
+function getNiederlassungData(Niederlassung){
+  return NiederlassungN[Niederlassung] || NiederlassungN.Arzl;
 }
 
 const $=id=>document.getElementById(id);
@@ -71,7 +71,7 @@ const $=id=>document.getElementById(id);
 /* ── STATE ── */
 function getInitialState(){
 return{
-meta:{filiale:'',objekt:'',grundstueck:'',ort:'',geologie:'',auftragsnummer:'',auftraggeber:'',bauleitung:'',bohrmeister:'',koordination:'',geprueftDurch:'',geprueftAm:''},
+meta:{Niederlassung:'',objekt:'',grundstueck:'',ort:'',geologie:'',auftragsnummer:'',auftraggeber:'',bauleitung:'',bohrmeister:'',koordination:'',geprueftDurch:'',geprueftAm:''},
 selection:{foerder:true,schluck:false},
 foerder:{dm:'',endteufe:'',ruhe:''},
 schluck:{dm:'',endteufe:'',ruhe:''},
@@ -213,7 +213,7 @@ function hydrateVersuch(v){
 
 /* ── FIELD MAPS ── */
 const META_FIELDS=[
-  ['meta-filiale','filiale'],
+  ['meta-Niederlassung','Niederlassung'],
   ['meta-objekt','objekt'],
   ['meta-grundstueck','grundstueck'],
   ['meta-ort','ort'],
@@ -240,7 +240,7 @@ function collectSelectionFromUi(){
   if(!f&&!s){state.selection.foerder=true;state.selection.schluck=false;syncSelectionToUi();alert('Mindestens ein Brunnen muss ausgewählt sein.');return false;}
   state.selection.foerder=f;state.selection.schluck=s;updateBrunnenVisibility();return true;
 }
-function updateMainPdfButtonLabel(){const btn=$('btnPdf');if(btn)btn.textContent=state.settings.pdfExportType==='vollstaendig'?'PDF Vollständig':'PDF Protokoll';}
+function updateMainPdfButtonLabel(){const btn=$('btnPdf');if(btn)btn.textContent=state.settings.pdfExportType==='vollstaendig'?'Bericht Vollständig':'PDF Protokoll';}
 function applyTheme(theme){
 const nextTheme=theme==='light'?'light':'dark';
 
@@ -313,15 +313,15 @@ function updateAlarmSoundButton(){
     }
   }
 }
-function ensureRequiredFiliale(){
+function ensureRequiredNiederlassung(){
   collectMetaFromUi();
-  const filiale = String(state.meta.filiale || '').trim();
+  const Niederlassung = String(state.meta.Niederlassung || '').trim();
 
-  if(FILIALEN[filiale]) return true;
+  if(NiederlassungN[Niederlassung]) return true;
 
   document.querySelector('.tab[data-tab="protokoll"]')?.click();
-  alert('Bitte bei den Stammdaten eine Filiale auswählen.');
-  $('meta-filiale')?.focus();
+  alert('Bitte bei den Stammdaten eine Niederlassung auswählen.');
+  $('meta-Niederlassung')?.focus();
   return false;
 }
 function renderOverviewPhotoThumb(){
@@ -874,7 +874,7 @@ async function migrateLocalHistoryToIndexedDb(){
 }
 
 async function saveCurrentToHistory(msg='Im Verlauf gespeichert.'){
-  if(!ensureRequiredFiliale()) return false;
+  if(!ensureRequiredNiederlassung()) return false;
 
   try{
     const current = await readHistory();
@@ -1824,7 +1824,7 @@ async function renderHistoryList(){
         <div class="historyBtns">
           <button type="button" data-hact="load" data-id="${h(entry.id)}">Laden</button>
           <button type="button" data-hact="pdf-protokoll" data-id="${h(entry.id)}">PDF Protokoll</button>
-          <button type="button" data-hact="pdf-voll" data-id="${h(entry.id)}">PDF Vollständig</button>
+          <button type="button" data-hact="pdf-voll" data-id="${h(entry.id)}">Bericht Vollständig</button>
           <button type="button" data-hact="pdf-restsand" data-id="${h(entry.id)}">PDF Restsand</button>
           <button type="button" data-hact="pdf-ph" data-id="${h(entry.id)}">PDF Sulfat</button>
           <button type="button" data-hact="pdf-kolben" data-id="${h(entry.id)}">PDF Kolben</button>
@@ -1965,7 +1965,7 @@ function getWellRowsForPdf(versuch,key,ruhe){
   });
 }
 function getFooterTextSingleLine(meta, subtitle=''){
-  const filial = getFilialeData(meta?.filiale);
+  const filial = getNiederlassungData(meta?.Niederlassung);
   return `${FIRMA.name} · ${filial.tel} · ${filial.email} · ${filial.web} · ${filial.adresse}${subtitle ? ' · ' + subtitle : ''}`;
 }
 function getFooterFontSize(font, text, maxW, startSize = 6.4, minSize = 4.6){
@@ -2953,7 +2953,7 @@ rowsToDraw.forEach((rData, i) => {
 }
 
 async function exportKolbenPdf(snapshot=null){
-  if(!snapshot && !ensureRequiredFiliale()) return;
+  if(!snapshot && !ensureRequiredNiederlassung()) return;
 
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
@@ -3002,7 +3002,7 @@ function addFullPdfPageNumbers(pdf, ctx){
   }
 }
 async function exportPdf(snapshot=null,type='protokoll'){
-  if(!snapshot && !ensureRequiredFiliale()) return;
+  if(!snapshot && !ensureRequiredNiederlassung()) return;
 
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
@@ -3105,7 +3105,7 @@ async function exportPdf(snapshot=null,type='protokoll'){
 }
 
 async function exportRestsandPdf(snapshot=null){
-  if(!snapshot && !ensureRequiredFiliale()) return;
+  if(!snapshot && !ensureRequiredNiederlassung()) return;
 
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
@@ -3133,7 +3133,7 @@ async function exportRestsandPdf(snapshot=null){
 }
 
 async function exportPhPdf(snapshot=null){
-  if(!snapshot && !ensureRequiredFiliale()) return;
+  if(!snapshot && !ensureRequiredNiederlassung()) return;
 
   const snap=snapshot||collectSnapshot();
   if(!window.PDFLib){alert('PDF-Library noch nicht geladen.');return;}
